@@ -1,3 +1,6 @@
+> **RELEASE INCOMPLETE:** No built and clean-install-tested Windows runtime is available.
+> See [runtime source audit and exact blockers](RUNTIME-RELEASE-STATUS.md).
+
 # Windows InkBrowser runtimes and Octo identity
 
 ## What changed

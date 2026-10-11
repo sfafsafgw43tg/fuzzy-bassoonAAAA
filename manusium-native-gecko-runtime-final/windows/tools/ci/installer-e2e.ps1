@@ -40,6 +40,10 @@ function Invoke-Verify([string]$exe, [string]$man, [string]$inst) {
 
 foreach ($f in @($setup, $manifest, "$manifest.sig", (Join-Path $release 'SHA256SUMS.txt'))) { Assert (Test-Path -LiteralPath $f) "release file exists: $(Split-Path -Leaf $f)" }
 
+Step 'Require a clean installation environment'
+Assert (-not (Test-Path -LiteralPath $installDir)) 'No pre-existing OctoSuite installation'
+Assert (-not (Test-Path -LiteralPath 'HKCU:\Software\Classes\octobrowser')) 'No pre-existing OctoBrowser protocol registration'
+
 Step 'Silent per-user install'
 $log = Join-Path $work 'setup.log'
 $p = Start-Process -FilePath $setup -ArgumentList @('/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART', '/CURRENTUSER', "/LOG=`"$log`"") -Wait -PassThru
@@ -80,6 +84,19 @@ $chromiumExe = Join-Path $chromiumRoot 'inkbrowser-chrome.exe'
 $actualHash = (Get-FileHash -Algorithm SHA256 -LiteralPath $chromiumExe).Hash.ToLowerInvariant()
 Assert ($actualHash -eq ([string]$chromiumManifestObject.sha256).ToLowerInvariant()) 'Chromium executable SHA-256 matches runtime.json'
 
+}
+
+Step 'Launch every installed InkBrowser version in place'
+$env:OCTO_NATIVE_VISIBLE = '1'
+try {
+  foreach ($runtimeVersion in $runtimeVersions) {
+    $env:INKBROWSER_CHROMIUM_VERSION = [string]$runtimeVersion
+    & node (Join-Path $root 'tools\test-packaged-chromium.mjs') win32-x64 "--root=$(Join-Path $installDir 'OctoBrowser')"
+    Assert ($LASTEXITCODE -eq 0) "Installed InkBrowser $runtimeVersion launches, navigates, manages tabs and shuts down"
+  }
+} finally {
+  Remove-Item Env:\OCTO_NATIVE_VISIBLE -ErrorAction SilentlyContinue
+  Remove-Item Env:\INKBROWSER_CHROMIUM_VERSION -ErrorAction SilentlyContinue
 }
 
 Step 'Release verification through the installed apps'

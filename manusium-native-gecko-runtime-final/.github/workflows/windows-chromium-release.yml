@@ -3,6 +3,8 @@ name: Windows Chromium Release Build
 on:
   workflow_dispatch:
   push:
+    branches: ['arena/c10966b9-fuzzy-bassoonaaaa']
+    paths: ['.github/workflows/windows-chromium-release.yml']
     tags:
       - 'v*'
 
@@ -192,13 +194,6 @@ jobs:
             if ($LASTEXITCODE -ne 0) { throw 'Release hashing failed' }
           } finally { Remove-Item -LiteralPath $key -Force -ErrorAction SilentlyContinue }
 
-      - name: Verify installer payload after installation
-        shell: pwsh
-        run: |
-          $ErrorActionPreference = 'Stop'
-          ./tools/ci/installer-e2e.ps1 2>&1 | Tee-Object -FilePath ci-logs/installer-e2e.log
-          if ($LASTEXITCODE -ne 0) { throw "installer E2E failed with exit code $LASTEXITCODE" }
-
       - name: Upload build logs
         if: always()
         uses: actions/upload-artifact@v4
@@ -208,15 +203,59 @@ jobs:
           retention-days: 14
           path: windows/ci-logs/**
 
-      - name: Upload verified installer and complete browser ZIP
+      - name: Upload UNVERIFIED candidate for clean-machine testing
         uses: actions/upload-artifact@v4
         with:
-          name: InkBrowser-Windows-installer-${{ github.run_number }}
+          name: InkBrowser-Windows-CANDIDATE-${{ github.run_number }}
           if-no-files-found: error
           retention-days: 14
           path: |
             windows/release/OctoSuite-Setup-*.exe
             windows/release/octobrowser/win-unpacked/resources/engines/chromium/*/runtime.json
+            windows/release/octobrowser/*.zip
+            windows/release/latest.json*
+            windows/release/SHA256SUMS.txt
+
+  clean-install:
+    needs: windows-chromium
+    # A disposable machine, NOT the source builder and its cached installations.
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: windows
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          name: InkBrowser-Windows-CANDIDATE-${{ github.run_number }}
+          path: windows/release
+      - name: Install test harness only (no browser downloads)
+        run: npm ci --ignore-scripts --include=optional --no-audit --no-fund
+      - name: Clean install and execute installed InkBrowser versions
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force ci-logs | Out-Null
+          ./tools/ci/installer-e2e.ps1 2>&1 | Tee-Object ci-logs/clean-installer-e2e.log
+          if ($LASTEXITCODE -ne 0) { throw 'Clean installed-runtime test failed' }
+      - name: Upload clean-machine evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: InkBrowser-Windows-clean-install-logs-${{ github.run_number }}
+          path: windows/ci-logs/**
+          if-no-files-found: warn
+      - name: Upload tested release only after clean-install success
+        uses: actions/upload-artifact@v4
+        with:
+          name: InkBrowser-Windows-installer-${{ github.run_number }}
+          if-no-files-found: error
+          path: |
+            windows/release/OctoSuite-Setup-*.exe
             windows/release/octobrowser/*.zip
             windows/release/latest.json*
             windows/release/SHA256SUMS.txt

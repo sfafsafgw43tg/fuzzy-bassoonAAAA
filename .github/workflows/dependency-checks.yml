@@ -6,12 +6,18 @@ on:
       - 'manusium-native-gecko-runtime-final/windows/tools/ensure-deps.mjs'
       - 'manusium-native-gecko-runtime-final/windows/packages/core/test/ensure-deps.test.ts'
       - '.github/workflows/dependency-checks.yml'
+      - 'manusium-native-gecko-runtime-final/windows/tools/test-packaged-chromium.mjs'
+      - 'manusium-native-gecko-runtime-final/windows/packages/shell/test/native-engine.integration.test.ts'
+      - 'manusium-native-gecko-runtime-final/windows/packages/core/test/installed-runtime-gate.test.ts'
   push:
     branches: ['arena/c10966b9-fuzzy-bassoonaaaa']
     paths:
       - 'manusium-native-gecko-runtime-final/windows/tools/ensure-deps.mjs'
       - 'manusium-native-gecko-runtime-final/windows/packages/core/test/ensure-deps.test.ts'
       - '.github/workflows/dependency-checks.yml'
+      - 'manusium-native-gecko-runtime-final/windows/tools/test-packaged-chromium.mjs'
+      - 'manusium-native-gecko-runtime-final/windows/packages/shell/test/native-engine.integration.test.ts'
+      - 'manusium-native-gecko-runtime-final/windows/packages/core/test/installed-runtime-gate.test.ts'
   workflow_dispatch:
 
 permissions:
@@ -39,6 +45,6 @@ jobs:
       - name: Install dependencies without lifecycle scripts
         run: npm ci --ignore-scripts --include=optional --no-audit --no-fund
       - name: Regression tests
-        run: npx vitest run packages/core/test/ensure-deps.test.ts
+        run: npx vitest run packages/core/test/ensure-deps.test.ts packages/core/test/installed-runtime-gate.test.ts packages/core/test/packaged-chromium.test.ts
       - name: Execute the real platform binary and npm without a shell
         run: node --input-type=module -e "import { esbuildBinaryPath, runCommand } from './tools/ensure-deps.mjs'; const root = process.cwd(); const binary = esbuildBinaryPath(root); if (!binary || runCommand(binary, ['--version'], root) !== 0 || runCommand('npm', ['--version'], root) !== 0) process.exit(1);"

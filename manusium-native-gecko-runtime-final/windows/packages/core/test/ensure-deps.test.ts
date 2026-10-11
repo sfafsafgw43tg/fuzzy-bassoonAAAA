@@ -247,7 +247,7 @@ describe('ensureDependencies', () => {
     const first = recordingRunner((call) => {
       if (isNpmDependencyInstall(call)) {
         fakeInstall();
-        put('node_modules/esbuild/bin/esbuild', '');
+        put(process.platform === 'win32' ? `node_modules/@esbuild/win32-${process.arch}/esbuild.exe` : 'node_modules/esbuild/bin/esbuild', '');
       }
       return 0;
     });

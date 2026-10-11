@@ -8,10 +8,14 @@ import { discoverEngineRuntime } from '../src/engine-runtime';
 import { chromiumPrivacyArgs, prepareChromiumPrivacy } from '../src/engine-privacy';
 
 const packagedRoot = process.env.OCTO_PACKAGED_CHROMIUM_ROOT;
-const packaged = packagedRoot ? discoverEngineRuntime('chromium', { resourcesPath: '/does-not-exist', env: { OCTO_CHROMIUM_RUNTIME: packagedRoot }, platform: process.platform, arch: process.arch }) : undefined;
+const packaged = packagedRoot ? discoverEngineRuntime('chromium', { resourcesPath: '/does-not-exist', env: { OCTO_CHROMIUM_RUNTIME: packagedRoot }, platform: process.platform, arch: process.arch, version: process.env.INKBROWSER_CHROMIUM_VERSION }) : undefined;
 const executable = packaged?.executablePath || process.env.OCTO_CHROMIUM_PATH || '/usr/bin/chromium';
 const available = fs.existsSync(executable);
+if ((packagedRoot || process.env.OCTO_REQUIRE_NATIVE_RUNTIME === '1') && !available) {
+  throw new Error(`Required native Chromium runtime is unavailable: ${executable}`);
+}
 const suite = available ? describe : describe.skip;
+const sandboxArgs = process.platform === 'win32' ? [] : ['--no-sandbox'];
 
 function freePort(): Promise<number> {
   return new Promise((resolve, reject) => {
@@ -53,7 +57,7 @@ suite('real Chromium CDP vertical slice', () => {
       debugPort: port,
       headless: true,
       url: 'about:blank',
-      extraArgs: ['--no-sandbox', '--disable-gpu', ...chromiumPrivacyArgs(privacy)],
+      extraArgs: [...sandboxArgs, '--disable-gpu', ...chromiumPrivacyArgs(privacy)],
     });
     page = await CdpPage.connect(port);
     await page.navigate('data:text/html,<title>Native%20Chromium</title><h1>native</h1>');
@@ -82,9 +86,9 @@ suite('real Chromium CDP vertical slice', () => {
     roots.push(root);
     const port = await freePort();
     processUnderTest = await spawnNativeEngine('chromium', executable, {
-      profileDir: path.join(root, 'profile'), debugPort: port, headless: true, appMode: true,
+      profileDir: path.join(root, 'profile'), debugPort: port, headless: process.env.OCTO_NATIVE_VISIBLE !== '1', appMode: true,
       url: 'data:text/html,<title>Native%20App%20Mode</title><h1>app</h1>',
-      extraArgs: ['--no-sandbox', '--disable-gpu'],
+      extraArgs: [...sandboxArgs, '--disable-gpu'],
     });
     page = await CdpPage.connect(port);
     const state = await page.state();
@@ -100,7 +104,7 @@ suite('real Chromium CDP vertical slice', () => {
       debugPort: port,
       headless: true,
       url: 'about:blank',
-      extraArgs: ['--no-sandbox', '--disable-gpu'],
+      extraArgs: [...sandboxArgs, '--disable-gpu'],
     });
     page = await CdpPage.connect(port);
     const exited = new Promise<number | null>((resolve) => processUnderTest!.child.once('exit', (code) => resolve(code)));
@@ -116,7 +120,7 @@ suite('real Chromium CDP vertical slice', () => {
     const port = await freePort();
     processUnderTest = await spawnNativeEngine('chromium', executable, {
       profileDir: path.join(root, 'profile'), debugPort: port, headless: true, url: 'about:blank',
-      extraArgs: ['--no-sandbox', '--disable-gpu'],
+      extraArgs: [...sandboxArgs, '--disable-gpu'],
     });
     tabs = await NativeChromiumTabs.connect(port);
     const initial = (await tabs.tabs())[0];
