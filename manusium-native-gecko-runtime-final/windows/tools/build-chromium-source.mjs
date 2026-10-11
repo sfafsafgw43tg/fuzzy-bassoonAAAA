@@ -8,7 +8,7 @@
  * and stages the resulting executable and runtime files in the same flat
  * directory consumed by the native runtime integration.
  *
- * Run on a Windows x64 build machine with Visual Studio 2022, Python,
+ * Run on a Windows x64 build machine with Visual Studio 2026 (18+), Python,
  * depot_tools, GN and Ninja available. A full checkout/build normally needs
  * well over 100 GB of disk and several hours.
  */

@@ -96,10 +96,19 @@ jobs:
           }
           $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
           if (-not (Test-Path $vswhere)) { throw "vswhere.exe is missing: $vswhere" }
-          $vs = & $vswhere -latest -products * -requires Microsoft.VisualStudio.Workload.NativeDesktop Microsoft.VisualStudio.Component.VC.Tools.x86.x64 -property installationPath
-          if (-not $vs) { throw 'Visual Studio NativeDesktop/MSVC x64-x86 components were not found.' }
+          $vs = & $vswhere -latest -products * -version '[18.0,19.0)' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 Microsoft.VisualStudio.Component.VC.ATLMFC -property installationPath
+          if (-not $vs) { throw 'Visual Studio 2026 (18+) with MSVC x64/x86 and ATL/MFC is required by both pinned Chromium revisions.' }
           $sdkRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'
           if (-not (Test-Path $sdkRoot)) { throw "Windows SDK bin directory is missing under $($vs | Select-Object -First 1)" }
+          # The SDK installer patch is 10.0.28000.2270; directory version is .0.
+          $kitsRoot = Split-Path $sdkRoot
+          foreach ($part in @('Include', 'Lib', 'bin')) {
+            if (-not (Test-Path (Join-Path $kitsRoot "$part\10.0.28000.0"))) { throw 'Windows 11 SDK 10.0.28000.2270 is required (10.0.28000.0 directory layout).' }
+          }
+          $dbghelp = Join-Path $kitsRoot 'Debuggers\x64\dbghelp.dll'
+          if (-not (Test-Path $dbghelp)) { throw 'Windows SDK x64 Debugging Tools are missing.' }
+          $debugVersion = [regex]::Match((Get-Item $dbghelp).VersionInfo.FileVersion, '\d+\.\d+\.\d+\.\d+').Value
+          if (-not $debugVersion -or [version]$debugVersion -lt [version]'10.0.26100.3323') { throw 'SDK Debugging Tools 10.0.26100.3323 or newer are required.' }
           Write-Host "Chromium source root: $sourceRoot"
           Write-Host "Chromium source drive free space: $([math]::Round($free / 1GB, 1)) GB"
 

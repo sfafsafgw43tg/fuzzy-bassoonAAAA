@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 import path from 'node:path';
 import os from 'node:os';
 
-const root = path.resolve(import.meta.dirname, '../../..');
+const root = path.resolve(__dirname, '../../..');
 const text = (file: string) => readFileSync(path.join(root, file), 'utf8');
 
 describe('installed InkBrowser release gate', () => {

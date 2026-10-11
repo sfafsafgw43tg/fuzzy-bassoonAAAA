@@ -86,9 +86,14 @@ fingerprinting shims. The profile manager rejects incompatible protection modes.
 ## Input/access needed to finish
 
 Provide an authorized Windows x64 builder with the above runner labels (or
-access to an equivalent Windows build machine), Visual Studio C++ toolchain,
-Windows SDK/debugging tools required by the pinned Chromium revisions, Python,
-Git and depot_tools. Set `OCTO_CHROMIUM_SOURCE` to a large fixed local drive.
+access to an equivalent Windows build machine), Python, Git and depot_tools.
+Both pinned upstream `docs/windows_build_instructions.md` files require
+**Visual Studio 2026 >=18.0.0**, Desktop C++ plus **ATL/MFC**,
+**Windows 11 SDK 10.0.28000.2270** (directories named `10.0.28000.0`), and
+**SDK Debugging Tools >=10.0.26100.3323**. The earlier VS 2022 description was
+outdated; the builder header and CI preflight have been corrected.
+The source docs recommend more than 16 GB RAM; provide a suitably sized build
+machine rather than assuming a standard hosted runner can compile both pins. Set `OCTO_CHROMIUM_SOURCE` to a large fixed local drive.
 The existing preflight requires at least 300 GB free; two retained Chromium
 checkouts/build trees may require substantially more. Allow Chromium dependency
 and toolchain downloads and several hours of compilation. The desktop runtime
@@ -137,3 +142,26 @@ Logs remain available on failure. These tests do not by themselves automate all
 picker interactions or prove taskbar visual appearance: exact-version selection
 from the Octo UI, icons/taskbar behavior, requested standalone install path and
 license completeness remain release acceptance work on real Windows.
+
+
+## Validation evidence from this audit
+
+- Local full suite: 943 passed, 5 optional native tests skipped because there is
+  no local browser. The negative tests explicitly require a runtime and confirm
+  that its absence fails rather than passes/skips.
+- Hosted Windows and Ubuntu, Node 22 and 24: regression/negative-runtime tests
+  and actual esbuild/npm execution passed in
+  [run 38155686376](https://github.com/sfafsafgw43tg/fuzzy-bassoonAAAA/actions/runs/38155686376).
+  These are NOT successful InkBrowser execution tests.
+- The first source-build run was accepted by GitHub after the branch trigger
+  was added, but remained queued with `runner_name: null`. It is superseded by
+  the corrected toolchain-preflight revision. No native compilation started
+  during that observation. See the PR comment for the latest run identifier.
+
+The attempted cancellation of superseded build run `38155686407` returned
+**403 Resource not accessible by integration**. A repository maintainer should
+cancel that old queued run before starting the corrected revision on a builder.
+Do not mistake either a queued run or the passing regression job for native
+build evidence. Source requirements were checked directly against both pinned
+versions of Chromium's `docs/windows_build_instructions.md`; the SDK directory
+version was also checked against `build/vs_toolchain.py` at the primary pin.
