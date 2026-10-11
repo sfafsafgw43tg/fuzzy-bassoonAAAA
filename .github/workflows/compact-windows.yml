@@ -29,8 +29,6 @@ jobs:
       run:
         working-directory: manusium-native-gecko-runtime-final/windows
     env:
-      ELECTRON_CACHE: ${{ runner.temp }}/compact-electron-cache
-      ELECTRON_BUILDER_CACHE: ${{ runner.temp }}/compact-builder-cache
       CSC_IDENTITY_AUTO_DISCOVERY: 'false'
     steps:
       - uses: actions/checkout@v4
@@ -41,6 +39,11 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 22
+      - name: Keep engine and packaging caches in the disposable runner temp directory
+        shell: pwsh
+        run: |
+          Add-Content $env:GITHUB_ENV "ELECTRON_CACHE=$env:RUNNER_TEMP/compact-electron-cache"
+          Add-Content $env:GITHUB_ENV "ELECTRON_BUILDER_CACHE=$env:RUNNER_TEMP/compact-builder-cache"
       - name: Install build dependencies without an extra development Electron runtime
         run: npm ci --ignore-scripts --no-audit --no-fund
       - name: Check current supported engine patch
