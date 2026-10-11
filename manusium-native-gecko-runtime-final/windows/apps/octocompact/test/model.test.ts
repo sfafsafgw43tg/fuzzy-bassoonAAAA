@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { cleanBookmarks, destination, sessionPartition, webURL } from '../src/model';
+import { cleanBookmarks, destination, sessionPartition, webURL, chromeAsset } from '../src/model';
 import { SAFE_WEB_PREFERENCES } from '@octo/shell/security-policy';
 describe('compact browser policy', () => {
   it('searches text and upgrades typed domains to HTTPS', () => {
@@ -23,5 +23,14 @@ describe('compact browser policy', () => {
     expect(SAFE_WEB_PREFERENCES.sandbox).toBe(true);
     expect(SAFE_WEB_PREFERENCES.nodeIntegration).toBe(false);
     expect(SAFE_WEB_PREFERENCES.contextIsolation).toBe(true);
+  });
+});
+
+
+describe('trusted chrome asset boundary', () => {
+  it('serves only allowlisted assets on the trusted host and scheme', () => {
+    expect(chromeAsset('octo-compact://app/index.html')).toBe('index.html');
+    expect(chromeAsset('octo-compact://app/renderer.js')).toBe('renderer.js');
+    for (const url of ['https://app/index.html', 'octo-compact://other/index.html', 'octo-compact://app/main.js', 'octo-compact://app/../../secret.json', 'octo-compact://app/%2f..%2fmain.js', 'octo-compact://user@app/index.html']) expect(chromeAsset(url)).toBeNull();
   });
 });

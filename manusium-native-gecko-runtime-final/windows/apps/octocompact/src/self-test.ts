@@ -14,6 +14,7 @@ export async function selfTest(Browser: typeof CompactWindow, output: string): P
   const assertions: string[] = [];
   const check = (condition: unknown, label: string) => { assert(condition, label); assertions.push(label); };
   const server = http.createServer((request, response) => {
+    if (request.url === '/download') { response.setHeader('Content-Disposition', 'attachment; filename=compact-test.txt'); response.end('real browser download'); return; }
     response.setHeader('Content-Type', 'text/html');
     response.end(`<!doctype html><title>${request.url === '/two' ? 'Second page' : 'First page'}</title><h1>Real Chromium test</h1><input id="entry"><a href="/two">Next</a>`);
   });
@@ -76,6 +77,16 @@ export async function selfTest(Browser: typeof CompactWindow, output: string): P
       check(!normal.tabs.get(normal.active)!.getVisible(), 'options do not sit behind web content');
       const screenshot = await normal.win.webContents.capturePage();
       fs.writeFileSync(output.replace(/\.json$/, '.png'), screenshot.toPNG());
+      const downloadPath = path.join(app.getPath('userData'), 'compact-test-download.txt');
+      const downloaded = new Promise<void>((resolve, reject) => {
+        normal.ses.once('will-download', (_event, item) => {
+          item.setSavePath(downloadPath);
+          item.once('done', (_event, state) => state === 'completed' ? resolve() : reject(new Error(`Download ${state}`)));
+        });
+      });
+      normal.tabs.get(normal.active)!.webContents.downloadURL(base + '/download');
+      await Promise.race([downloaded, new Promise<never>((_resolve, reject) => setTimeout(() => reject(new Error('Download timed out')), 15000))]);
+      check(fs.readFileSync(downloadPath, 'utf8') === 'real browser download', 'real browser download saved correctly');
       await normal.ses.cookies.flushStore();
     }
     fs.writeFileSync(output, JSON.stringify({ ok: true, assertions, electron: process.versions.electron, chromium: process.versions.chrome, platform: process.platform, arch: process.arch }, null, 2));

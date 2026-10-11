@@ -1,14 +1,14 @@
-import { app, BrowserWindow, WebContentsView, ipcMain, session, dialog, Menu, shell } from 'electron';
+import { app, BrowserWindow, WebContentsView, ipcMain, session, dialog, Menu, shell, protocol } from 'electron';
 import type { Session, WebContents } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { pathToFileURL } from 'node:url';
 import { SAFE_WEB_PREFERENCES } from '@octo/shell/security-policy';
-import { destination, webURL, cleanBookmarks, sessionPartition, RELEASES, MAX_BOOKMARKS } from './model';
+import { destination, webURL, cleanBookmarks, sessionPartition, RELEASES, MAX_BOOKMARKS, chromeAsset } from './model';
 import type { Bookmark, CompactState } from './model';
 
 app.enableSandbox();
+protocol.registerSchemesAsPrivileged([{ scheme: 'octo-compact', privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
 app.setName('Octo Compact');
 app.setAppUserModelId('su.octo.compact');
 // Separate from the multi-engine suite; no migration or duplicate profile copy.
@@ -20,7 +20,7 @@ app.setPath('sessionData', app.getPath('userData'));
 app.commandLine.appendSwitch('disk-cache-size', '67108864');
 const windows = new Map<number, CompactWindow>();
 const configured = new WeakSet<Session>();
-const uiURL = pathToFileURL(path.join(__dirname, 'index.html')).href;
+const uiURL = 'octo-compact://app/index.html';
 const bookmarksFile = () => path.join(app.getPath('userData'), 'bookmarks.json');
 function readBookmarks(): Bookmark[] {
   try { const file = bookmarksFile(); if (fs.statSync(file).size > 3_000_000) return []; return cleanBookmarks(JSON.parse(fs.readFileSync(file, 'utf8'))); } catch { return []; }
@@ -88,7 +88,7 @@ export class CompactWindow {
       this.tabs.clear();
       if (privateWindow) void Promise.all([this.ses.clearStorageData(), this.ses.clearCache()]).catch(() => undefined);
     });
-    void this.win.loadFile(path.join(__dirname, 'index.html'));
+    void this.win.loadURL(uiURL).catch(error => { this.message = `Browser UI could not load: ${error.message}`; });
     this.addTab();
   }
   shortcuts(wc: WebContents): void {
@@ -166,7 +166,7 @@ export class CompactWindow {
       case 'close': {
         const id = typeof value === 'number' ? value : this.active;
         const tab = this.tabs.get(id); if (!tab) break;
-        this.win.contentView.removeChildView(tab); tab.webContents.close(); this.tabs.delete(id); this.errors.delete(id);
+        this.win.contentView.removeChildView(tab); this.tabs.delete(id); this.errors.delete(id); tab.webContents.close();
         if (!this.tabs.size) { this.win.close(); return; }
         if (id === this.active) this.active = [...this.tabs.keys()].at(-1)!;
         break;
@@ -209,6 +209,14 @@ else {
   app.on('second-instance', () => { const first = [...windows.values()][0]?.win; if (first) { first.restore(); first.focus(); } });
   app.whenReady().then(async () => {
     Menu.setApplicationMenu(null);
+    // The file-privilege fuse remains off. Serve only these trusted assets via
+    // a secure local scheme, registered only in the chrome's default session.
+    protocol.handle('octo-compact', request => {
+      const asset = chromeAsset(request.url);
+      if (request.method !== 'GET' || !asset) return new Response('Not found', { status: 404 });
+      const mime = asset.endsWith('.html') ? 'text/html' : asset.endsWith('.css') ? 'text/css' : 'text/javascript';
+      return new Response(new Uint8Array(fs.readFileSync(path.join(__dirname, asset))), { headers: { 'Content-Type': `${mime}; charset=utf-8`, 'X-Content-Type-Options': 'nosniff' } });
+    });
     if (process.platform !== 'win32' && app.isPackaged) throw new Error('This compact release targets Windows x64.');
     if (testOutput) {
       const { selfTest } = await import('./self-test');

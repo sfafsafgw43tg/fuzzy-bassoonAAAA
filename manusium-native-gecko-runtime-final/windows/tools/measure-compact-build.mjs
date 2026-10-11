@@ -12,3 +12,5 @@ const report = { schema: 'octo.compact-build-size.v1', note: 'Logical bytes at t
 fs.mkdirSync('ci-logs/compact', { recursive: true });
 fs.writeFileSync('ci-logs/compact/build-size.json', JSON.stringify(report, null, 2));
 console.log(JSON.stringify(report, null, 2));
+
+if (process.env.GITHUB_ACTIONS) console.log(`::notice title=Compact build footprint::${JSON.stringify(report)}`);

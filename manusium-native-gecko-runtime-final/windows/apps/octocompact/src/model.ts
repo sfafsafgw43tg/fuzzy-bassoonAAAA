@@ -27,3 +27,12 @@ export function cleanBookmarks(value: unknown): Bookmark[] {
 export function sessionPartition(privateWindow: boolean, id: string): string {
   return privateWindow ? `compact-private-${id}` : 'persist:compact';
 }
+
+/** Strict asset allowlist for the trusted chrome's local scheme. */
+export function chromeAsset(input: string): string | null {
+  try {
+    const url = new URL(input);
+    if (url.protocol !== 'octo-compact:' || url.host !== 'app' || url.username || url.password) return null;
+    return ({ '/index.html': 'index.html', '/style.css': 'style.css', '/renderer.js': 'renderer.js' } as Record<string, string>)[url.pathname] ?? null;
+  } catch { return null; }
+}
