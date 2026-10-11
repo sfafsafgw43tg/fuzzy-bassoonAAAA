@@ -208,7 +208,7 @@ $Messages = @{
     stepAndroid       = 'Android Studio and Java 17'
     stepSdk           = 'Android SDK command-line tools, adb and the emulator'
     stepDeps          = 'Project dependencies (npm ci)'
-    stepBuild         = 'Package branded Octo applications'
+    stepBuild         = 'Prepare prebuilt Octo applications'
     uiTitle              = 'OctoSuite installer'
     uiVersion            = 'Version {0}'
     uiHeading            = 'Install OctoSuite'
@@ -442,7 +442,7 @@ $Messages = @{
     stepAndroid       = 'Android Studio i Java 17'
     stepSdk           = 'Narzędzia wiersza poleceń Android SDK, adb i emulator'
     stepDeps          = 'Zależności projektu (npm ci)'
-    stepBuild         = 'Pakowanie aplikacji z identyfikacją Octo'
+    stepBuild         = 'Przygotowanie gotowych aplikacji Octo'
     uiTitle              = 'Instalator OctoSuite'
     uiVersion            = 'Wersja {0}'
     uiHeading            = 'Instalacja OctoSuite'
@@ -819,8 +819,8 @@ function Invoke-Open([string]$appId) {
   # the existing Electron fallback instead of stopping at the runtime gate.
   # Release packaging keeps the strict Test-Ready check and cannot omit it.
   if ((Test-DevCheckout) -and $env:OS -eq 'Windows_NT') {
-    if (Test-Ready) {
-      $packagedExe = Get-LocalPackagedExe $appId
+    $packagedExe = Get-LocalPackagedExe $appId
+    if ((Test-Ready) -and (Test-Path -LiteralPath $packagedExe -PathType Leaf)) {
       Say (T 'starting' $a.Product)
       if ($Rest -and $Rest.Count -gt 0) { Start-Process -FilePath $packagedExe -ArgumentList $Rest -WorkingDirectory (Split-Path -Parent $packagedExe) }
       else { Start-Process -FilePath $packagedExe -WorkingDirectory (Split-Path -Parent $packagedExe) }
@@ -2376,18 +2376,26 @@ function Get-SetupSteps {
       } }
     @{ Key = 'stepDeps'; Required = $true; Fatal = $true; Action = { return (Invoke-EnsureDependencies) } }
     @{ Key = 'stepBuild'; Required = $true; Fatal = $true; Action = {
-        # Always rebuild/package: an old dist/main.js is not proof of success.
-        # Local setup deliberately does not require the optional native runtime.
+        # Normal setup uses the prebuilt Electron distribution installed by npm.
+        # It must not run electron-builder or compile Chromium on the user's machine.
         Assert-NotRunning @('octobrowser', 'octodetect')
-        $previousSkip = $env:OCTO_SKIP_NATIVE_RUNTIME_VERIFY
-        try {
-          $env:OCTO_SKIP_NATIVE_RUNTIME_VERIFY = '1'
-          Invoke-Npm @('run', 'package:local:windows')
-          return (Test-Ready)
-        } finally {
-          if ($null -eq $previousSkip) { Remove-Item Env:OCTO_SKIP_NATIVE_RUNTIME_VERIFY -ErrorAction SilentlyContinue }
-          else { $env:OCTO_SKIP_NATIVE_RUNTIME_VERIFY = $previousSkip }
+        Invoke-Npm @('run', 'icons')
+        Invoke-Npm @('run', 'build')
+        $electronExe = Join-Path $InstallRoot 'node_modules\electron\dist\electron.exe'
+        if (-not (Test-Path -LiteralPath $electronExe -PathType Leaf)) { throw 'The prebuilt Electron/Chromium runtime is missing from node_modules\electron\dist.' }
+        foreach ($app in @('octobrowser', 'octodetect')) {
+          $main = if ($app -eq 'octobrowser') { Join-Path $InstallRoot 'apps\octobrowser\dist\main.js' } else { Join-Path $InstallRoot 'apps\octodetect\dist\main.js' }
+          if (-not (Test-Path -LiteralPath $main -PathType Leaf)) { throw "The built $app application is missing its dist\main.js." }
         }
+        $releaseDir = Join-Path $InstallRoot 'release'
+        New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
+        [ordered]@{
+          schema = 'octo.local-ready.v1'
+          mode = 'prebuilt-electron'
+          nativeRuntimeVerified = $false
+          checkedAt = (Get-Date).ToUniversalTime().ToString('o')
+        } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $releaseDir '.octo-local-ready.json') -Encoding UTF8
+        return (Test-Ready)
       } }
     @{ Key = 'stepShortcut'; Required = $false; Fatal = $false; Action = { return (ConvertTo-StepResult (New-DesktopShortcut)) } }
   )
@@ -2680,6 +2688,14 @@ function Test-Ready {
     $receipt = Get-Content -LiteralPath (Join-Path $InstallRoot 'release\.octo-local-ready.json') -Raw -Encoding UTF8 | ConvertFrom-Json
     if ([string]$receipt.schema -ne 'octo.local-ready.v1') { return $false }
   } catch { return $false }
+  if ([string]$receipt.mode -eq 'prebuilt-electron') {
+    if (-not (Test-Path -LiteralPath (Join-Path $InstallRoot 'node_modules\electron\dist\electron.exe') -PathType Leaf)) { return $false }
+    foreach ($app in @('octobrowser', 'octodetect')) {
+      $main = if ($app -eq 'octobrowser') { Join-Path $InstallRoot 'apps\octobrowser\dist\main.js' } else { Join-Path $InstallRoot 'apps\octodetect\dist\main.js' }
+      if (-not (Test-Path -LiteralPath $main -PathType Leaf)) { return $false }
+    }
+    return $true
+  }
   foreach ($id in @('octobrowser', 'octodetect')) {
     $exe = Get-LocalPackagedExe $id
     if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { return $false }

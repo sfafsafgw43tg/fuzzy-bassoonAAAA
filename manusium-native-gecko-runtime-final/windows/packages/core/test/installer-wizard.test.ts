@@ -268,8 +268,10 @@ describe('steps and the console installer', () => {
     expect(octo).toContain("$env:OCTO_CHROMIUM_SOURCE = $sourceRoot");
     expect(octo).toContain('OCTO_CHROMIUM_SOURCE');
     const buildBlock = octo.slice(octo.indexOf("@{ Key = 'stepBuild'; Required"), octo.indexOf("@{ Key = 'stepShortcut'; Required"));
-    expect(buildBlock).toContain('OCTO_SKIP_NATIVE_RUNTIME_VERIFY');
-    expect(buildBlock).toContain("Invoke-Npm @('run', 'package:local:windows')");
+    expect(buildBlock).toContain("Invoke-Npm @('run', 'icons')");
+    expect(buildBlock).toContain("Invoke-Npm @('run', 'build')");
+    expect(buildBlock).toContain("mode = 'prebuilt-electron'");
+    expect(buildBlock).not.toContain('package:local:windows');
   });
 
   it('the Chromium installer steps keep their order', () => {
