@@ -122,3 +122,26 @@ Windows-only installer tests are in `scripts/tests/installer-runtime.Tests.ps1`
 and run in the Windows release workflow. They were not executed in the Linux
 sandbox. To diagnose an individual npm failure, retain the installer log; the
 completion screenshot does not include npm's underlying error.
+
+## esbuild repair-loop fix
+
+The earlier installer incorrectly looked for `esbuild/bin/esbuild.exe` on
+Windows. Upstream keeps the Windows executable in
+`node_modules/@esbuild/win32-x64/esbuild.exe` (or a nested/fallback location),
+while `esbuild/bin/esbuild` is a JavaScript CLI. The dependency checker now uses
+those real locations. This resolves a false missing-binary check; it is separate
+from building or distributing InkBrowser itself.
+
+Dependency repairs acquire `.octo-deps.lock` in the source root, outside
+`node_modules`, before checking or changing dependencies. A second installer
+fails with a clear message instead of concurrently running npm. After a killed
+installer, confirm its Node/npm child processes have stopped before removing a
+leftover lock. npm is invoked through `node npm-cli.js` with `shell: false`,
+avoiding Node 24's DEP0190 shell warning.
+
+Use the updated files under `manusium-native-gecko-runtime-final/windows` on
+the PR branch. The repository's original uploaded ZIP is retained unchanged and
+contains the older installer. With other installers closed, run
+`node tools/ensure-deps.mjs` once from the updated Windows source folder. A
+successful dependency repair does not mean that the native browser runtimes
+have been built; the subsequent runtime check still requires their full payloads.

@@ -19,11 +19,12 @@
 
 import { spawnSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
-import { existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
+import { openSync, closeSync, unlinkSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 export const FINGERPRINT_VERSION = 1;
+export const LOCK_PATH = '.octo-deps.lock';
 export const STAMP_PATH = path.join('node_modules', '.octo-deps-stamp.json');
 
 const ROOT_INPUTS = ['package.json', 'package-lock.json', '.npmrc'];
@@ -90,19 +91,28 @@ export function electronBinaryPresent(root) {
 }
 
 /** Returns the platform-specific esbuild binary path, or null when it is absent. */
-export function esbuildBinaryPath(root) {
-  const dir = path.join(root, 'node_modules', 'esbuild', 'bin');
-  const name = process.platform === 'win32' ? 'esbuild.exe' : 'esbuild';
-  return existsSync(path.join(dir, name)) ? path.join(dir, name) : null;
+export function esbuildBinaryPath(root, platform = process.platform, arch = process.arch) {
+  const dir = path.join(root, 'node_modules', 'esbuild');
+  const pkg = `@esbuild/${platform}-${arch}`;
+  const subpath = platform === 'win32' ? 'esbuild.exe' : 'bin/esbuild';
+  // Windows never puts an .exe in esbuild/bin: that directory holds a JS CLI.
+  // Check esbuild-local and hoisted optional dependencies plus upstream's fallback.
+  const candidates = [
+    path.join(dir, 'node_modules', pkg, subpath),
+    path.join(root, 'node_modules', pkg, subpath),
+    path.join(dir, 'lib', `downloaded-${pkg.replace('/', '-')}-${path.basename(subpath)}`),
+    ...(platform === 'win32' ? [] : [path.join(dir, 'bin', 'esbuild')]),
+  ];
+  return candidates.find(file => existsSync(file)) ?? null;
 }
 
 /** Returns the exact platform package esbuild expects for this process. */
-export function esbuildPlatformPackage(root) {
+export function esbuildPlatformPackage(root, platform = process.platform, arch = process.arch) {
   const packageFile = path.join(root, 'node_modules', 'esbuild', 'package.json');
   if (!existsSync(packageFile)) return null;
   try {
     const pkg = JSON.parse(readFileSync(packageFile, 'utf8'));
-    const name = `@esbuild/${process.platform}-${process.arch}`;
+    const name = `@esbuild/${platform}-${arch}`;
     const version = pkg.optionalDependencies?.[name];
     return typeof version === 'string' ? { name, version } : null;
   } catch {
@@ -133,14 +143,14 @@ export function existingDependencyArtifactsPresent(root, pkg) {
  * arbitrary package scripts: esbuild is required by the build, while the
  * electron-winstaller selector is needed only when that packaging dependency exists.
  */
-export function verifyNativePackageArtifacts(root, { run = runCommand, log = writeLine } = {}) {
+export function verifyNativePackageArtifacts(root, { run = runCommand, log = writeLine, platform = process.platform, arch = process.arch } = {}) {
   const esbuildDir = path.join(root, 'node_modules', 'esbuild');
   if (existsSync(esbuildDir)) {
-    let binary = esbuildBinaryPath(root);
+    let binary = esbuildBinaryPath(root, platform, arch);
     if (!binary) {
-      const platformPackage = esbuildPlatformPackage(root);
+      const platformPackage = esbuildPlatformPackage(root, platform, arch);
       if (!platformPackage) {
-        log(`esbuild does not declare a platform package for ${process.platform}-${process.arch}.`);
+        log(`esbuild does not declare a platform package for ${platform}-${arch}.`);
         return false;
       }
       const packageSpec = `${platformPackage.name}@${platformPackage.version}`;
@@ -151,10 +161,15 @@ export function verifyNativePackageArtifacts(root, { run = runCommand, log = wri
       const install = path.join(esbuildDir, 'install.js');
       log('running the verified esbuild install.js for the restored platform package.');
       if (!existsSync(install) || run(process.execPath, [install], root) !== 0) return false;
-      binary = esbuildBinaryPath(root);
+      binary = esbuildBinaryPath(root, platform, arch);
     }
-    if (!binary || run(binary, ['--version'], root) !== 0) {
-      log('The esbuild native binary could not be executed.');
+    if (!binary) {
+      log(`The esbuild ${platform}-${arch} executable is still missing after repair under ${esbuildDir}.`);
+      return false;
+    }
+    const status = run(binary, ['--version'], root);
+    if (status !== 0) {
+      log(`esbuild verification failed (exit ${status}): ${binary} --version`);
       return false;
     }
   }
@@ -224,16 +239,30 @@ export function planDependencyWork({
   return { action: 'none', reason: 'dependencies match the sources' };
 }
 
+/** Run npm's JavaScript entry point directly, never npm.cmd through a shell. */
+export function resolveNpmCli(execPath = process.execPath, env = process.env, platform = process.platform) {
+  const dirs = [path.dirname(execPath), ...String(env.PATH ?? env.Path ?? '').split(platform === 'win32' ? ';' : path.delimiter).filter(Boolean)];
+  const candidates = [
+    env.npm_execpath,
+    ...dirs.map(dir => path.join(dir, 'node_modules', 'npm', 'bin', 'npm-cli.js')),
+    path.resolve(path.dirname(execPath), '..', 'lib', 'node_modules', 'npm', 'bin', 'npm-cli.js'),
+  ];
+  return candidates.find(file => file && path.basename(file) === 'npm-cli.js' && existsSync(file)) ?? null;
+}
+
 /** Runs a command and returns its exit status. Output goes to this console. */
-export function runCommand(command, args, cwd) {
-  const result = spawnSync(command, args, {
-    cwd,
-    stdio: 'inherit',
-    // npm is npm.cmd on Windows, which only starts through the shell.
-    shell: process.platform === 'win32' && command === 'npm',
-  });
+export function runCommand(command, args, cwd, { platform = process.platform, execPath = process.execPath, env = process.env, spawn = spawnSync } = {}) {
+  if (command === 'npm') {
+    const cli = resolveNpmCli(execPath, env, platform);
+    if (cli) { command = execPath; args = [cli, ...args]; }
+    else if (platform === 'win32') {
+      process.stderr.write('Cannot locate npm-cli.js beside Node.js or on PATH. Repair the Node.js installation.\n');
+      return 1;
+    }
+  }
+  const result = spawn(command, args, { cwd, env, stdio: 'inherit', shell: false });
   if (result.error) {
-    process.stderr.write(`${result.error.message}\n`);
+    process.stderr.write(`${result.error.code ?? 'spawn error'}: ${result.error.message}\n`);
     return 1;
   }
   return result.status ?? 1;
@@ -245,7 +274,28 @@ const writeLine = (line) => process.stdout.write(`${line}\n`);
  * Makes the checkout at `root` ready to run. Returns { status, plan }:
  * 0 ready, 1 needs work (check mode only), 2 failed.
  */
-export function ensureDependencies(root, { checkOnly = false, run = runCommand, log = writeLine } = {}) {
+export function ensureDependencies(root, options = {}) {
+  // Keep the lock OUTSIDE node_modules: npm ci removes that directory.
+  const lock = path.join(root, LOCK_PATH);
+  let fd;
+  try {
+    fd = openSync(lock, 'wx', 0o600);
+  } catch (error) {
+    if (error.code !== 'EEXIST') throw error;
+    const reason = `Another dependency setup owns ${lock}. Close the other installer and retry. If a previous setup crashed, first confirm its Node/npm processes have stopped, then remove only this lock file.`;
+    (options.log ?? writeLine)(reason);
+    return { status: 2, plan: { action: 'blocked', reason } };
+  }
+  try {
+    writeFileSync(fd, JSON.stringify({ pid: process.pid, startedAt: new Date().toISOString() }));
+    return ensureDependenciesUnlocked(root, options);
+  } finally {
+    closeSync(fd);
+    unlinkSync(lock);
+  }
+}
+
+function ensureDependenciesUnlocked(root, { checkOnly = false, run = runCommand, log = writeLine } = {}) {
   const pkg = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
   const electronNeeded = electronRequired(pkg);
   const plan = planDependencyWork({

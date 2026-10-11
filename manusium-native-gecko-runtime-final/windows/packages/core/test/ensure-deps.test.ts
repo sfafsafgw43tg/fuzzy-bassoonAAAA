@@ -4,6 +4,9 @@ import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import {
+  LOCK_PATH,
+  runCommand,
+  resolveNpmCli,
   computeFingerprint,
   electronBinaryPresent,
   electronRequired,
@@ -152,8 +155,9 @@ describe('native package setup', () => {
   it('recognises the required esbuild binary and optional Squirrel artifacts', () => {
     expect(esbuildBinaryPath(root)).toBe(null);
     expect(electronWinstallerArtifactsPresent(root)).toBe(true);
-    put('node_modules/esbuild/bin/esbuild', '');
-    expect(esbuildBinaryPath(root)).toContain(path.join('node_modules', 'esbuild', 'bin', 'esbuild'));
+    const binary = process.platform === 'win32' ? `node_modules/@esbuild/win32-${process.arch}/esbuild.exe` : 'node_modules/esbuild/bin/esbuild';
+    put(binary, '');
+    expect(esbuildBinaryPath(root)).toBe(path.join(root, binary));
     put('node_modules/electron-winstaller/vendor/7z.exe', '');
     expect(electronWinstallerArtifactsPresent(root)).toBe(false);
     put('node_modules/electron-winstaller/vendor/7z.dll', '');
@@ -168,7 +172,7 @@ describe('native package setup', () => {
     put('node_modules/electron-winstaller/script/select-7z-arch.js', '');
     const runner = recordingRunner((call) => {
       if (call.command === 'npm' && call.args[0] === 'install') put(`node_modules/@esbuild/${process.platform}-${process.arch}/package.json`, '{}');
-      if (call.args[0].endsWith(path.join('esbuild', 'install.js'))) put('node_modules/esbuild/bin/esbuild', '');
+      if (call.args[0].endsWith(path.join('esbuild', 'install.js'))) put(process.platform === 'win32' ? `node_modules/@esbuild/win32-${process.arch}/esbuild.exe` : 'node_modules/esbuild/bin/esbuild', '');
       if (call.args[0].endsWith(path.join('select-7z-arch.js'))) {
         put('node_modules/electron-winstaller/vendor/7z.exe', '');
         put('node_modules/electron-winstaller/vendor/7z.dll', '');
@@ -422,5 +426,102 @@ describe('npm start hooks', () => {
     }
     expect(pkg.scripts.deps).toBe('node tools/ensure-deps.mjs');
     expect(pkg.scripts['deps:check']).toBe('node tools/ensure-deps.mjs --check');
+  });
+});
+
+
+describe('Windows esbuild install-loop regression', () => {
+  it.each(['x64', 'arm64', 'ia32'])('detects the real Windows %s optional-package executable without reinstalling', (arch) => {
+    const binary = `node_modules/@esbuild/win32-${arch}/esbuild.exe`;
+    put('node_modules/esbuild/bin/esbuild', '#!/usr/bin/env node\n// JS wrapper, not a Windows executable');
+    put('node_modules/esbuild/package.json', JSON.stringify({ optionalDependencies: { [`@esbuild/win32-${arch}`]: '0.28.2' } }));
+    put(binary, 'fixture');
+    expect(esbuildBinaryPath(root, 'win32', arch)).toBe(path.join(root, binary));
+    const runner = recordingRunner(() => 0);
+    expect(verifyNativePackageArtifacts(root, { platform: 'win32', arch, run: runner.run, log: () => {} })).toBe(true);
+    expect(runner.calls).toEqual([{ command: path.join(root, binary), args: ['--version'] }]);
+  });
+
+  it('detects esbuild-local nested dependencies and the upstream downloaded fallback', () => {
+    const nested = 'node_modules/esbuild/node_modules/@esbuild/win32-x64/esbuild.exe';
+    put(nested, 'fixture');
+    expect(esbuildBinaryPath(root, 'win32', 'x64')).toBe(path.join(root, nested));
+    rmSync(path.join(root, nested));
+    const downloaded = 'node_modules/esbuild/lib/downloaded-@esbuild-win32-x64-esbuild.exe';
+    put(downloaded, 'fixture');
+    expect(esbuildBinaryPath(root, 'win32', 'x64')).toBe(path.join(root, downloaded));
+  });
+
+  it('does not confuse the JS CLI or the old incorrect location with a Windows binary', () => {
+    put('node_modules/esbuild/bin/esbuild', 'JS wrapper');
+    put('node_modules/esbuild/bin/esbuild.exe', 'incorrect location');
+    expect(esbuildBinaryPath(root, 'win32', 'x64')).toBeNull();
+  });
+
+  it('finds the repaired Windows binary after install.js rather than repeating the missing check', () => {
+    put('node_modules/esbuild/package.json', JSON.stringify({ optionalDependencies: { '@esbuild/win32-x64': '0.28.2' } }));
+    put('node_modules/esbuild/install.js', 'fixture');
+    const binary = 'node_modules/@esbuild/win32-x64/esbuild.exe';
+    const runner = recordingRunner(call => {
+      if (call.args[0].endsWith(path.join('esbuild', 'install.js'))) put(binary, 'fixture');
+      return 0;
+    });
+    expect(verifyNativePackageArtifacts(root, { platform: 'win32', arch: 'x64', run: runner.run, log: () => {} })).toBe(true);
+    expect(runner.calls.at(-1)?.command).toBe(path.join(root, binary));
+  });
+
+  it('reports the exact binary and exit status when execution actually fails', () => {
+    put('node_modules/esbuild/package.json', '{}');
+    put('node_modules/@esbuild/win32-x64/esbuild.exe', 'fixture');
+    const log: string[] = [];
+    expect(verifyNativePackageArtifacts(root, { platform: 'win32', arch: 'x64', run: () => 5, log: (line: string) => log.push(line) })).toBe(false);
+    expect(log.join('\n')).toContain('exit 5');
+    expect(log.join('\n')).toContain('esbuild.exe --version');
+  });
+});
+
+describe('dependency setup concurrency', () => {
+  it('refuses a second setup without invoking npm or removing the first lock', () => {
+    makeProject();
+    put(LOCK_PATH, JSON.stringify({ pid: process.pid }));
+    const runner = recordingRunner(() => 0);
+    const result = ensureDependencies(root, { run: runner.run, log: () => {} });
+    expect(result.status).toBe(2);
+    expect(result.plan.action).toBe('blocked');
+    expect(runner.calls).toEqual([]);
+    expect(existsSync(path.join(root, LOCK_PATH))).toBe(true);
+  });
+
+  it('holds the lock throughout repair and releases it after failure', () => {
+    makeProject();
+    const runner = recordingRunner(() => {
+      expect(existsSync(path.join(root, LOCK_PATH))).toBe(true);
+      expect(ensureDependencies(root, { log: () => {} }).status).toBe(2);
+      return 1;
+    });
+    expect(ensureDependencies(root, { run: runner.run, log: () => {} }).status).toBe(2);
+    expect(existsSync(path.join(root, LOCK_PATH))).toBe(false);
+  });
+
+  it('releases its lock when project reading throws', () => {
+    put('package.json', 'not JSON');
+    expect(() => ensureDependencies(root)).toThrow();
+    expect(existsSync(path.join(root, LOCK_PATH))).toBe(false);
+  });
+});
+
+describe('npm invocation without a Windows command shell', () => {
+  it('preserves spaces and shell metacharacters as literal arguments', () => {
+    const cli = path.join(root, 'Node & tools (test)', 'node_modules/npm/bin/npm-cli.js');
+    put(path.relative(root, cli), 'fixture');
+    const node = path.join(root, 'Node & tools (test)', 'node.exe');
+    const env = { PATH: '' };
+    expect(resolveNpmCli(node, env, 'win32')).toBe(cli);
+    const calls: unknown[][] = [];
+    expect(runCommand('npm', ['install', 'literal & value'], root, {
+      platform: 'win32', execPath: node, env,
+      spawn: (...args: unknown[]) => { calls.push(args); return { status: 0 }; },
+    })).toBe(0);
+    expect(calls).toEqual([[node, [cli, 'install', 'literal & value'], { cwd: root, env, stdio: 'inherit', shell: false }]]);
   });
 });

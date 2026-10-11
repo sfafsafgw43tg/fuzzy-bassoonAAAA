@@ -50,3 +50,6 @@ resources/engines/gecko/*/
 .runtime-test/
 ci-logs/
 __pycache__/
+
+# Serializes dependency repair across launcher/installer processes
+.octo-deps.lock
