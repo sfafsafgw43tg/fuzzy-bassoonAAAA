@@ -213,7 +213,7 @@ describe('the graphical installer', () => {
   it('runs exactly the steps the console runs', () => {
     expect(uiSource).toContain('Get-SetupSteps');
     const keys = [...source.matchAll(/Key = '(step[A-Za-z]+)'/g)].map((m) => m[1]);
-    expect(keys).toEqual(['stepPrereqs', 'stepDeps', 'stepRuntimes', 'stepBuild', 'stepShortcut']);
+    expect(keys).toEqual(['stepPrereqs', 'stepDeps', 'stepBuild', 'stepShortcut']);
     for (const key of keys) {
       // Every step needs a label in both dictionaries.
       expect(source).toContain(`    ${key.padEnd(17)} = '`);
@@ -222,11 +222,11 @@ describe('the graphical installer', () => {
 });
 
 describe('the steps are required or optional', () => {
-  it('requires dependencies, runtimes and packaging; only the shortcut is optional', () => {
+  it('requires dependencies and packaging; only the shortcut is optional', () => {
     const block = source.slice(source.indexOf('function Get-SetupSteps'), source.indexOf('function Show-InstallerWindow'));
     const required = [...block.matchAll(/Key = '(step[A-Za-z]+)'; Required = \$true/g)].map((m) => m[1]);
     const optional = [...block.matchAll(/Key = '(step[A-Za-z]+)'; Required = \$false/g)].map((m) => m[1]);
-    expect(required).toEqual(['stepPrereqs', 'stepDeps', 'stepRuntimes', 'stepBuild']);
+    expect(required).toEqual(['stepPrereqs', 'stepDeps', 'stepBuild']);
     expect(optional).toEqual(['stepShortcut']);
   });
 });

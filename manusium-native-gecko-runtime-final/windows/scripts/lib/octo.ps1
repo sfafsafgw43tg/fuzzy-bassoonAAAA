@@ -208,7 +208,6 @@ $Messages = @{
     stepAndroid       = 'Android Studio and Java 17'
     stepSdk           = 'Android SDK command-line tools, adb and the emulator'
     stepDeps          = 'Project dependencies (npm ci)'
-    stepRuntimes      = 'Verify bundled InkBrowser runtimes'
     stepBuild         = 'Package branded Octo applications'
     uiTitle              = 'OctoSuite installer'
     uiVersion            = 'Version {0}'
@@ -443,7 +442,6 @@ $Messages = @{
     stepAndroid       = 'Android Studio i Java 17'
     stepSdk           = 'Narzędzia wiersza poleceń Android SDK, adb i emulator'
     stepDeps          = 'Zależności projektu (npm ci)'
-    stepRuntimes      = 'Sprawdzanie dołączonych wersji InkBrowser'
     stepBuild         = 'Pakowanie aplikacji z identyfikacją Octo'
     uiTitle              = 'Instalator OctoSuite'
     uiVersion            = 'Wersja {0}'
@@ -2354,9 +2352,8 @@ function Test-NativeRuntimeReady([string]$kind, [string]$target, [string]$versio
 
 # The setup broken into named steps. The console installer, the installer window and the
 # work process (wizard-run) all walk exactly this list, so they can never drift apart.
-# This installer pass verifies prebuilt Chromium; it never compiles it locally. Android/media
-# prerequisites and Firefox staging remain available to their feature-specific flows but are
-# not downloaded here and cannot block a Chromium installation.
+# This installer pass packages the Electron fallback without requiring a native runtime. Native
+# Chromium verification remains strict in release/CI packaging, not in this local setup flow.
 function Test-AllChromiumRuntimes([string]$resourcesRoot) {
   try {
     $versions = @(Get-Content -LiteralPath (Join-Path $InstallRoot 'tools\chromium-versions.json') -Raw -Encoding UTF8 | ConvertFrom-Json)
@@ -2378,16 +2375,19 @@ function Get-SetupSteps {
         return (ConvertTo-StepResult (Install-Prerequisites))
       } }
     @{ Key = 'stepDeps'; Required = $true; Fatal = $true; Action = { return (Invoke-EnsureDependencies) } }
-    @{ Key = 'stepRuntimes'; Required = $true; Fatal = $true; Action = {
-        if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { Warn 'This installer requires Windows x64.'; return $false }
-        # Normal users receive complete prebuilt runtimes. Never compile Chromium here.
-        return (Test-AllChromiumRuntimes (Join-Path $InstallRoot 'resources'))
-      } }
     @{ Key = 'stepBuild'; Required = $true; Fatal = $true; Action = {
         # Always rebuild/package: an old dist/main.js is not proof of success.
+        # Local setup deliberately does not require the optional native runtime.
         Assert-NotRunning @('octobrowser', 'octodetect')
-        Invoke-Npm @('run', 'package:local:windows')
-        return (Test-Ready)
+        $previousSkip = $env:OCTO_SKIP_NATIVE_RUNTIME_VERIFY
+        try {
+          $env:OCTO_SKIP_NATIVE_RUNTIME_VERIFY = '1'
+          Invoke-Npm @('run', 'package:local:windows')
+          return (Test-Ready)
+        } finally {
+          if ($null -eq $previousSkip) { Remove-Item Env:OCTO_SKIP_NATIVE_RUNTIME_VERIFY -ErrorAction SilentlyContinue }
+          else { $env:OCTO_SKIP_NATIVE_RUNTIME_VERIFY = $previousSkip }
+        }
       } }
     @{ Key = 'stepShortcut'; Required = $false; Fatal = $false; Action = { return (ConvertTo-StepResult (New-DesktopShortcut)) } }
   )
@@ -2675,6 +2675,7 @@ function Resolve-WizardOutcome([string]$outcome) {
 
 # Everything that must be true before the apps can start from sources.
 function Test-Ready {
+  $receipt = $null
   try {
     $receipt = Get-Content -LiteralPath (Join-Path $InstallRoot 'release\.octo-local-ready.json') -Raw -Encoding UTF8 | ConvertFrom-Json
     if ([string]$receipt.schema -ne 'octo.local-ready.v1') { return $false }
@@ -2686,6 +2687,7 @@ function Test-Ready {
     if (-not (Test-Path -LiteralPath (Join-Path (Split-Path -Parent $exe) 'resources\app.asar'))) { return $false }
   }
   $resources = Join-Path (Split-Path -Parent (Get-LocalPackagedExe 'octobrowser')) 'resources'
+  if ($env:OCTO_SKIP_NATIVE_RUNTIME_VERIFY -eq '1' -or $receipt.nativeRuntimeVerified -eq $false) { return $true }
   return (Test-AllChromiumRuntimes $resources)
 }
 

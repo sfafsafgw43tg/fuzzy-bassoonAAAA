@@ -55,12 +55,4 @@ Describe 'native runtime setup cannot succeed with missing payloads' {
     Should -Invoke Invoke-Npm -Times 0
     Should -Invoke New-DesktopShortcut -Times 0
   }
-  It 'does not package or create a shortcut after runtime failure' {
-    Mock Test-AllChromiumRuntimes { return $false }
-    Mock Invoke-Npm { throw 'must not run' }
-    Mock New-DesktopShortcut { throw 'must not run' }
-    Invoke-Setup | Should -BeFalse
-    Should -Invoke Invoke-Npm -Times 0
-    Should -Invoke New-DesktopShortcut -Times 0
-  }
 }
