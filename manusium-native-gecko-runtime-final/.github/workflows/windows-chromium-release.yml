@@ -118,6 +118,13 @@ jobs:
           npm run icons
           if ($LASTEXITCODE -ne 0) { throw 'Icon generation failed' }
 
+      - name: Validate native Chromium patch bundle
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          npm run check:chromium-patches 2>&1 | Tee-Object -FilePath ci-logs/chromium-patches.log
+          if ($LASTEXITCODE -ne 0) { throw "Chromium patch bundle validation failed with exit code $LASTEXITCODE" }
+
       - name: Build Chromium source runtime
         shell: pwsh
         run: |

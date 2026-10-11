@@ -231,7 +231,7 @@ describe('gn/release.gn', () => {
     expect(setting('google_default_client_id')).toBe('""');
     expect(setting('google_default_client_secret')).toBe('""');
     expect(setting('use_official_google_api_keys')).toBe('false');
-    expect(setting('safe_browsing_mode')).toBe('0');
+    expect(setting('safe_browsing_mode')).toBeUndefined();
     expect(setting('enable_reporting')).toBe('false');
     expect(setting('enable_remoting')).toBe('false');
     expect(setting('enable_mdns')).toBe('false');
@@ -260,7 +260,7 @@ describe('gn/release.gn', () => {
       'v8_drumbrake_bounds_checks', 'is_chrome_branded', 'proprietary_codecs', 'ffmpeg_branding',
       'enable_mse_mpeg2ts_stream_parser', 'enable_widevine', 'google_api_key', 'google_default_client_id',
       'google_default_client_secret', 'use_official_google_api_keys', 'safe_browsing_mode', 'enable_reporting',
-      'enable_remoting', 'enable_mdns', 'enable_service_discovery', 'enable_hangout_services_extension',
+      'enable_remoting', 'enable_mdns', 'enable_service_discovery', 'enable_hangout_services_extension', 'use_siso',
     ]);
     expect(names.length).toBeGreaterThan(30);
     expect(names.filter((name) => !known.has(name))).toEqual([]);

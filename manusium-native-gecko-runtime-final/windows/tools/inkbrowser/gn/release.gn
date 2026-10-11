@@ -53,9 +53,11 @@ google_api_key = ""                       # [U]
 google_default_client_id = ""             # [U]
 google_default_client_secret = ""         # [U]
 use_official_google_api_keys = false      # [U]
-safe_browsing_mode = 0                    # [U] a trade-off, see BLUEPRINT section 2
+# Safe Browsing defaults are changed by the native patch series; the GN graph
+# must retain the safe_browsing target dependencies on Chromium 155.
 enable_reporting = false                  # [U]
 enable_remoting = false                   # [U]
 enable_mdns = false                       # [U]
 enable_service_discovery = false          # [U]
 enable_hangout_services_extension = false # [U]
+use_siso = false                          # keep output compatible with autoninja/ninja on the build runner

@@ -24,8 +24,8 @@ Describe 'native runtime setup cannot succeed with missing payloads' {
   BeforeEach {
     $script:InstallRoot = Join-Path $TestDrive 'source'
     New-Item -ItemType Directory -Force (Join-Path $InstallRoot 'tools') | Out-Null
-    '["155.0.8059.39","156.0.8078.12"]' | Set-Content (Join-Path $InstallRoot 'tools\chromium-versions.json')
-    foreach ($version in @('155.0.8059.39','156.0.8078.12')) {
+    '["155.0.8059.39"]' | Set-Content (Join-Path $InstallRoot 'tools\chromium-versions.json')
+    foreach ($version in @('155.0.8059.39')) {
       $dir = Join-Path $InstallRoot "resources\engines\chromium\$version"
       New-Item -ItemType Directory -Force (Join-Path $dir 'locales') | Out-Null
       foreach ($name in @('inkbrowser-chrome.exe','chrome.dll','chrome_elf.dll','chrome_child.dll','resources.pak','chrome_100_percent.pak','chrome_200_percent.pak','icudtl.dat','v8_context_snapshot.bin','locales\en-US.pak')) {
@@ -38,9 +38,9 @@ Describe 'native runtime setup cannot succeed with missing payloads' {
       } | ConvertTo-Json | Set-Content (Join-Path $dir 'runtime.json')
     }
   }
-  It 'requires both complete version directories' {
+  It 'requires the complete patched version directory' {
     Test-AllChromiumRuntimes (Join-Path $InstallRoot 'resources') | Should -BeTrue
-    Remove-Item (Join-Path $InstallRoot 'resources\engines\chromium\156.0.8078.12\chrome.dll')
+    Remove-Item (Join-Path $InstallRoot 'resources\engines\chromium\155.0.8059.39\chrome.dll')
     Test-AllChromiumRuntimes (Join-Path $InstallRoot 'resources') | Should -BeFalse
   }
   It 'rejects a renamed or tampered executable' {

@@ -231,6 +231,8 @@ describe('steps and the console installer', () => {
     expect(octo).toContain('Get-FileHash -LiteralPath $exe -Algorithm SHA256');
     expect(functionBody(octo, 'Test-AllChromiumRuntimes')).toContain("Test-NativeRuntimeReady 'chromium' 'win32-x64'");
     expect(octo).toContain('function Ensure-ChromiumBuildToolchain');
+    expect(functionBody(octo, 'Ensure-ChromiumBuildToolchain')).toContain("$env:INKBROWSER_DEVELOPER_BUILD -ne '1'");
+    expect(functionBody(octo, 'Ensure-ChromiumBuildToolchain')).toContain('normal installer will not install Visual Studio');
     expect(octo).toContain("Invoke-Native $gclient @('--version') $depot");
     expect(octo).not.toContain('Invoke-Native $gclient @() $depot');
     expect(octo).toContain('function Normalize-CmdlineToolsLayout');

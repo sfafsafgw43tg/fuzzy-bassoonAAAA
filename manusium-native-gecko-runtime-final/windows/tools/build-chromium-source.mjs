@@ -15,6 +15,7 @@
 import fs from 'node:fs';
 import { applyChromiumBranding } from './lib/chromium-branding.mjs';
 import { copyChromiumPayload } from './lib/chromium-payload.mjs';
+import { applyPatchSeries } from './apply-chromium-patches.mjs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';
@@ -187,7 +188,7 @@ async function sourceCheckout(source, version, skipSync) {
   }
   return runCapture('git', ['rev-parse', 'HEAD'], source, 'recording Chromium source revision');
 }
-function applyOverlay(source, version) {
+function applyOverlay(source, version, patchResult) {
   const destination = path.join(source, 'chrome', 'app', 'theme', 'chromium', 'BRANDING');
   if (!fs.existsSync(overlay)) fail(`project branding overlay is missing: ${overlay}`);
   if (!fs.existsSync(path.dirname(destination))) fail(`Chromium branding directory is missing at ${path.dirname(destination)}; the pinned source layout changed`);
@@ -198,6 +199,10 @@ function applyOverlay(source, version) {
     chromiumVersion: version,
     overlay: 'tools/inkbrowser/source/BRANDING',
     overlaySha256: sha256(overlay),
+    nativePatchSeries: {
+      count: patchResult.count,
+      sha256: patchResult.digest,
+    },
   };
   fs.writeFileSync(path.join(source, 'inkbrowser-source-build.json'), `${JSON.stringify(marker, null, 2)}\n`);
   return marker;
@@ -268,6 +273,9 @@ async function main() {
   if (target !== targetDefault) fail(`unsupported target ${target}; only ${targetDefault} is implemented by this source-build workflow`);
   const version = arg('--version', versionDefault);
   if (!/^\d+\.\d+\.\d+\.\d+$/.test(version)) fail(`invalid Chromium version: ${version}`);
+  if (version !== versionDefault) {
+    fail(`the supplied native patch handoff is pinned to Chromium ${versionDefault}; no patch compatibility claim exists for ${version}`);
+  }
   ensureTool('git');
   ensureTool('fetch');
   ensureTool('gclient');
@@ -275,11 +283,13 @@ async function main() {
   ensureTool('autoninja');
   const source = path.resolve(arg('--source', process.env.OCTO_CHROMIUM_SOURCE
     ? path.join(process.env.OCTO_CHROMIUM_SOURCE, 'chromium', version, 'src')
-    : path.join('C:\src', 'chromium', version, 'src')));
+    : path.join('C:', 'src', 'chromium', version, 'src')));
   const outBuild = path.resolve(arg('--out-build', path.join(source, 'out', 'InkBrowser')));
   const outDir = path.resolve(arg('--out', path.join(root, 'resources', 'engines', 'chromium', version)));
   const revision = await sourceCheckout(source, version, flag('--skip-sync'));
-  const marker = applyOverlay(source, version);
+  const patchResult = applyPatchSeries({ source, checkOnly: flag('--check-patches') });
+  console.log(`[build-chromium-source] native InkBrowser patch series: ${patchResult.skipped ? 'already applied' : patchResult.checked ? 'checked' : 'applied'} (${patchResult.count} patches, ${patchResult.digest})`);
+  const marker = applyOverlay(source, version, patchResult);
   await build(source, outBuild, flag('--skip-build'));
   await stage(source, outBuild, outDir, version, revision, marker, outBuild);
 }

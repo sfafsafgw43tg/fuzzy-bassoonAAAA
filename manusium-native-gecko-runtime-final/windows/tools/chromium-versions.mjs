@@ -5,7 +5,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 export const versions = JSON.parse(fs.readFileSync(new URL('./chromium-versions.json', import.meta.url), 'utf8'));
-if (!Array.isArray(versions) || versions.length < 2 || new Set(versions).size !== versions.length || versions.some(v => !/^\d+\.\d+\.\d+\.\d+$/.test(v))) throw new Error('Invalid InkBrowser version pins');
+if (!Array.isArray(versions) || versions.length < 1 || new Set(versions).size !== versions.length || versions.some(v => !/^\d+\.\d+\.\d+\.\d+$/.test(v))) throw new Error('Invalid InkBrowser version pins');
 export function runNode(script, args = [], env = process.env) {
   const result = spawnSync(process.execPath, [path.join(root, 'tools', script), ...args], { cwd: root, env, stdio: 'inherit' });
   if (result.error || result.status !== 0) throw new Error(`${script} failed: ${result.error?.message ?? result.status}`);

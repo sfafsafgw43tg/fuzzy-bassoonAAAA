@@ -1599,6 +1599,10 @@ function Install-Prerequisites([switch]$GitRequired) {
 # only when a source-built Chromium runtime is actually missing.
 function Ensure-ChromiumBuildToolchain {
   if ($env:OS -ne 'Windows_NT') { return $true }
+  if ($env:INKBROWSER_DEVELOPER_BUILD -ne '1') {
+    Warn 'Native Chromium source compilation is developer/CI-only. The normal installer will not install Visual Studio, depot_tools, or the Chromium source.'
+    return $false
+  }
   $git = Resolve-Tool 'git'
   if (-not $git) { Warn 'Chromium source build needs Git for Windows, but git was not found.'; return $false }
   $minimumChromiumFreeBytes = 100GB
@@ -2356,7 +2360,7 @@ function Test-NativeRuntimeReady([string]$kind, [string]$target, [string]$versio
 function Test-AllChromiumRuntimes([string]$resourcesRoot) {
   try {
     $versions = @(Get-Content -LiteralPath (Join-Path $InstallRoot 'tools\chromium-versions.json') -Raw -Encoding UTF8 | ConvertFrom-Json)
-    if ($versions.Count -lt 2) { return $false }
+    if ($versions.Count -lt 1) { return $false }
     foreach ($version in $versions) {
       if (-not (Test-NativeRuntimeReady 'chromium' 'win32-x64' ([string]$version) $resourcesRoot)) {
         Warn "InkBrowser $version is missing or incomplete under $resourcesRoot\engines\chromium. Install the complete prebuilt Octo Windows release, not the source ZIP. Developers: stage both runtimes on the Windows build runner first. No browser was installed by this step."
