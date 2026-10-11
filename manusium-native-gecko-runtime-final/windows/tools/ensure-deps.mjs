@@ -167,9 +167,14 @@ export function verifyNativePackageArtifacts(root, { run = runCommand, log = wri
       log(`The esbuild ${platform}-${arch} executable is still missing after repair under ${esbuildDir}.`);
       return false;
     }
-    const status = run(binary, ['--version'], root);
+    // Use esbuild's supported JS launcher rather than spawning the optional
+    // platform executable directly. On Windows the launcher resolves the
+    // package-local binary and applies esbuild's normal path handling, which
+    // is the same path used by the application build.
+    const launcher = path.join(esbuildDir, 'bin', 'esbuild');
+    const status = run(process.execPath, [launcher, '--version'], root);
     if (status !== 0) {
-      log(`esbuild verification failed (exit ${status}): ${binary} --version`);
+      log(`esbuild verification failed (exit ${status}): ${process.execPath} ${launcher} --version`);
       return false;
     }
   }

@@ -182,7 +182,10 @@ describe('native package setup', () => {
     expect(verifyNativePackageArtifacts(root, { run: runner.run, log: () => {} })).toBe(true);
     expect(runner.calls[0].args).toContain(`@esbuild/${process.platform}-${process.arch}@0.28.2`);
     expect(runner.calls[1].args[0]).toBe(path.join(root, 'node_modules', 'esbuild', 'install.js'));
-    expect(runner.calls[2].args).toEqual(['--version']);
+    expect(runner.calls[2]).toEqual({
+      command: process.execPath,
+      args: [path.join(root, 'node_modules', 'esbuild', 'bin', 'esbuild'), '--version'],
+    });
     expect(runner.calls[3].args[0]).toBe(path.join(root, 'node_modules', 'electron-winstaller', 'script', 'select-7z-arch.js'));
   });
 
@@ -439,7 +442,10 @@ describe('Windows esbuild install-loop regression', () => {
     expect(esbuildBinaryPath(root, 'win32', arch)).toBe(path.join(root, binary));
     const runner = recordingRunner(() => 0);
     expect(verifyNativePackageArtifacts(root, { platform: 'win32', arch, run: runner.run, log: () => {} })).toBe(true);
-    expect(runner.calls).toEqual([{ command: path.join(root, binary), args: ['--version'] }]);
+    expect(runner.calls).toEqual([{
+      command: process.execPath,
+      args: [path.join(root, 'node_modules', 'esbuild', 'bin', 'esbuild'), '--version'],
+    }]);
   });
 
   it('detects esbuild-local nested dependencies and the upstream downloaded fallback', () => {
@@ -467,7 +473,10 @@ describe('Windows esbuild install-loop regression', () => {
       return 0;
     });
     expect(verifyNativePackageArtifacts(root, { platform: 'win32', arch: 'x64', run: runner.run, log: () => {} })).toBe(true);
-    expect(runner.calls.at(-1)?.command).toBe(path.join(root, binary));
+    expect(runner.calls.at(-1)).toEqual({
+      command: process.execPath,
+      args: [path.join(root, 'node_modules', 'esbuild', 'bin', 'esbuild'), '--version'],
+    });
   });
 
   it('reports the exact binary and exit status when execution actually fails', () => {
@@ -476,7 +485,7 @@ describe('Windows esbuild install-loop regression', () => {
     const log: string[] = [];
     expect(verifyNativePackageArtifacts(root, { platform: 'win32', arch: 'x64', run: () => 5, log: (line: string) => log.push(line) })).toBe(false);
     expect(log.join('\n')).toContain('exit 5');
-    expect(log.join('\n')).toContain('esbuild.exe --version');
+    expect(log.join('\n')).toContain('esbuild/bin/esbuild --version');
   });
 });
 
