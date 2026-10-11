@@ -471,8 +471,10 @@ export function pageShim(c: PageConfig, eventName: string): void {
     }
 
     // ---- WebGL / WebGPU profile overlays ---------------------------------
-    // Keep the native rendering implementation and all unconfigured limits,
-    // while making the exposed adapter identity internally consistent.
+    // Keep native rendering for enabled profiles, but never let the host GPU
+    // identity escape through the standard VENDOR/RENDERER parameters. The
+    // debug extension is only one disclosure path; sites also read the
+    // standard parameters and WebGPU adapter information.
     if (fp.webgl === 'off') {
       const blockContext = (self: unknown, args: unknown[], orig: (...a: unknown[]) => unknown): unknown => {
         const kind = String(args[0] ?? '').toLowerCase();
@@ -483,11 +485,20 @@ export function pageShim(c: PageConfig, eventName: string): void {
       method(proto('OffscreenCanvas'), 'getContext', blockContext);
     }
     if (fp.webgl !== 'off') {
+      const exposedVendor = fp.webglVendor || 'WebGL Vendor';
+      const exposedRenderer = fp.webglRenderer || 'WebGL Renderer';
       const patchWebGL = (Ctor: unknown): void => {
         const P = (Ctor as { prototype?: object } | undefined)?.prototype;
         if (!P) return;
         method(P, 'getParameter', (self, args, orig) => {
           const p = Number(args[0]);
+          // 0x1f00/0x1f01 are ordinary WebGL values; 0x9245/0x9246 are the
+          // unmasked debug-extension values. Mask all four in noise mode so
+          // a site cannot recover the real adapter through the standard path.
+          if (fp.webgl === 'noise') {
+            if (p === 0x1f00 || p === 0x9245) return exposedVendor;
+            if (p === 0x1f01 || p === 0x9246) return exposedRenderer;
+          }
           if (p === 0x9245 && fp.webglVendor) return fp.webglVendor;
           if (p === 0x9246 && fp.webglRenderer) return fp.webglRenderer;
           return orig(...args);
@@ -533,7 +544,9 @@ export function pageShim(c: PageConfig, eventName: string): void {
     const gpuArchitecture = /Apple\s*M\d/i.test(gpuRenderer) ? 'apple-m' : /RTX\s*30/i.test(gpuRenderer) ? 'ampere' : /RTX\s*40/i.test(gpuRenderer) ? 'ada' : /Arc/i.test(gpuRenderer) ? 'xe-hpg' : /UHD/i.test(gpuRenderer) ? 'gen12' : 'common-3';
     const gpuDescription = gpuRenderer.replace(/^ANGLE\s*\([^,]+,\s*/i, '').replace(/\s+Direct3D.*$/i, '').replace(/,\s*Unspecified Version\)?$/i, '').replace(/\)$/i, '');
     const adapterInfo = () => ({ vendor: gpuVendor, architecture: gpuArchitecture, device: gpuDescription, description: gpuDescription, isFallbackAdapter: false });
-    if (fp.webgpu === 'off' || fp.webgpu === 'disable') {
+    // Disabling WebGL must not leave WebGPU available as a second GPU
+    // disclosure path. WebGPU can also be disabled independently.
+    if (fp.webgl === 'off' || fp.webgpu === 'off' || fp.webgpu === 'disable') {
       getter(proto('Navigator'), 'gpu', (_s, orig) => { orig(); return undefined; });
     } else {
       if (gpuProto) {

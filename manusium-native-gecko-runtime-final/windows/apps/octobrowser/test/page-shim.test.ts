@@ -86,7 +86,7 @@ describe('pageShim Graphics Card Emulation', () => {
     return gl;
   }
 
-  it('passes through native WebGL parameters and limits while preserving truthful unmasked vendor/renderer', () => {
+  it('masks host WebGL identity consistently while preserving native limits', () => {
     class MockWebGLRenderingContext {
       getParameter(param: number): unknown {
         if (param === 0x1f00) return 'WebKit Native';
@@ -156,13 +156,14 @@ describe('pageShim Graphics Card Emulation', () => {
 
     const ctx = Object.create(MockWebGLRenderingContext.prototype);
 
-    // Vendor and Renderer unmasked
+    // Both standard and debug-extension identity values match the configured
+    // profile, so the host adapter cannot escape through the standard path.
+    expect(ctx.getParameter(0x1F00)).toBe('Google Inc. (NVIDIA)');
+    expect(ctx.getParameter(0x1F01)).toBe('ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0, D3D11-31.0.15.5176)');
     expect(ctx.getParameter(0x9245)).toBe('Google Inc. (NVIDIA)');
     expect(ctx.getParameter(0x9246)).toBe('ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0, D3D11-31.0.15.5176)');
 
-    // Native WebGL vendor/renderer/limits pass through natively without synthetic override
-    expect(ctx.getParameter(0x1F00)).toBe('WebKit Native');
-    expect(ctx.getParameter(0x1F01)).toBe('WebKit WebGL Native');
+    // Native WebGL limits still pass through without synthetic overrides.
     expect(ctx.getParameter(0x0D33)).toBe(8192); // Native MAX_TEXTURE_SIZE preserved
 
     // Native shader precision format preserved
@@ -205,6 +206,9 @@ describe('pageShim Graphics Card Emulation', () => {
     expect(canvas.getContext('webgl')).toBeNull();
     expect(canvas.getContext('webgl2')).toBeNull();
     expect(canvas.getContext('2d')).toEqual({ kind: '2d' });
+    const navigatorProto = (window as unknown as { Navigator: { prototype: object } }).Navigator.prototype;
+    const gpuGetter = Object.getOwnPropertyDescriptor(navigatorProto, 'gpu')?.get;
+    expect(gpuGetter?.call(navigator)).toBeUndefined();
   });
 
   it('preserves native WebGL 2 parameters and limits without synthetic constants', () => {
