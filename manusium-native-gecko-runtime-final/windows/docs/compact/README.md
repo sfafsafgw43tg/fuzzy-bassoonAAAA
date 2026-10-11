@@ -1,10 +1,10 @@
 # Octo Compact — single-engine desktop edition
 
-**Status: candidate, pending Windows build + clean-install evidence.** This is a
+**Status: Windows-tested candidate.** Build and clean-install/native-browser
+acceptance passed for commit `dd2b7b0` in run `38160319029` (2026-10-11). This is a
 new small edition, not a completed source-built InkBrowser release. Use its
 `Octo-Compact-Setup-<version>.exe`, not the full suite's old `install.bat` or the
-original uploaded source ZIP. Do not advertise an installed size until
-`installed-size.json` exists from a passing clean-install job.
+original uploaded source ZIP. The measurements and tested artifact are listed below.
 
 ## Inspection and fit
 
@@ -71,7 +71,8 @@ context isolation, web security and no Node integration in web content. Websites
 have no preload bridge. Commands are accepted only from the trusted local main
 frame. Certificate validation is not bypassed. Packaging retains hardened fuses,
 ASAR integrity validation, Electron/Chromium license notices and all runtime
-resources/locales. No security resources are stripped for size.
+resources/locales. No security resources are stripped for size. The trusted controls use the restricted
+`octo-compact://app/` scheme instead of enabling extra file-protocol privileges.
 
 Electron was updated from 44.4.5 to **44.7.0**, the registry's latest stable patch
 at implementation time. `npm run check:compact:engine` requires an exact pin,
@@ -149,3 +150,75 @@ Manual accessibility, graphics/driver compatibility, uncommon downloads and
 permission flows, visual branding, real-world sites and release-signing checks
 remain necessary before calling this production-ready. A scripted clean-install
 pass is not evidence of performance across all machines.
+
+
+## Verified Windows result — 2026-10-11
+
+[Successful build and clean-install run 38160319029](https://github.com/sfafsafgw43tg/fuzzy-bassoonAAAA/actions/runs/38160319029)
+verified application commit `dd2b7b020a416822350968e1b9cac14f14a30e8d`.
+
+[Download the tested installer artifact (compact-CANDIDATE-6)](https://github.com/sfafsafgw43tg/fuzzy-bassoonAAAA/actions/runs/38160319029/artifacts/11710405759).
+GitHub wraps the installer in an artifact ZIP; this is **not a source archive**.
+Extract and run `Octo-Compact-Setup-0.1.1.exe`. GitHub access may be required and
+artifacts expire after seven days. This is not yet a permanently published stable
+release. Do not use the older source `install.bat` for this compact edition.
+
+| Measured item | Result |
+| --- | --- |
+| Installed app, including its embedded engine and uninstaller, excluding user data | **386,738,032 bytes / 368.82 MiB** |
+| Actual NSIS installer executable | **120,731,644 bytes / 115.14 MiB** |
+| Compact JS/UI/icon bundle before packaging (not the installed browser) | 380,210 bytes / 371.30 KiB |
+| Synthetic test profile after browsing/restart | 5,383,230 bytes; not a quota or expected real-user size |
+| Engine actually executed | Electron **44.7.0**, Chromium **152.0.7977.130**, Windows x64 |
+| Build job / clean-install job duration | 2m18s / 59s (one hosted-runner observation, not a performance guarantee) |
+
+SHA-256 of the installer:
+
+```text
+4A72C5BFE270FCB7E25AAF0713ED881C619A35192F1B786CB12C9E8FDCE94F47
+```
+
+Raw receipts copied from the successful jobs' GitHub check annotations:
+[evidence/installed-size-dd2b7b0.json](evidence/installed-size-dd2b7b0.json) and
+[evidence/build-size-dd2b7b0.json](evidence/build-size-dd2b7b0.json).
+The recorded end-of-build categories total about 688 MiB, but this is **not the
+peak build disk requirement**: it excludes source/Git, any unobserved system/cache
+locations and transient staging. The configured Electron-cache path measured zero;
+that does not mean the runtime was never downloaded. Use the several-GB planning
+allowance above rather than treating that sum as a minimum disk specification.
+
+Commands verified by this Windows run:
+
+```powershell
+npm ci --ignore-scripts --no-audit --no-fund
+npm run check:compact:engine
+npm run typecheck
+npm test
+npm run dist:compact:windows
+node tools/measure-compact-build.mjs
+# On a second fresh Windows runner, with that installer downloaded:
+./tools/ci/compact-installed.ps1
+```
+
+The clean test checks required files, branding, fuses and actual installed
+execution, including a real HTTP download, private isolation, restart persistence,
+390px layout and silent uninstall. It writes the size/success receipt only after
+uninstall succeeds. It does not substitute a development Electron runtime.
+
+The local full suite also passes: **953 passed, 5 optional native/graphics tests
+skipped**, plus typechecking and compact compilation. The Windows full-suite step
+passed; compact installed tests are mandatory and cannot skip missing binaries.
+
+Failures found and fixed rather than bypassed:
+- Job-level runner-context use in the workflow cache configuration.
+- Windows source line endings and an omitted workflow in sparse checkout.
+- A Firefox discovery cache/relative-path bug; host-dependent SDK discovery test;
+  a timer-granularity assumption in an Android stream test. Coverage is retained.
+- Installed trusted UI failed with `ERR_FILE_NOT_FOUND` via `file://` under the
+  hardened configuration. The local asset scheme fixed launch without enabling
+  file-protocol privileges or relaxing sandbox/fuse settings.
+
+Still not claimed: Authenticode publisher verification, automated signed updates,
+Android/iOS support, consumer Windows 10/11 hardware coverage, peak disk usage,
+or completion of the source-built multi-version InkBrowser release. Production
+release/signing and wider real-site/manual accessibility QA remain separate work.

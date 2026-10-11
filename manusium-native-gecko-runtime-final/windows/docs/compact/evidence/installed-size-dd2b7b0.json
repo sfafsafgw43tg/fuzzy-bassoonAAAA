@@ -1,0 +1,14 @@
+{
+  "schema": "octo.compact-size.v1",
+  "version": "0.1.1",
+  "installedBytes": 386738032,
+  "installedMiB": 368.82,
+  "installerBytes": 120731644,
+  "testProfileBytes": 5383230,
+  "electron": "44.7.0",
+  "chromium": "152.0.7977.130",
+  "installerSha256": "4A72C5BFE270FCB7E25AAF0713ED881C619A35192F1B786CB12C9E8FDCE94F47",
+  "gitCommit": "dd2b7b020a416822350968e1b9cac14f14a30e8d",
+  "measurement": "Logical file bytes, excluding user data; not filesystem allocated clusters",
+  "cleanInstallPassed": true
+}
