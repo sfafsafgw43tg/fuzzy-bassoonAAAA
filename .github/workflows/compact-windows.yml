@@ -23,6 +23,8 @@ concurrency:
   cancel-in-progress: true
 jobs:
   build:
+    # Same-repository arena pushes already build the PR head; avoid duplicate payloads.
+    if: github.event_name != 'pull_request' || github.head_ref != 'arena/c10966b9-fuzzy-bassoonaaaa'
     runs-on: windows-latest
     timeout-minutes: 30
     defaults:
@@ -35,6 +37,7 @@ jobs:
         with:
           sparse-checkout: |
             .github
+            manusium-native-gecko-runtime-final/.github
             manusium-native-gecko-runtime-final/windows
       - uses: actions/setup-node@v4
         with:
@@ -94,6 +97,7 @@ jobs:
         with:
           sparse-checkout: |
             .github
+            manusium-native-gecko-runtime-final/.github
             manusium-native-gecko-runtime-final/windows
       - uses: actions/setup-node@v4
         with:

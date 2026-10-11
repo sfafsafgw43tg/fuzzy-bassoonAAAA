@@ -99,9 +99,12 @@ export function findTorBrowser(configured?: string): string | null {
 
 export interface FirefoxAvailability { available: boolean; path: string | null; reason?: 'not-found' | 'invalid-path' | 'not-executable' }
 
-let firefoxAvailabilityCache: FirefoxAvailability | undefined;
+const firefoxAvailabilityCache = new Map<string, FirefoxAvailability>();
 export function firefoxAvailability(configured?: string): FirefoxAvailability {
-  if (firefoxAvailabilityCache) return firefoxAvailabilityCache;
+  if (configured && !path.isAbsolute(configured)) return { available: false, path: null, reason: 'invalid-path' };
+  const key = configured || '';
+  const cached = firefoxAvailabilityCache.get(key);
+  if (cached) return cached;
   const home = os.homedir();
   const candidates = process.platform === 'win32'
     ? [configured, path.join(process.env.ProgramFiles || 'C:\\Program Files', 'Mozilla Firefox', 'firefox.exe'), path.join(process.env.LOCALAPPDATA || '', 'Mozilla Firefox', 'firefox.exe')]
@@ -114,10 +117,14 @@ export function firefoxAvailability(configured?: string): FirefoxAvailability {
       const stat = fs.statSync(candidate);
       if (!stat.isFile()) continue;
       if (process.platform !== 'win32' && (stat.mode & 0o111) === 0) continue;
-      return firefoxAvailabilityCache = { available: true, path: candidate };
+      const result: FirefoxAvailability = { available: true, path: candidate };
+      firefoxAvailabilityCache.set(key, result);
+      return result;
     } catch { /* continue */ }
   }
-  return firefoxAvailabilityCache = { available: false, path: null, reason: candidates.some((v) => typeof v === 'string' && !path.isAbsolute(v)) ? 'invalid-path' : 'not-found' };
+  const result: FirefoxAvailability = { available: false, path: null, reason: 'not-found' };
+  firefoxAvailabilityCache.set(key, result);
+  return result;
 }
 
 export function launchFirefox(executable: string, profileDir: string, url = 'about:blank'): import('node:child_process').ChildProcess {

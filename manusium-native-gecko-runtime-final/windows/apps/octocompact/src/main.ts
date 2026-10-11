@@ -41,8 +41,9 @@ function setupSession(ses: Session): void {
   ses.setPermissionCheckHandler((_wc, permission, origin) => grants.has(`${origin}:${permission}`));
   ses.setPermissionRequestHandler((wc, permission, callback, details) => {
     let origin: string;
-    try { origin = new URL(details.requestingUrl || wc.getURL()).origin; } catch { callback(false); return; }
-    if (!['media', 'geolocation', 'notifications', 'fullscreen', 'clipboard-sanitized-write'].includes(permission) || !webURL(origin) || origin !== new URL(wc.getURL()).origin) { callback(false); return; }
+    let currentOrigin: string;
+    try { origin = new URL(details.requestingUrl || wc.getURL()).origin; currentOrigin = new URL(wc.getURL()).origin; } catch { callback(false); return; }
+    if (!['media', 'geolocation', 'notifications', 'fullscreen', 'clipboard-sanitized-write'].includes(permission) || !webURL(origin) || origin !== currentOrigin) { callback(false); return; }
     const parent = owner(wc);
     if (!parent) { callback(false); return; }
     void dialog.showMessageBox(parent.win, { type: 'question', title: 'Site permission', message: `${origin} requests ${permission}.`, buttons: ['Block', 'Allow this session'], defaultId: 0, cancelId: 0 }).then(({ response }) => {

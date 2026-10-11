@@ -820,10 +820,10 @@ describe('wiring a live camera into a device', () => {
   });
 
   it('offers only live cameras, with no emulator picture and no companion option', async () => {
-    const choices = await androidCameraChoices();
+    const choices = await androidCameraChoices({ tools: () => undefined, cameraNames: async () => [] });
     expect(Object.keys(choices)).not.toContain('companion');
     // The emulator's own test pattern and 3D room are not cameras here, so they
-    // are never listed. With no emulator on this machine the list is empty, and
+    // are never listed. With an explicitly absent emulator the list is empty, and
     // the picker says so from emulatorAvailable.
     expect(choices.webcams).toEqual([]);
     expect(choices.emulatorAvailable).toBe(false);

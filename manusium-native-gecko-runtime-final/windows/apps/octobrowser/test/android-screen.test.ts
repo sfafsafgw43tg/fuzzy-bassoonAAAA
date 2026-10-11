@@ -152,10 +152,12 @@ describe('ScreenStream', () => {
       return pngHeader(2, 2);
     });
     let count = 0;
-    const stream = new ScreenStream(deps, () => { count += 1; if (count === 4) stream.stop(); }, () => undefined, 0);
+    let finish!: () => void;
+    const completed = new Promise<void>(resolve => { finish = resolve; });
+    const stream = new ScreenStream(deps, () => { count += 1; if (count === 4) { stream.stop(); finish(); } }, () => undefined, 0);
     stream.start();
     stream.start();
-    await new Promise((resolve) => setTimeout(resolve, 20));
+    await completed;
     expect(peak).toBe(1);
     expect(count).toBe(4);
   });

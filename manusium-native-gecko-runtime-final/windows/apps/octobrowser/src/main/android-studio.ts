@@ -1843,9 +1843,9 @@ export function androidCameraChoicesCached(): Promise<CameraChoices> {
   return cameraScanInFlight;
 }
 
-export async function androidCameraChoices(): Promise<CameraChoices> {
-  const tools = optionalSdk();
-  const hostCameraCount = (await windowsCameraNames()).length || undefined;
+export async function androidCameraChoices(deps = { tools: optionalSdk, cameraNames: windowsCameraNames }): Promise<CameraChoices> {
+  const tools = deps.tools();
+  const hostCameraCount = (await deps.cameraNames()).length || undefined;
   if (!tools?.emulator) return { webcams: [], emulatorAvailable: false, hostCameraCount, problem: '', detail: '' };
   const candidates = [...new Set([
     tools.emulator,
