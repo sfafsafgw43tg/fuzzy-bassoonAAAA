@@ -36,6 +36,7 @@ import { presetFor } from '@octo/core/privacy';
 import { chromiumUserAgent } from '@octo/core/user-agent';
 import { browserEngineFor, NEW_PROFILE_ENGINE, type BrowserEngine } from '@octo/core/inkbrowser';
 import { DEFAULT_ENGINE_PRIVACY, sanitizeEnginePrivacy, type EnginePrivacySettings } from '@octo/core/engine-privacy';
+import { DEFAULT_NATIVE_CHROMIUM_CONFIG } from '@octo/core/chromium-config';
 import { ANDROID_VERSIONS, IOS_VERSIONS, mobileEmulationFor, MOBILE_DEVICES } from '@octo/core/mobile';
 import {
   S, Profile, Kind, Level, FpOs, Fingerprint, ProxyType, ProxyCheck, SavedProxy, animateIn, run, toast, errText, modal, closeModal, field, fieldWithInfo, input, select, toggle,
@@ -54,7 +55,7 @@ interface Draft {
   name: string; kind: Kind; engine: BrowserEngine | ''; chromiumRuntime?: string; status: string; tags: string[]; folder: string; profileDirectory?: string; notes: string; startPages: string[];
   homePage: string; searchEngine?: string; theme: 'dark' | 'light'; browserShell: BrowserShell; baseChromeLook: boolean; ordinaryBrowser: boolean; appMode: boolean; smartPaste: boolean; keepHistory: boolean; savePasswords: boolean; restoreSession: boolean; deleteOnClose: boolean;
   protection: { level: Level; overrides: Record<string, unknown> }; dns: Profile['dns']; sandbox: Sandbox; mobile: Profile['mobile']; addons: string[]; vstudioWebOnLaunch: boolean;
-  mediaCapture: Profile['mediaCapture']; enginePrivacy: EnginePrivacySettings;
+  mediaCapture: Profile['mediaCapture']; enginePrivacy: EnginePrivacySettings; nativeChromium: Profile['nativeChromium'];
   fp: Fingerprint | null; proxy: ProxyDraft;
   /** Exported cookies to import (JSON / Netscape), empty = none. */
   cookies: string;
@@ -161,7 +162,7 @@ function newDraft(): Draft {
     dns: { mode: 'inherit', dohTemplate: '' },
     ...kindDefaults('antidetect', S.init.addons.filter((a) => a.kind !== 'external-app').map((a) => a.id)),
     vstudioWebOnLaunch: false,
-    mediaCapture: { cameraLabel: '', microphoneLabel: '' }, enginePrivacy: structuredClone(DEFAULT_ENGINE_PRIVACY),
+    mediaCapture: { cameraLabel: '', microphoneLabel: '' }, enginePrivacy: structuredClone(DEFAULT_ENGINE_PRIVACY), nativeChromium: structuredClone(DEFAULT_NATIVE_CHROMIUM_CONFIG),
     fp: null,
     proxy: { mode: 'none', type: 'http', text: '', changeIpUrl: '', name: '', save: false, savedId: '', keep: false, lockdown: true },
     cookies: '',
@@ -182,7 +183,7 @@ function draftFrom(p: Profile): Draft {
     homePage: c.homePage === 'octo://newtab' ? '' : c.homePage, searchEngine: c.searchEngine ?? '', theme: c.theme, browserShell: c.browserShell, baseChromeLook: c.baseChromeLook === true, ordinaryBrowser: c.ordinaryBrowser === true, appMode: c.appMode === true, smartPaste: c.smartPaste !== false, keepHistory: c.keepHistory, savePasswords: c.savePasswords === true, restoreSession: c.restoreSession, deleteOnClose: c.deleteOnClose,
     protection: { level: c.protection.level, overrides: c.protection.overrides ?? {} }, dns: c.dns, sandbox: c.sandbox, mobile: c.mobile ?? { device: 'none', orientation: 'portrait' }, addons: c.addons,
     vstudioWebOnLaunch: c.vstudioWebOnLaunch === true,
-    mediaCapture: c.mediaCapture ?? { cameraLabel: '', microphoneLabel: '' }, enginePrivacy: sanitizeEnginePrivacy(c.enginePrivacy ?? DEFAULT_ENGINE_PRIVACY),
+    mediaCapture: c.mediaCapture ?? { cameraLabel: '', microphoneLabel: '' }, enginePrivacy: sanitizeEnginePrivacy(c.enginePrivacy ?? DEFAULT_ENGINE_PRIVACY), nativeChromium: structuredClone(c.nativeChromium),
     fp: c.fingerprint?.enabled ? c.fingerprint : c.kind === 'antidetect' ? c.fingerprint : null, proxy, cookies: '',
   };
 }
@@ -320,7 +321,7 @@ export function openEditor(p: Profile | null): void {
         homePage: d.homePage.trim() || 'octo://newtab', searchEngine: d.searchEngine || undefined, theme: d.theme, browserShell: d.browserShell, baseChromeLook: d.baseChromeLook, ordinaryBrowser: d.ordinaryBrowser, appMode: d.appMode, smartPaste: d.smartPaste, keepHistory: d.keepHistory, savePasswords: d.savePasswords, restoreSession: d.restoreSession,
         deleteOnClose: d.deleteOnClose, protection: d.protection, dns: d.dns, sandbox: d.sandbox, mobile: d.mobile, addons: d.addons,
         vstudioWebOnLaunch: d.vstudioWebOnLaunch,
-        mediaCapture: d.mediaCapture, enginePrivacy: d.enginePrivacy,
+        mediaCapture: d.mediaCapture, enginePrivacy: d.enginePrivacy, nativeChromium: d.nativeChromium,
       };
       if (d.fp) patch.fingerprint = d.fp;
       else if (!creating && p!.fingerprint?.enabled) patch.fingerprint = { ...p!.fingerprint, enabled: false };
@@ -953,9 +954,50 @@ function nativeEnginePrivacySection(d: Draft, draw: () => void, summary: () => v
   return section(t('enginePrivacy.title'), h('p', { class: 'hint', text: t(`enginePrivacy.${base}.hint`) }), h('div', { class: 'row between' }, h('span', { class: 'pill' }, base === 'firefox' ? 'Firefox / Gecko' : 'Chromium'), reset), h('div', { class: 'frows' }, ...controls), h('p', { class: 'hint native-applied-note', text: t('enginePrivacy.nativeApplied') }), h('p', { class: 'hint', text: t('enginePrivacy.limitations') }));
 }
 
+/**
+ * Chromium gets its own editor surface. Do not expose Electron's page-shim
+ * controls here: the standalone runtime only consumes the validated native
+ * contract and the engine-native privacy switches above.
+ */
+function nativeChromiumFingerprintSection(d: Draft, draw: () => void, summary: () => void): HTMLElement {
+  const c = d.nativeChromium;
+  const changed = () => summary();
+  const ua = input(c.userAgent, { maxlength: '512', spellcheck: 'false' }, (v) => { c.userAgent = v.trim(); changed(); });
+  const platform = select(c.platform, [['Win32', 'Win32'], ['Win64', 'Win64'], ['Linux x86_64', 'Linux x86_64'], ['MacIntel', 'MacIntel'], ['Android', 'Android']], (v) => { c.platform = v; changed(); });
+  const languages = input(c.languages.join(','), { maxlength: '256', spellcheck: 'false', placeholder: 'en-US,en' }, (v) => {
+    c.languages = v.split(',').map((x) => x.trim()).filter(Boolean).slice(0, 8);
+    changed();
+  });
+  const timezone = select(c.timezone, timezones().map((z) => [z, z] as [string, string]), (v) => { c.timezone = v; changed(); });
+  const width = input(String(c.deviceMetrics.width), { inputmode: 'numeric', maxlength: '5' }, (v) => { c.deviceMetrics.width = Math.max(320, Number(v) || 1920); changed(); });
+  const height = input(String(c.deviceMetrics.height), { inputmode: 'numeric', maxlength: '5' }, (v) => { c.deviceMetrics.height = Math.max(240, Number(v) || 1080); changed(); });
+  const scale = input(String(c.deviceMetrics.deviceScaleFactor), { inputmode: 'decimal', maxlength: '4' }, (v) => { c.deviceMetrics.deviceScaleFactor = Math.min(8, Math.max(0.5, Number(v) || 1)); changed(); });
+  const metrics = h('div', { class: 'grid3' }, field('chromium.width', width), field('chromium.height', height), field('chromium.scale', scale));
+  const cores = select(String(c.hardwareConcurrency), [1, 2, 4, 6, 8, 12, 16, 24, 32, 64].map((n) => [String(n), String(n)] as [string, string]), (v) => { c.hardwareConcurrency = Number(v); changed(); });
+  const touch = toggle(c.touch, 'chromium.touch', (v) => { c.touch = v; changed(); });
+  const uaChFull = input(c.uaCh.fullVersion, { maxlength: '32', spellcheck: 'false', placeholder: '155.0.8059.39' }, (v) => { c.uaCh.fullVersion = v.trim(); changed(); });
+  const uaChPlatform = select(c.uaCh.platform, [['Windows', 'Windows'], ['Linux', 'Linux'], ['macOS', 'macOS'], ['Android', 'Android'], ['Chrome OS', 'Chrome OS']], (v) => { c.uaCh.platform = v as typeof c.uaCh.platform; changed(); });
+  const status = h('p', { class: 'hint warning', text: t('enginePrivacy.chromiumIdentityStatus') });
+  return section(t('enginePrivacy.chromiumIdentityTitle'),
+    h('p', { class: 'hint', text: t('enginePrivacy.chromiumIdentityHint') }),
+    frowWithInfo(t('enginePrivacy.userAgent'), t('enginePrivacy.userAgentHint'), ua),
+    frowWithInfo(t('enginePrivacy.platform'), t('enginePrivacy.platformHint'), platform),
+    frowWithInfo(t('enginePrivacy.languages'), t('enginePrivacy.languagesHint'), languages),
+    frowWithInfo(t('enginePrivacy.timezone'), t('enginePrivacy.timezoneHint'), timezone),
+    frowWithInfo(t('enginePrivacy.metrics'), t('enginePrivacy.metricsHint'), metrics),
+    frowWithInfo(t('enginePrivacy.hardwareConcurrency'), t('enginePrivacy.hardwareConcurrencyHint'), cores),
+    frowWithInfo(t('enginePrivacy.touch'), t('enginePrivacy.touchHint'), touch),
+    frowWithInfo(t('enginePrivacy.uaCh'), t('enginePrivacy.uaChHint'), h('div', { class: 'grid2' }, field('chromium.uaChVersion', uaChFull), field('chromium.uaChPlatform', uaChPlatform))),
+    status);
+}
+
 function advanced(b: HTMLElement, d: Draft, draw: () => void, summary: () => void, profile: Profile | null): void {
   if (d.kind === 'tor') { b.append(h('p', { class: 'info', text: t('edit.torFixed') })); return; }
   if (d.kind === 'phone') { phoneOperatingSystem(b, d, draw, summary); return; }
+  if (d.engine === 'inkbrowser') {
+    b.append(nativeEnginePrivacySection(d, draw, summary), nativeChromiumFingerprintSection(d, draw, summary));
+    return;
+  }
   if (!d.fp) {
     if (d.engine !== 'electron') b.append(nativeEnginePrivacySection(d, draw, summary));
     return;

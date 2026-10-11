@@ -7,6 +7,7 @@
 import { clear } from '@octo/shell/renderer/bridge';
 import { h, t, getLang, Dicts } from '@octo/shell/renderer/i18n-client';
 import { icon } from '@octo/shell/renderer/icons';
+import type { NativeChromiumConfig } from '@octo/core/chromium-config';
 
 // ------------------------------------------------------------------ types
 
@@ -68,7 +69,8 @@ export interface Profile {
   mobile: { device: MobileDeviceId; orientation: 'portrait' | 'landscape'; osVersion?: '15' | '14' | '13' | '12' | '18.0' | '17.5' | '16.7' };
   addons: string[]; vstudioWebOnLaunch: boolean; encrypted: boolean; deleteOnClose: boolean; keepHistory: boolean; savePasswords: boolean; restoreSession: boolean; homePage: string; searchEngine?: string;
   theme: 'dark' | 'light'; browserShell: 'octo' | 'chrome' | 'chromium' | 'firefox' | 'safari'; baseChromeLook: boolean; ordinaryBrowser?: boolean; appMode?: boolean; smartPaste?: boolean; fingerprint: Fingerprint;
-  enginePrivacy: { chromium: { webRtc: 'default' | 'disable-non-proxied-udp'; location: 'ask' | 'block' }; firefox: { webRtc: 'default' | 'disabled'; location: 'ask' | 'block'; resistFingerprinting: boolean } };
+  enginePrivacy: { chromium: { webRtc: 'default' | 'disable-non-proxied-udp'; location: 'ask' | 'block'; webgl: 'allow' | 'disable' }; firefox: { webRtc: 'default' | 'disabled'; location: 'ask' | 'block'; webgl: 'allow' | 'disable'; resistFingerprinting: boolean } };
+  nativeChromium: NativeChromiumConfig;
   tags: string[]; folder: string; profileDirectory?: string; sortOrder: number; status: string; notes: string; startPages: string[];
   proxyCheck?: ProxyCheck; stats: { launches: number; lastLaunchAt: string; worktimeSec: number };
   // runtime info from the manager
