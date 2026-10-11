@@ -238,7 +238,7 @@ describe('motion', () => {
 });
 
 describe('vStudio Mobile inside the phones', () => {
-  it('never guesses a camera and never leaves a lens without a picture', () => {
+  it('preserves explicit endpoints without claiming they produced a picture', () => {
     expect(studio).toContain("function cameraValue(source: CameraSource | string, webcam = '')");
     expect(page).toContain("getUserMedia({ audio: true, video: false })");
     expect(page).toContain('microphoneDevice');
@@ -269,16 +269,17 @@ describe('vStudio Mobile inside the phones', () => {
     expect(studio).toContain("const args = [`@${name}`, '-camera-back', cameraValues.back, '-camera-front', cameraValues.front];");
     // A camera that is not there is never replaced by a picture: the lenses are
     // settled from the cameras that are active right now, and a lens with none is off.
-    expect(studio).toContain("const assigned = assignLensCameras({ front: frontDevice, back: rearPreferred }, live);");
-    expect(studio).toContain("front: assigned.front ? 'webcam' : 'none',");
-    expect(studio).toContain("back: assigned.back ? 'webcam' : 'none',");
+    expect(studio).toContain("const selected = resolveAvdCameraSelection(");
+    expect(studio).toContain("front: selected.front ? 'webcam' : 'none',");
+    expect(studio).toContain("back: selected.back ? 'webcam' : 'none',");
     // The emulator's own picture is not a camera here, so no lens is ever
     // switched to it, and no GPU mode is required for it.
     expect(studio).not.toContain('usesVirtualScene');
     expect(studio).not.toContain("'virtualscene'");
     expect(studio).not.toContain("'emulated'");
-    // Both lenses on one endpoint is never launched: the front lens gives way.
-    expect(studio).toContain("if (frontValue !== 'none' && frontValue === backValue) frontValue = 'none';");
+    // Sharing is explicit and accompanied by a warning, never silently rewritten.
+    expect(studio).not.toContain("frontValue = 'none'");
+    expect(studio).toContain("Some drivers cannot open both at once");
     expect(studio).toContain('export async function androidCameraChoices');
     expect(manager).toContain("handle('mgr:android-camera-choices'");
     // DirectShow camera state is never restored from or saved into Quick Boot.
@@ -322,12 +323,11 @@ describe('vStudio Mobile inside the phones', () => {
     expect(manager).toContain('repairAndroidMedia(String(name ?? \'\'), { cameraDevice');
   });
 
-  it('is reachable from the device row, and offers only active host cameras in the creator', () => {
+  it('offers explicit manual endpoints and Off without synthetic camera sources', () => {
     expect(page).toContain('androidMediaDialog({ name: machine.name');
-    // A lens is a select of the active host cameras, or the text Off. The
-    // emulator's own picture and "no camera" are never options.
-    expect(cameraUi).toContain("select<string>(current.name, list.map((camera): [string, string] => [camera.name, displayName(camera)]),");
-    expect(cameraUi).toContain("(id) => choose(facing, id)));");
+    // Off is selectable and webcam0 remains configurable when enumeration fails.
+    expect(cameraUi).toContain("select<string>(deviceOf(facing), options, id => choose(facing, id))");
+    expect(cameraUi).toContain("t('android.camera.manualEndpoint', { endpoint: id })");
     expect(cameraUi).not.toMatch(/\[\s*'(none|emulated|virtualscene)'\s*,/);
     expect(cameraUi).not.toContain("'emulated'");
     expect(cameraUi).not.toContain("'virtualscene'");
@@ -335,18 +335,19 @@ describe('vStudio Mobile inside the phones', () => {
     expect(cameraUi).not.toContain("'android.camera.emulated'");
     expect(cameraUi).not.toContain("'android.camera.virtualscene'");
     expect(cameraUi).toContain("t('android.camera.off')");
-    expect(cameraUi).toContain("'android.camera.oneCamera'");
-    expect(cameraUi).toContain("t('android.camera.msgNone')");
-    // No tags and no "tested" wording: a camera is listed only once it has sent a picture.
+    expect(cameraUi).toContain("'android.camera.sharedWarning'");
+    expect(cameraUi).toContain("'android.camera.msgNone'");
+    // Manual mappings carry an explicit unverified warning, not a success badge.
     expect(cameraUi).not.toContain('android.camera.untested');
     expect(cameraUi).not.toContain('android.camera.fromWindows');
     expect(cameraUi).toContain("t('android.camera.notSending')");
     expect(cameraUi).toContain("t('android.camera.msgAvdHint')");
     expect(cameraUi).toContain("t('android.camera.noEmulator')");
-    // One camera serves one lens: choosing the camera of the other lens swaps the two.
-    expect(cameraUi).toContain("toast(t('android.camera.swapped'), 'info');");
-    expect(cameraUi).toContain('assignLensCameras(');
-    expect(cameraUi).toContain('if (!working().some((camera) => camera.name === id)) return;');
+    // Manual shared endpoints never silently swap or require a host probe.
+    expect(cameraUi).not.toContain("toast(t('android.camera.swapped'), 'info');");
+    expect(cameraUi).toContain("t('android.camera.manualWarning'");
+    expect(cameraUi).toContain('resolveAvdCameraSelection(');
+    expect(cameraUi).not.toContain('if (!working().some((camera) => camera.name === id)) return;');
     expect(creator).toContain('cameraDevice: draft.cameraBackDevice || draft.cameraFrontDevice');
   });
 });
@@ -593,7 +594,7 @@ describe('vStudio Mobile, the app', () => {
     // No companion camera source is offered to Android any more, and a device
     // saved with the old one still resolves to the host camera behind it.
     expect(studio).toContain("export type CameraSource = 'none' | 'webcam';");
-    expect(studio).toContain("export function normalizeCameraSource(_saved?: string): CameraSource {");
+    expect(studio).toContain("export function normalizeCameraSource(saved?: string): CameraSource {");
     expect(cameraUi).toContain("export type CameraSource = 'none' | 'webcam';");
     expect(cameraUi).not.toContain("'vstudio'");
     expect(mediaUi).not.toContain("'vstudio'");
@@ -628,7 +629,9 @@ describe('devices, languages and the freeze', () => {
     expect(cameraUi).toContain('check = await checkHostCamera(camera);');
     // A picker whose panel was replaced stops opening cameras, and an opened picker reuses a
     // check made moments ago, so re-rendering the creator does not open every camera again.
-    expect(cameraUi).toContain('if (attached && !element.isConnected) break;');
+    expect(cameraUi).toContain('if (!cameraTests.enabled || (attached && !element.isConnected)) break;');
+    expect(cameraUi).toContain('const lease = cameraTests.begin();');
+    expect(cameraUi).toContain('lease.close();');
     expect(cameraUi).toContain('if (attached && !element.isConnected) return;');
     expect(cameraUi).toContain('const RECENT_CHECK_MS = 15_000;');
     expect(cameraUi).toContain('release(attempt);');

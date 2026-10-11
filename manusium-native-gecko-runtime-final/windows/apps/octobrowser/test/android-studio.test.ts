@@ -610,19 +610,19 @@ describe('wiring a live camera into a device', () => {
     " Camera 'webcam1' is connected to device 'OBS Virtual Camera' on channel 0 using pixel format 'RGB24'",
   ].join('\n');
 
-  it('reads every saved camera choice as a host camera chosen automatically', () => {
+  it('preserves explicit Off while migrating retired synthetic camera sources', () => {
     // The emulator's own test pattern and 3D room are not cameras on this
     // computer, so no saved value can keep them. Older values read as a host
     // camera, and the endpoint a lens holds is what says whether it has one.
     expect(normalizeCameraSources('webcam', 'webcam')).toEqual({ front: 'webcam', back: 'webcam' });
     expect(normalizeCameraSources('webcam', 'emulated')).toEqual({ front: 'webcam', back: 'webcam' });
     expect(normalizeCameraSources('emulated', 'webcam')).toEqual({ front: 'webcam', back: 'webcam' });
-    expect(normalizeCameraSources('none', 'virtualscene')).toEqual({ front: 'webcam', back: 'webcam' });
+    expect(normalizeCameraSources('none', 'virtualscene')).toEqual({ front: 'none', back: 'webcam' });
     expect(normalizeCameraSources('emulated', 'emulated')).toEqual({ front: 'webcam', back: 'webcam' });
     expect(normalizeCameraSources('vstudio', 'vstudio')).toEqual({ front: 'webcam', back: 'webcam' });
     expect(normalizeCameraSources('nonsense', 'webcam99x')).toEqual({ front: 'webcam', back: 'webcam' });
     expect(normalizeCameraSources(undefined, undefined)).toEqual({ front: 'webcam', back: 'webcam' });
-    // A saved "no camera" is read as a host camera, chosen automatically on the next launch.
+    // An explicit Off choice survives the next launch.
     expect(normalizeAndroidLaunchPrefs({ cameraFront: 'webcam', cameraBack: 'webcam' })).toMatchObject({
       cameraFront: 'webcam', cameraBack: 'webcam',
     });
@@ -630,7 +630,7 @@ describe('wiring a live camera into a device', () => {
       cameraFront: 'webcam', cameraBack: 'webcam',
     });
     expect(normalizeAndroidLaunchPrefs({ cameraFront: 'none', cameraBack: 'none' } as never)).toMatchObject({
-      cameraFront: 'webcam', cameraBack: 'webcam',
+      cameraFront: 'none', cameraBack: 'none',
     });
     // The companion routing keys are gone from what a launch remembers.
     const prefs = normalizeAndroidLaunchPrefs({ cameraFront: 'webcam', cameraBack: 'none' } as never);
@@ -639,17 +639,13 @@ describe('wiring a live camera into a device', () => {
     expect(Object.keys(prefs)).not.toContain('hostCameraRotation');
   });
 
-  /**
-   * The emulator rule that decides whether the guest CameraProvider lives: one
-   * host endpoint cannot be opened for both facings. Breaking it crashed the
-   * stock Camera app, so the front lens gives way.
-   */
+  /** Shared endpoints are allowed on request; the user is warned about driver contention. */
   it('answers with camera values the emulator accepts', () => {
     expect(emulatorCameraValues('webcam', 'webcam', '', '')).toEqual({ front: 'none', back: 'none' });
     expect(emulatorCameraValues('webcam', 'webcam', 'webcam1', '')).toEqual({ front: 'webcam1', back: 'none' });
     expect(emulatorCameraValues('webcam', 'webcam', '', 'webcam2')).toEqual({ front: 'none', back: 'webcam2' });
     expect(emulatorCameraValues('webcam', 'webcam', 'webcam1', 'webcam2')).toEqual({ front: 'webcam1', back: 'webcam2' });
-    expect(emulatorCameraValues('webcam', 'webcam', 'webcam1', 'webcam1')).toEqual({ front: 'none', back: 'webcam1' });
+    expect(emulatorCameraValues('webcam', 'webcam', 'webcam1', 'webcam1')).toEqual({ front: 'webcam1', back: 'webcam1' });
     // Only a well-formed endpoint reaches the command line; anything else is
     // 'none' rather than a guessed webcam0. Whether the endpoint is still
     // connected is decided by resolveActiveCameraAssignments, below.
@@ -663,17 +659,16 @@ describe('wiring a live camera into a device', () => {
     // Nothing is connected: both lenses are off, and nothing stands in for a camera.
     const none = resolveActiveCameraAssignments('webcam', 'webcam', '', '', [], []);
     expect(none).toMatchObject({ front: 'none', back: 'none', frontDevice: '', backDevice: '', warning: '' });
-    // A saved camera that is gone is reported, not replaced by the emulator's own picture.
+    // Explicit manual endpoints survive discovery failure, with an honest warning.
     const gone = resolveActiveCameraAssignments('webcam', 'webcam', 'webcam3', 'webcam3', [], []);
-    expect(gone).toMatchObject({ front: 'none', back: 'none', frontDevice: '', backDevice: '' });
-    expect(gone.warning).toContain('The saved rear camera is no longer active.');
-    expect(gone.warning).toContain('The saved front camera is no longer active.');
-    // One host camera serves one lens: the rear one keeps it, the front one is off.
+    expect(gone).toMatchObject({ front: 'webcam', back: 'webcam', frontDevice: 'webcam3', backDevice: 'webcam3' });
+    expect(gone.warning).toContain('Not enumerated by the Android Emulator: webcam3');
+    expect(gone.warning).toContain('capture is not verified');
     const duplicate = resolveActiveCameraAssignments('webcam', 'webcam', 'webcam0', 'webcam0', [
       { name: 'webcam0', device: 'Integrated Camera', virtual: false },
     ], []);
-    expect(duplicate).toMatchObject({ front: 'none', back: 'webcam', frontDevice: '', backDevice: 'webcam0' });
-    expect(duplicate.warning).toContain('One camera cannot serve both lenses.');
+    expect(duplicate).toMatchObject({ front: 'webcam', back: 'webcam', frontDevice: 'webcam0', backDevice: 'webcam0' });
+    expect(duplicate.warning).toContain('Some drivers cannot open both at once');
   });
 
   it('keeps the camera the user picked, and fills the other lens from what is active', () => {
@@ -698,15 +693,14 @@ describe('wiring a live camera into a device', () => {
     expect(auto).toMatchObject({ back: 'webcam', backDevice: 'webcam0', front: 'webcam', frontDevice: 'webcam1' });
   });
 
-  it('uses only an endpoint the emulator enumerated, never a guessed one', () => {
+  it('preserves manual endpoints but never invents an enumeration result', () => {
     const list = [{ name: 'webcam0', device: 'Integrated Camera', virtual: false }];
-    // webcam3 is not listed, so the front lens gives it up. The one listed camera
-    // serves the rear lens, and the front lens is off.
     const unknown = resolveActiveCameraAssignments('webcam', 'webcam', 'webcam3', '', list, []);
-    expect(unknown).toMatchObject({ front: 'none', frontDevice: '', back: 'webcam', backDevice: 'webcam0' });
-    expect(unknown.warning).toContain('The saved front camera is no longer active.');
-    // Nothing listed means nothing is used, not a guessed webcam0.
-    expect(resolveActiveCameraAssignments('webcam', 'webcam', 'webcam0', '', [], []).front).toBe('none');
+    expect(unknown).toMatchObject({ front: 'webcam', frontDevice: 'webcam3', back: 'webcam', backDevice: 'webcam0' });
+    expect(unknown.warning).toContain('Not enumerated by the Android Emulator: webcam3');
+    expect(list).toHaveLength(1);
+    expect(resolveActiveCameraAssignments('webcam', 'webcam', 'webcam0', '', [], []).front).toBe('webcam');
+    expect(resolveActiveCameraAssignments('none', 'none', 'webcam0', 'webcam0', list)).toMatchObject({ front: 'none', back: 'none', frontDevice: '', backDevice: '' });
   });
 
   it('lists no camera when the emulator cannot be asked, and never reads Windows instead', async () => {
@@ -750,7 +744,7 @@ describe('wiring a live camera into a device', () => {
       ].join('\n'));
       const listed = (await listAndroidAvds()).find((item) => item.name === 'Media_Intent');
       // No partner camera, no companion flag: the device points at a host camera.
-      expect(listed).toMatchObject({ cameraFront: 'webcam', cameraBack: 'webcam' });
+      expect(listed).toMatchObject({ cameraFront: 'webcam', cameraBack: 'none' });
       expect(Object.keys(listed ?? {})).not.toContain('mediaCompanion');
     } finally {
       if (previous === undefined) delete process.env.ANDROID_AVD_HOME;
@@ -769,7 +763,7 @@ describe('wiring a live camera into a device', () => {
       cameraFront: 'vstudio' as never, cameraBack: 'none',
       hostCameraRotation: 90, hostCameraMirror: true, startMediaCompanion: true,
     } as never);
-    expect(legacy).toMatchObject({ cameraFront: 'webcam', cameraBack: 'webcam' });
+    expect(legacy).toMatchObject({ cameraFront: 'webcam', cameraBack: 'none' });
     expect(Object.keys(legacy)).not.toContain('hostCameraMirror');
     expect(Object.keys(legacy)).not.toContain('startMediaCompanion');
   });
@@ -803,10 +797,9 @@ describe('wiring a live camera into a device', () => {
     const mixed = mediaConfig('webcam', 'webcam', true, 'webcam0', 'webcam1', { front: { width: 1920, height: 1080 } });
     expect(mixed['hw.camera.maxHorizontalPixels']).toBe('640');
     expect(mixed['hw.camera.maxVerticalPixels']).toBe('480');
-    // Both facings on one endpoint is the crash the emulator cannot recover
-    // from, so the front one gives way and the rear one keeps it.
+    // An explicit shared endpoint reaches both facings; hardware concurrency is not promised.
     const duplicate = mediaConfig('webcam', 'webcam', true, 'webcam0', 'webcam0');
-    expect(duplicate['hw.camera.front']).toBe('none');
+    expect(duplicate['hw.camera.front']).toBe('webcam0');
     expect(duplicate['hw.camera.back']).toBe('webcam0');
     // A lens with no camera is recorded as off.
     const off = mediaConfig('webcam', 'webcam', false, '', '');

@@ -245,7 +245,7 @@ export function androidCreateWizard(context: CreatorContext): void {
     dpi: first?.sizing.dpi ?? 420,
     gpuMode: 'auto', bootMode: 'quick',
     snapshots: true, camera: false, microphone: true,
-    cameraFront: 'webcam', cameraBack: 'webcam', cameraFrontDevice: '', cameraBackDevice: '',
+    cameraFront: 'webcam', cameraBack: 'webcam', cameraFrontDevice: 'webcam0', cameraBackDevice: 'webcam0',
     cameraDevice: '',
     locale: '',
     customPackage: '',

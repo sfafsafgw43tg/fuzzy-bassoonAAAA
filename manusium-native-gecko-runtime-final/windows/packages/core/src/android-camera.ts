@@ -193,3 +193,20 @@ export function meterLevel(samples: ArrayLike<number>): number {
   const rms = Math.sqrt(sum / samples.length);
   return Math.min(1, Math.max(0, rms * 2));
 }
+
+/** Explicit AVD choices are configuration, not a claim of successful enumeration. */
+export function resolveAvdCameraSelection(
+  sources: { front: string; back: string },
+  saved: Partial<LensCameras>,
+  available: readonly ScannedCamera[],
+): LensCameras & { shared: boolean; unlisted: string[] } {
+  const endpoint = (id: string | undefined) => /^webcam\d+$/.test(id ?? '') ? id! : '';
+  const ids = [...new Set(available.map(c => endpoint(c.id)).filter(Boolean))];
+  let front = sources.front === 'none' ? '' : endpoint(saved.front);
+  let back = sources.back === 'none' ? '' : endpoint(saved.back);
+  // Auto-fill only an enabled lens without an explicit endpoint. Never silently
+  // replace a user's webcam0 choice or reactivate an explicitly disabled lens.
+  if (!back && sources.back !== 'none') back = ids.find(id => id !== front) ?? '';
+  if (!front && sources.front !== 'none') front = ids.find(id => id !== back) ?? '';
+  return { front, back, shared: !!front && front === back, unlisted: [...new Set([front, back].filter(id => id && !ids.includes(id)))] };
+}

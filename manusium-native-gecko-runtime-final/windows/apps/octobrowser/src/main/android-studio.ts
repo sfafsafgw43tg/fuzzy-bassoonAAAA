@@ -33,7 +33,7 @@ import { quietBoot, telephonyArgsIn, telephonySupported, validTelephoneNumber, t
 import { parseSecondaryDisplay, writeSecondaryDisplay, type SecondaryDisplay } from './android-displays';
 
 import {
-  MEDIA_PLUGINS, assignLensCameras, friendlyNameForDevicePath, hardwareIdOf, isDevicePath,
+  MEDIA_PLUGINS, resolveAvdCameraSelection, friendlyNameForDevicePath, hardwareIdOf, isDevicePath,
   type MediaPluginId, type WindowsCameraName,
 } from '@octo/core';
 import { REQUIREMENT_FIXES, type RequirementId, unityCaptureRegistered, unityCaptureRegisteredAsync, vbCableInstalled, vbCableInstalledAsync } from './media-requirements';
@@ -41,23 +41,9 @@ import { REQUIREMENT_FIXES, type RequirementId, unityCaptureRegistered, unityCap
 export { ANDROID_DEVICES, ANDROID_CATALOG_DEVICES, ANDROID_SYSTEM_IMAGES, androidPreset, androidSpaceEstimate } from './android-devices';
 export type { AndroidDeviceProfile, AndroidHardwareChoice, AndroidSystemImage, AndroidPerformancePreset, AndroidAbi } from './android-devices';
 
-/**
- * What a camera facing is fed from.
- *
- * Only host cameras are chosen. `webcam` is a camera the emulator enumerated:
- * the built-in one, a USB webcam, a capture card or any camera a program
- * publishes on this computer. The emulator's own test pattern and 3D room are
- * not offered, and no lens is ever given one in place of a camera.
- *
- * `none` is not a choice a user makes. It is what a lens becomes when no active
- * camera is left for it: nothing is connected, or the only one is already
- * serving the other lens. Saved values from earlier builds (`none`, `emulated`,
- * `virtualscene`, the old `vstudio`) are read as `webcam`, so they are chosen
- * again automatically - see normalizeCameraSources.
- *
- * There is deliberately no "vStudio" source any more: a device takes its picture
- * straight from a camera that is live on this PC, and the vStudio companion is a
- * separate application the user starts on their own.
+/** A facing uses a host webcam endpoint or explicit Off. Endpoints may be
+ * configured manually even when enumeration fails; that is not proof of capture.
+ * The emulator's test pattern/virtual scene is never substituted for a camera.
  */
 export type CameraSource = 'none' | 'webcam';
 
@@ -1539,28 +1525,17 @@ function cameraValue(source: CameraSource | string, webcam = ''): string {
   return source === 'webcam' && WEBCAM.test(webcam) ? webcam : 'none';
 }
 
-/** The saved value of one lens. Every saved value means a host camera chosen automatically. */
-export function normalizeCameraSource(_saved?: string): CameraSource {
-  return 'webcam';
+/** Explicit Off survives saves, scans and subsequent launches. */
+export function normalizeCameraSource(saved?: string): CameraSource {
+  return saved === 'none' ? 'none' : 'webcam';
 }
 
-/**
- * The saved intent of both lenses. Missing, unknown and older values (`none`,
- * `emulated`, `virtualscene`, `vstudio`) all become `webcam`, so a device saved
- * with "no camera" is given the first active camera on its next launch, just
- * like a new device. Only the endpoint a lens holds says whether it has a camera.
- */
+/** Normalize legacy sources without overriding an explicit Off choice. */
 export function normalizeCameraSources(front?: string, back?: string): { front: CameraSource; back: CameraSource } {
   return { front: normalizeCameraSource(front), back: normalizeCameraSource(back) };
 }
 
-/**
- * The value each lens is launched with: its endpoint, or `none` when it is off.
- *
- * Two lenses never share one host endpoint. Android's CameraProvider can crash
- * when the same DirectShow endpoint is opened for both facings, so the front
- * lens gives way, the same way assignLensCameras settles it.
- */
+/** Exact validated endpoints for both facings; shared endpoints are an explicit user choice. */
 export function emulatorCameraValues(
   front: CameraSource | string,
   back: CameraSource | string,
@@ -1568,8 +1543,7 @@ export function emulatorCameraValues(
   backWebcam = '',
 ): { front: string; back: string } {
   const backValue = cameraValue(back, backWebcam);
-  let frontValue = cameraValue(front, frontWebcam);
-  if (frontValue !== 'none' && frontValue === backValue) frontValue = 'none';
+  const frontValue = cameraValue(front, frontWebcam);
   return { front: frontValue, back: backValue };
 }
 
@@ -1869,48 +1843,28 @@ export interface ActiveCameraAssignments {
   warning: string;
 }
 
-/**
- * Give each lens an active host camera. The rule is the one the picker uses
- * (assignLensCameras in @octo/core): a saved endpoint is kept while the emulator
- * still enumerates it; a lens whose camera is gone takes another active camera
- * that the other lens does not hold; a lens with nothing left is off. Nothing is
- * substituted by webcam0 or by the emulator's own picture.
- *
- * The saved source of each lens is always a host camera (see
- * normalizeCameraSource), so only the endpoints decide the result.
+/** Preserve explicit endpoints (including shared webcam0), even when discovery fails.
+ * Missing enumeration remains a warning, never a fabricated working-camera result.
  */
 export function resolveActiveCameraAssignments(
-  _front: CameraSource | string,
-  _back: CameraSource | string,
+  front: CameraSource | string,
+  back: CameraSource | string,
   frontDevice: string,
   backDevice: string,
   webcams: EmulatorWebcam[],
-  /** Kept for the callers' sake; a host camera is matched by endpoint only. */
   _preferred: string[] = [],
   legacyDevice = '',
 ): ActiveCameraAssignments {
-  const live = webcams.filter((item) => item.name).map((item) => ({ id: item.name, name: item.device }));
-  const activeIds = new Set(live.map((item) => item.id));
-  // A device that recorded only its last camera in the shared key still gets it, on the rear lens.
-  const rearPreferred = backDevice || (WEBCAM.test(legacyDevice) ? legacyDevice : '');
-  const assigned = assignLensCameras({ front: frontDevice, back: rearPreferred }, live);
+  const selected = resolveAvdCameraSelection(
+    { front, back },
+    { front: frontDevice, back: backDevice || (WEBCAM.test(legacyDevice) ? legacyDevice : '') },
+    webcams.map(item => ({ id: item.name, name: item.device })),
+  );
   const warnings: string[] = [];
-  const explain = (lens: 'front' | 'rear', saved: string, lost: boolean, now: string, shared: boolean): void => {
-    if (!lost || !saved) return;
-    const reason = shared ? 'One camera cannot serve both lenses.' : `The saved ${lens} camera is no longer active.`;
-    warnings.push(now
-      ? `${reason} The ${lens} lens now uses ${now}.`
-      : `${reason} No other camera is free for the ${lens} lens, so it is off.`);
-  };
-  explain('rear', rearPreferred, assigned.lost.back, assigned.back, false);
-  explain('front', frontDevice, assigned.lost.front, assigned.front, activeIds.has(frontDevice));
-  return {
-    front: assigned.front ? 'webcam' : 'none',
-    back: assigned.back ? 'webcam' : 'none',
-    frontDevice: assigned.front,
-    backDevice: assigned.back,
-    warning: warnings.join(' '),
-  };
+  if (selected.shared) warnings.push('Both lenses use the same webcam. Some drivers cannot open both at once; turn one lens off if capture fails.');
+  if (selected.unlisted.length) warnings.push(`Not enumerated by the Android Emulator: ${selected.unlisted.join(', ')}. Explicit configuration is preserved but capture is not verified.`);
+  return { front: selected.front ? 'webcam' : 'none', back: selected.back ? 'webcam' : 'none',
+    frontDevice: selected.front, backDevice: selected.back, warning: warnings.join(' ') };
 }
 
 /**
@@ -1965,8 +1919,8 @@ function cameraLimitFor(value: string, measured?: CameraResolution): CameraResol
 
 /**
  * The `config.ini` keys one device boots with, from the two lenses and the
- * microphone switch. Exported so the crash rules (no shared endpoint, no
- * resolution a lens cannot deliver) are pinned by tests.
+ * microphone switch. Sharing is permitted explicitly; measured resolution limits
+ * are retained, and no synthetic camera is substituted.
  */
 export function mediaConfig(
   front: CameraSource | string,
@@ -3548,9 +3502,8 @@ export async function launchAndroidAvd(input: AndroidLaunchInput): Promise<Andro
   const front = requestedCameras.front;
   const back = requestedCameras.back;
   let cameraWarning = '';
-  // Only cameras the emulator enumerates are considered. A lens whose camera is
-  // no longer active is given another active one, or is off for this launch;
-  // it never starts on a picture that is not a camera.
+  // Explicit webcam endpoints survive failed discovery. An unlisted endpoint
+  // is reported as unverified, and Off remains off. No synthetic image is used.
   const emulatorRoot = rootForPackage(avdSystemPackage(avd)) || tools.root;
   const webcamReport = await emulatorWebcamsFrom(emulator, emulatorRoot);
   const hostCameraCount = (await windowsCameraNames()).length;

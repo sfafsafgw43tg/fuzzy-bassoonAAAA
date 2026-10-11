@@ -1,27 +1,16 @@
-/**
- * apps/octobrowser/src/renderer/launcher-android-cameras.ts
- *
- * The camera section of an Android device: the creator, the device settings,
- * the media dialog and the VirtualBox launch dialog all use this one picker.
- *
- * It offers only cameras that work right now. The list is the one the Android
- * Emulator names (`emulator -webcam-list`), never numbers guessed from Windows.
- * Each listed camera is opened once here, and it is offered only when it sends
- * a picture; the stream is released at once, so the device or a website can use
- * the camera straight after.
- *
- * Two lenses, Back and Front. A lens is a select of the working cameras, or Off.
- * With one working camera it serves the back lens and the front lens is Off.
- * A saved camera is kept while it still works; otherwise the first working one
- * is used. Choosing the camera of the other lens swaps the two lenses.
+/** Shared AVD camera controls. Explicit endpoints are allowed even if enumeration
+ * fails. Host capture testing is opt-in and can be stopped for Android-only use.
+ * A configured endpoint is never labelled a verified camera without a live test.
  */
 import { api } from '@octo/shell/renderer/bridge';
 import { h, t } from '@octo/shell/renderer/i18n-client';
 import { icon } from '@octo/shell/renderer/icons';
-import { field, run, select, toast } from './launcher-ui';
+import { field, run, select } from './launcher-ui';
 import {
-  assignLensCameras, classifyCameraFailure, pickCameraForEmulator, type CameraFailure,
+  resolveAvdCameraSelection, classifyCameraFailure, pickCameraForEmulator, type CameraFailure,
 } from '@octo/core/android-camera';
+import { CameraTestManager } from './camera-test-manager';
+const cameraTests = new CameraTestManager();
 
 /** A lens is fed from a host camera (`webcam`), or it is off (`none`). */
 export type CameraSource = 'none' | 'webcam';
@@ -147,6 +136,7 @@ interface Attempt {
   stream?: MediaStream;
   video?: HTMLVideoElement;
   closed: boolean;
+  lease: NonNullable<ReturnType<CameraTestManager['begin']>>;
 }
 
 function release(attempt: Attempt): void {
@@ -180,19 +170,23 @@ function firstPicture(video: HTMLVideoElement, ms: number): Promise<boolean> {
 async function pictureOf(emulator: EmulatorCamera, attempt: Attempt): Promise<CameraCheck> {
   try {
     let cameras = await videoInputs();
+    if (attempt.closed || attempt.lease.signal.aborted) return NO_PICTURE;
     if (!pickCameraForEmulator(cameras, emulator) && cameras.every((item) => !item.label)) {
       const reveal = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+      attempt.lease.track(reveal);
+      if (attempt.lease.signal.aborted) return NO_PICTURE;
       reveal.getTracks().forEach((track) => track.stop());
       // Windows drivers that allow one user need a moment before they can be opened again.
       await delay(300);
       cameras = await videoInputs();
     }
-    if (attempt.closed) return NO_PICTURE;
+    if (attempt.closed || attempt.lease.signal.aborted) return NO_PICTURE;
     const match = pickCameraForEmulator(cameras, emulator);
     if (!match) return { ok: false, width: 0, height: 0, failure: 'unavailable' };
     const stream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: match.deviceId } }, audio: false });
-    // The check may have been abandoned while the camera was being opened: release it at once.
-    if (attempt.closed) {
+    attempt.lease.track(stream);
+    // A late driver response is stopped even when the manager is already off.
+    if (attempt.closed || attempt.lease.signal.aborted) {
       stream.getTracks().forEach((track) => track.stop());
       return NO_PICTURE;
     }
@@ -224,27 +218,33 @@ async function pictureOf(emulator: EmulatorCamera, attempt: Attempt): Promise<Ca
  * or a website cannot use.
  */
 export function checkHostCamera(camera: EmulatorCamera): Promise<CameraCheck> {
+  const generation = cameraTests.generation;
   return queued(async () => {
-    const attempt: Attempt = { closed: false };
+    if (!cameraTests.enabled || generation !== cameraTests.generation) return NO_PICTURE;
+    const lease = cameraTests.begin();
+    if (!lease) return NO_PICTURE;
+    const attempt: Attempt = { closed: false, lease };
+    const cancelled = new Promise<CameraCheck>(resolve => lease.signal.addEventListener('abort', () => resolve(NO_PICTURE), { once: true }));
     let timer = 0;
     const limit = new Promise<CameraCheck>((resolve) => {
       timer = window.setTimeout(() => resolve(NO_PICTURE), CHECK_LIMIT_MS);
     });
     try {
-      return await Promise.race([pictureOf(camera, attempt), limit]);
+      return await Promise.race([pictureOf(camera, attempt), limit, cancelled]);
     } finally {
       window.clearTimeout(timer);
       release(attempt);
+      lease.close();
     }
   });
 }
 
 export function cameraPicker(options: CameraPickerOptions): CameraPicker {
   const selection: CameraSelection = {
-    front: sourceOf(options.initial.frontDevice ?? ''),
-    back: sourceOf(options.initial.backDevice ?? ''),
-    frontDevice: options.initial.frontDevice ?? '',
-    backDevice: options.initial.backDevice ?? '',
+    front: options.initial.front === 'none' ? 'none' : 'webcam',
+    back: options.initial.back === 'none' ? 'none' : 'webcam',
+    frontDevice: options.initial.front === 'none' ? '' : options.initial.frontDevice ?? '',
+    backDevice: options.initial.back === 'none' ? '' : options.initial.backDevice ?? '',
     frontLimit: options.initial.frontLimit,
     backLimit: options.initial.backLimit,
   };
@@ -262,6 +262,7 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
   let checking = false;
   let scanning = false;
   let attached = false;
+  let disposed = false;
   let problem: CameraProblem = '';
   let detail = '';
   let windowsCount = 0;
@@ -281,6 +282,29 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
   const refreshButton = h('button', { type: 'button', class: 'btn small' },
     icon('refreshCircle', 14), h('span', { text: t('common.refresh') })) as HTMLButtonElement;
   refreshButton.onclick = () => void scan(true);
+  const hostToggle = h('input', { type: 'checkbox' }) as HTMLInputElement;
+  hostToggle.checked = cameraTests.enabled;
+  hostToggle.onchange = () => cameraTests.setEnabled(hostToggle.checked);
+  const both = h('button', { type: 'button', class: 'btn small', text: t('android.camera.useWebcam0Both') });
+  both.onclick = () => {
+    cameraTests.setEnabled(false);
+    setDevice('front', 'webcam0'); setDevice('back', 'webcam0');
+    paintLenses(); paintStatus(); emit();
+  };
+  const off = h('button', { type: 'button', class: 'btn small', text: t('android.camera.disableBoth') });
+  off.onclick = () => { cameraTests.setEnabled(false); setDevice('front', ''); setDevice('back', ''); paintLenses(); paintStatus(); emit(); };
+  const manager = h('fieldset', { class: 'camera-manager' },
+    h('legend', { text: t('android.camera.manager') }),
+    h('label', {}, hostToggle, h('span', { text: t('android.camera.hostTesting') })),
+    h('p', { class: 'hint', text: t('android.camera.androidOnlyHint') }),
+    h('div', { class: 'camera-picker-foot' }, both, off),
+    h('p', { class: 'hint', text: t('android.camera.restartHint') }));
+  const unsubscribe = cameraTests.subscribe(() => {
+    hostToggle.checked = cameraTests.enabled;
+    recentChecks.clear();
+    paintStatus();
+    if (cameraTests.enabled) void scan(true);
+  });
   // A camera plugged in or removed is picked up by itself: Windows reports several
   // changes per plug, so the rescan waits for them to settle and never overlaps
   // (scan() is already guarded). Nothing runs while the picker is not on screen.
@@ -292,6 +316,7 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
   };
   navigator.mediaDevices?.addEventListener?.('devicechange', onDeviceChange);
   const element = h('div', { class: 'camera-picker' },
+    manager,
     h('div', { class: 'grid2' }, backSlot, frontSlot),
     h('div', { class: 'camera-picker-foot' }, refreshButton),
     statusSlot);
@@ -315,48 +340,28 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
     else { selection.back = sourceOf(device); selection.backDevice = device; }
   }
 
-  /**
-   * Settle both lenses against the cameras that work right now. A saved camera
-   * that still works keeps its lens; one that does not is replaced by another
-   * working camera, or its lens is turned off when none is left.
-   */
+  /** Discovery must not erase an explicit endpoint or reactivate Off. */
   function assign(): void {
-    const result = assignLensCameras(
+    const result = resolveAvdCameraSelection(selection,
       { front: selection.frontDevice, back: selection.backDevice },
-      working().map((camera) => ({ id: camera.name, name: camera.device })),
-    );
-    setDevice('front', result.front);
-    setDevice('back', result.back);
-    if (result.lost.front || result.lost.back) toast(t('android.camera.reassigned'), 'info');
+      listed.map(camera => ({ id: camera.name, name: camera.device })));
+    setDevice('front', result.front); setDevice('back', result.back);
   }
 
   function choose(facing: CameraFacing, id: string): void {
-    // Only a camera that works right now can be chosen.
-    if (!working().some((camera) => camera.name === id)) return;
-    const other: CameraFacing = facing === 'front' ? 'back' : 'front';
-    if (deviceOf(other) === id) {
-      // One camera, one lens: the other lens takes the camera this lens had, or goes off.
-      setDevice(other, deviceOf(facing));
-      toast(t('android.camera.swapped'), 'info');
-    }
+    if (id && !/^webcam\d+$/.test(id)) return;
     setDevice(facing, id);
-    paintLenses();
-    emit();
+    paintLenses(); paintStatus(); emit();
   }
 
-  /** One lens: a select of the working cameras, or Off when it has none. Off is text, never an option. */
   function lensField(facing: CameraFacing): HTMLElement {
     const key = facing === 'front' ? 'android.cameraFront' : 'android.cameraBack';
-    if (!loaded) return field(key, h('span', { class: 'camera-off', text: '…' }));
-    const list = working();
-    const current = list.find((camera) => camera.name === deviceOf(facing));
-    if (!current) {
-      // With one working camera it serves the back lens, so the front lens is off by design.
-      const hintKey = facing === 'front' && list.length === 1 ? 'android.camera.oneCamera' : undefined;
-      return field(key, h('span', { class: 'camera-off', text: t('android.camera.off') }), hintKey);
-    }
-    return field(key, select<string>(current.name, list.map((camera): [string, string] => [camera.name, displayName(camera)]),
-      (id) => choose(facing, id)));
+    const ids = [...new Set(['webcam0', ...listed.map(camera => camera.name), deviceOf(facing)].filter(id => /^webcam\d+$/.test(id)))];
+    const options: Array<[string, string]> = [['', t('android.camera.off')], ...ids.map((id): [string, string] => {
+      const camera = listed.find(item => item.name === id);
+      return [id, camera ? `${id} — ${displayName(camera)}` : t('android.camera.manualEndpoint', { endpoint: id })];
+    })];
+    return field(key, select<string>(deviceOf(facing), options, id => choose(facing, id)));
   }
 
   function paintLenses(): void {
@@ -368,15 +373,19 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
     return h('p', { class: warn ? 'hint warn' : 'hint', text });
   }
 
-  /** One short status under the lenses. Nothing is shown when every listed camera works. */
+  /** Keep configured, enumerated and capture-verified camera states distinct. */
   function paintStatus(): void {
     const lines: HTMLElement[] = [];
+    if (!cameraTests.enabled) lines.push(line(false, t('android.camera.testingOff')));
+    if (selection.frontDevice && selection.frontDevice === selection.backDevice) lines.push(line(true, t('android.camera.sharedWarning')));
+    const unlisted = [...new Set([selection.frontDevice, selection.backDevice].filter(id => id && !listed.some(camera => camera.name === id)))];
+    if (loaded && unlisted.length) lines.push(line(true, t('android.camera.manualWarning', { endpoints: unlisted.join(', ') })));
     if (loadFailed) lines.push(line(true, t('android.camera.scanFailed')));
     else if (!loaded || checking) lines.push(line(false, t('android.camera.scanning')));
     else if (noEmulator) lines.push(line(true, t('android.camera.noEmulator')));
     else {
-      if (!working().length) {
-        lines.push(line(true, t('android.camera.msgNone')));
+      if (!listed.length || (cameraTests.enabled && !working().length)) {
+        lines.push(line(true, t(cameraTests.enabled ? 'android.camera.msgNone' : 'android.camera.noneListed')));
         if (problem === 'timeout') lines.push(line(false, t('android.camera.timedOut')));
         else if (problem === 'reported') lines.push(line(false, t('android.camera.emulatorSaid', { detail })));
         if (!listed.length) {
@@ -395,12 +404,12 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
 
   /**
    * One pass: read the emulator's list, then open the cameras that need it. A
-   * manual pass (Refresh, or opening the picker) checks every listed camera. A
+   * manual pass checks every listed camera only while host testing is enabled. A
    * poll checks only the cameras it has not checked yet, so a busy webcam is not
    * reopened every few seconds.
    */
   async function scan(manual: boolean): Promise<void> {
-    if (scanning) return;
+    if (scanning || disposed) return;
     scanning = true;
     refreshButton.disabled = true;
     if (element.isConnected) attached = true;
@@ -423,13 +432,14 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
       for (const [name, entry] of checks) {
         if (!listed.some((camera) => camera.name === name && keyOf(camera) === entry.key)) checks.delete(name);
       }
-      const due = listed.filter((camera) => manual || checkOf(camera) === undefined);
+      const due = cameraTests.enabled ? listed.filter((camera) => manual || checkOf(camera) === undefined) : [];
       if (due.length) {
         checking = true;
         paintStatus();
         for (const camera of due) {
           // The panel this picker belongs to was replaced: stop opening cameras for it.
-          if (attached && !element.isConnected) break;
+          if (!cameraTests.enabled || (attached && !element.isConnected)) break;
+          const generation = cameraTests.generation;
           const key = keyOf(camera);
           const known = manual ? undefined : recentChecks.get(key);
           let check: CameraCheck;
@@ -437,6 +447,7 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
             check = known.check;
           } else {
             check = await checkHostCamera(camera);
+            if (!cameraTests.enabled || generation !== cameraTests.generation) break;
             recentChecks.set(key, { at: Date.now(), check });
           }
           checks.set(camera.name, { key, check });
@@ -467,12 +478,26 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
   // (replaced or closed), the timer stops and no more camera work is started for it.
   const poll = window.setInterval(() => {
     if (!element.isConnected) {
-      window.clearInterval(poll);
+      dispose();
       return;
     }
     attached = true;
     void scan(false);
   }, POLL_MS);
+
+  const observer = new MutationObserver(() => {
+    if (element.isConnected) attached = true;
+    else if (attached) dispose();
+  });
+  observer.observe(document.body, { childList: true, subtree: true });
+  function dispose(): void {
+    if (disposed) return;
+    disposed = true;
+    window.clearInterval(poll); clearTimeout(deviceSettle);
+    navigator.mediaDevices?.removeEventListener?.('devicechange', onDeviceChange);
+    observer.disconnect(); unsubscribe();
+    cameraTests.setEnabled(false);
+  }
 
   paintLenses();
   paintStatus();
