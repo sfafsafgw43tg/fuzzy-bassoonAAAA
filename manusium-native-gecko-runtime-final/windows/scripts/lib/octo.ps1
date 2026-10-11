@@ -2381,12 +2381,7 @@ function Get-SetupSteps {
         Assert-NotRunning @('octobrowser', 'octodetect')
         Invoke-Npm @('run', 'icons')
         Invoke-Npm @('run', 'build')
-        $electronExe = Join-Path $InstallRoot 'node_modules\electron\dist\electron.exe'
-        if (-not (Test-Path -LiteralPath $electronExe -PathType Leaf)) { throw 'The prebuilt Electron/Chromium runtime is missing from node_modules\electron\dist.' }
-        foreach ($app in @('octobrowser', 'octodetect')) {
-          $main = if ($app -eq 'octobrowser') { Join-Path $InstallRoot 'apps\octobrowser\dist\main.js' } else { Join-Path $InstallRoot 'apps\octodetect\dist\main.js' }
-          if (-not (Test-Path -LiteralPath $main -PathType Leaf)) { throw "The built $app application is missing its dist\main.js." }
-        }
+        Invoke-Npm @('run', 'prepare:prebuilt:windows')
         $releaseDir = Join-Path $InstallRoot 'release'
         New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
         [ordered]@{
@@ -2689,9 +2684,13 @@ function Test-Ready {
     if ([string]$receipt.schema -ne 'octo.local-ready.v1') { return $false }
   } catch { return $false }
   if ([string]$receipt.mode -eq 'prebuilt-electron') {
-    if (-not (Test-Path -LiteralPath (Join-Path $InstallRoot 'node_modules\electron\dist\electron.exe') -PathType Leaf)) { return $false }
     foreach ($app in @('octobrowser', 'octodetect')) {
-      $main = if ($app -eq 'octobrowser') { Join-Path $InstallRoot 'apps\octobrowser\dist\main.js' } else { Join-Path $InstallRoot 'apps\octodetect\dist\main.js' }
+      $appRoot = Join-Path $InstallRoot ("release\{0}\win-unpacked" -f $app)
+      $exe = Join-Path $appRoot $Apps[$app].Exe
+      $appJson = Join-Path $appRoot 'resources\app\package.json'
+      $main = Join-Path $appRoot 'resources\app\dist\main.js'
+      if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { return $false }
+      if (-not (Test-Path -LiteralPath $appJson -PathType Leaf)) { return $false }
       if (-not (Test-Path -LiteralPath $main -PathType Leaf)) { return $false }
     }
     return $true

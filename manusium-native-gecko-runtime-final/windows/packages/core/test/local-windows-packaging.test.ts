@@ -3,11 +3,15 @@ import path from 'node:path';
 import { describe, expect, it } from 'vitest';
 const root = path.resolve(__dirname, '../../..');
 const packaging = fs.readFileSync(path.join(root, 'tools/package-local-windows.mjs'), 'utf8');
+const prebuilt = fs.readFileSync(path.join(root, 'tools/prepare-prebuilt-app.mjs'), 'utf8');
 const installer = fs.readFileSync(path.join(root, 'scripts/lib/octo.ps1'), 'utf8');
 const fn = (name: string) => new RegExp(`function ${name}(?:\\([^\\n]*\\))? \\{([\\s\\S]*?)\\r?\\n\\}`).exec(installer)?.[1] ?? '';
 describe('branded local Windows setup', () => {
   it('keeps strict packaging separate while setup uses the prebuilt app runtime', () => {
     expect(installer).not.toContain("package:local:windows");
+    expect(installer).toContain("prepare:prebuilt:windows");
+    expect(prebuilt).toContain("path.join(outputResources, 'app')");
+    expect(prebuilt).toContain('copyTree(electronDist, output)');
     expect(packaging).toContain("runNode('verify-packaged-chromium.mjs'");
     const buildStep = installer.slice(installer.indexOf("@{ Key = 'stepBuild'"), installer.indexOf("@{ Key = 'stepShortcut'"));
     const stages = ["Invoke-Npm @('run', 'icons')", "Invoke-Npm @('run', 'build')", "mode = 'prebuilt-electron'"];
@@ -20,8 +24,9 @@ describe('branded local Windows setup', () => {
     const ready = fn('Test-Ready');
     expect(ready).toContain('release\\.octo-local-ready.json');
     expect(ready).toContain("receipt.mode -eq 'prebuilt-electron'");
-    expect(ready).toContain('node_modules\\electron\\dist\\electron.exe');
-    expect(ready).toContain('apps\\octobrowser\\dist\\main.js');
+    expect(ready).toContain('release\\{0}\\win-unpacked');
+    expect(ready).toContain('resources\\app\\package.json');
+    expect(ready).toContain('resources\\app\\dist\\main.js');
   });
   it('starts the packaged GUI executable in Windows source installs', () => {
     const open = fn('Invoke-Open');

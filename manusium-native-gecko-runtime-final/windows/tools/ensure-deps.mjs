@@ -345,20 +345,19 @@ function ensureDependenciesUnlocked(root, { checkOnly = false, run = runCommand,
     return { status: 2, plan };
   }
 
-  if (plan.action === 'install') {
-    // Record only after native package setup succeeds. A failed Electron download
-    // below is retried on its own; it does not reinstall every package on each start.
-    // Fingerprint after install because npm install may rewrite the lockfile.
-    writeStamp(root, computeFingerprint(root));
-  }
-
   if (electronNeeded && !electronBinaryPresent(root)) {
     log('Installing the Electron binary.');
-    const installScript = path.join('node_modules', 'electron', 'install.js');
-    if (run(process.execPath, [installScript], root) !== 0 || !electronBinaryPresent(root)) {
+    const installScript = path.join(root, 'node_modules', 'electron', 'install.js');
+    if (!existsSync(installScript) || run(process.execPath, [installScript], root) !== 0 || !electronBinaryPresent(root)) {
       log('The Electron binary could not be installed. Check the network, then start again.');
       return { status: 2, plan };
     }
+  }
+
+  if (plan.action === 'install') {
+    // Record success only after all required native binaries are present.
+    // Fingerprint after install because npm install may rewrite the lockfile.
+    writeStamp(root, computeFingerprint(root));
   }
 
   log('Dependencies are ready.');

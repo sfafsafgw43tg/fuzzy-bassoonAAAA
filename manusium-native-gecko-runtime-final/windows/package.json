@@ -35,6 +35,7 @@
     "start": "npm run start:browser",
     "icons": "node tools/build-icons.mjs",
     "brand:electron:windows": "node tools/brand-electron-dev.mjs",
+    "prepare:prebuilt:windows": "node tools/prepare-prebuilt-app.mjs",
     "test": "vitest run",
     "test:native-engines": "node tools/verify-native-engines.mjs",
     "test:native-engines:allow-missing-firefox": "node tools/verify-native-engines.mjs --allow-missing-firefox",
