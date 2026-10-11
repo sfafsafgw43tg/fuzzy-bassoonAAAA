@@ -7,7 +7,7 @@ They configure the Android Emulator's AVD files; they are not a Windows device-d
 
 1. Stop the AVD if it is running.
 2. Open its camera settings and choose **Use webcam0 for front and back**.
-3. Leave **Test cameras in Octo (uses the webcam temporarily)** unchecked.
+3. Leave **Test cameras in Octo (off = Android only)** unchecked.
 4. Save, then cold-start the AVD (including when starting it from Android Studio).
 
 The saved `config.ini` contains:
@@ -52,3 +52,12 @@ cannot be guaranteed here.
 - The UI fixture is **not** a physical webcam/Android guest test. Actual guest
   frames, driver compatibility and installation of a new release require separate
   Windows hardware/release verification; this patch does not establish them.
+
+### Recorded validation
+
+Implementation `2beda11fb8235a3320b6263e91a35b5efdbee719` passed
+[Windows run 38167521619](https://github.com/sfafsafgw43tg/fuzzy-bassoonAAAA/actions/runs/38167521619):
+typecheck, full unit suite, translation check, browser build and the Electron UI
+regression (1 passed, 1.6 seconds). Local unit results: 960 passed, 5 optional
+integration tests skipped. No physical webcam, Android guest capture or new
+installer was validated by this run.
