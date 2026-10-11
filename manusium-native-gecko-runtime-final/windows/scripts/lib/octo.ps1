@@ -183,6 +183,7 @@ $Messages = @{
     setupDone         = 'Everything is ready. Start the apps with run.bat (or start-all.bat).'
     setupBuilt        = 'Applications built: apps\octobrowser\dist, apps\octodetect\dist'
     runHidden         = 'Starting without a console window...'
+    nativeFallback    = 'The bundled InkBrowser runtime is not available in this source checkout. Starting the Electron app instead; native Chromium profiles remain unavailable until a packaged runtime is installed.'
     noSources         = 'No installer and no OctoSuite sources here ({0}). Unpack the whole repository (with package.json, apps\ and tools\) or put OctoSuite-Setup-*.exe next to the scripts.'
     installFromSources = 'No release installer found - setting up the source copy in {0}.'
     ghNoGitDir        = 'These sources are not a git clone (no .git folder), so they cannot be fast-forwarded. Only the build is refreshed. Use "git clone" to get updates from GitHub.'
@@ -417,6 +418,7 @@ $Messages = @{
     setupDone         = 'Wszystko gotowe. Uruchom aplikacje plikiem run.bat (albo start-all.bat).'
     setupBuilt        = 'Zbudowano aplikacje: apps\octobrowser\dist, apps\octodetect\dist'
     runHidden         = 'Uruchamianie bez okna konsoli...'
+    nativeFallback    = 'Do tej kopii źródłowej nie dołączono środowiska InkBrowser. Uruchamiam aplikację Electron; profile natywnego Chromium będą niedostępne do czasu zainstalowania pakietu wydania.'
     noSources         = 'Nie ma tu ani instalatora, ani źródeł OctoSuite ({0}). Rozpakuj całe repozytorium (z plikami package.json, apps\ i tools\) albo połóż obok skryptów plik OctoSuite-Setup-*.exe.'
     installFromSources = 'Nie znaleziono instalatora wydania – konfigurowanie kopii źródłowej w {0}.'
     ghNoGitDir        = 'Te źródła nie są klonem git (brak folderu .git), więc nie można pobrać zmian. Odbudowana zostanie tylko aplikacja. Aby dostawać aktualizacje, użyj „git clone”.'
@@ -813,17 +815,20 @@ function Invoke-Open([string]$appId) {
     else { Start-Process -FilePath $exe -WorkingDirectory (Split-Path -Parent $exe) }
     return
   }
-  # Windows setup launches the resource-edited, packaged executable, not
-  # node_modules/electron.exe. npm run dev remains an explicit developer option.
+  # Prefer the resource-edited packaged executable when a complete local
+  # package exists. A source checkout may not contain generated native
+  # Chromium runtimes, though. In that case open.bat must remain useful: use
+  # the existing Electron fallback instead of stopping at the runtime gate.
+  # Release packaging keeps the strict Test-Ready check and cannot omit it.
   if ((Test-DevCheckout) -and $env:OS -eq 'Windows_NT') {
-    if (-not (Test-Ready)) {
-      if (-not (Invoke-Setup) -or -not (Test-Ready)) { Fail (T 'wizardNotReady') }
+    if (Test-Ready) {
+      $packagedExe = Get-LocalPackagedExe $appId
+      Say (T 'starting' $a.Product)
+      if ($Rest -and $Rest.Count -gt 0) { Start-Process -FilePath $packagedExe -ArgumentList $Rest -WorkingDirectory (Split-Path -Parent $packagedExe) }
+      else { Start-Process -FilePath $packagedExe -WorkingDirectory (Split-Path -Parent $packagedExe) }
+      return
     }
-    $packagedExe = Get-LocalPackagedExe $appId
-    Say (T 'starting' $a.Product)
-    if ($Rest -and $Rest.Count -gt 0) { Start-Process -FilePath $packagedExe -ArgumentList $Rest -WorkingDirectory (Split-Path -Parent $packagedExe) }
-    else { Start-Process -FilePath $packagedExe -WorkingDirectory (Split-Path -Parent $packagedExe) }
-    return
+    Warn (T 'nativeFallback')
   }
   $electronExe = Join-Path $InstallRoot 'node_modules\electron\dist\electron.exe'
   $electronCmd = Join-Path $InstallRoot 'node_modules\.bin\electron.cmd'

@@ -27,4 +27,12 @@ describe('branded local Windows setup', () => {
     expect(open).toContain('Start-Process -FilePath $packagedExe');
     expect(open.indexOf('Start-Process -FilePath $packagedExe')).toBeLessThan(open.indexOf('$electronExe ='));
   });
+  it('does not block open.bat on missing generated native runtimes', () => {
+    const open = fn('Invoke-Open');
+    expect(open).toContain('if (Test-Ready) {');
+    expect(open).toContain("Warn (T 'nativeFallback')");
+    expect(open).not.toContain("if (-not (Invoke-Setup) -or -not (Test-Ready)) { Fail (T 'wizardNotReady') }");
+    expect(open).toContain("Invoke-Npm @('run', 'build')");
+    expect(installer).toContain('nativeFallback');
+  });
 });
