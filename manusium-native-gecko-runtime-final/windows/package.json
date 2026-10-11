@@ -61,7 +61,11 @@
     "check-fuses": "node tools/check-fuses.mjs",
     "test:scripts": "pwsh -NoProfile -Command \"Invoke-Pester -Path scripts/tests -Output Detailed -CI\"",
     "package:local:windows": "node tools/package-local-windows.mjs",
-    "verify:windows:branding": "node tools/verify-windows-branding.mjs"
+    "verify:windows:branding": "node tools/verify-windows-branding.mjs",
+    "build:compact": "node tools/build-compact.mjs",
+    "check:compact:engine": "node tools/check-compact-engine.mjs",
+    "dist:compact:windows": "npm run check:compact:engine && npm run build:compact && electron-builder --win --x64 --config electron-builder.cjs --projectDir apps/octocompact",
+    "test:compact:installed": "pwsh -NoProfile -File tools/ci/compact-installed.ps1"
   },
   "devDependencies": {
     "@electron/fuses": "^2.1.3",
@@ -69,7 +73,7 @@
     "@resvg/resvg-js": "^2.6.2",
     "@types/node": "^22.20.4",
     "@types/yauzl": "^2.10.3",
-    "electron": "44.4.5",
+    "electron": "44.7.0",
     "electron-builder": "^26.17.0",
     "esbuild": "^0.28.2",
     "png-to-ico": "^3.0.2",
