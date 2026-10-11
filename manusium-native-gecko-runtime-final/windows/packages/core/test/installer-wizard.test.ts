@@ -214,7 +214,8 @@ describe('steps and the console installer', () => {
     expect(chromium).toContain("distribution: 'source-built'");
     expect(chromium).not.toContain('chrome-for-testing-public');
     const runtimeStep = functionBody(octo, 'Get-SetupSteps');
-    expect(runtimeStep).not.toContain('Test-AllChromiumRuntimes');
+    expect(runtimeStep).toContain('Test-AllChromiumRuntimes');
+    expect(runtimeStep).toContain("mode = if ($nativeAvailable) { 'prebuilt-inkbrowser' } else { 'prebuilt-electron' }");
     expect(runtimeStep).not.toContain('Ensure-ChromiumBuildToolchain');
     const packaging = fs.readFileSync(path.join(root, 'tools/package-local-windows.mjs'), 'utf8');
     expect(packaging).toContain("runNode('chromium-versions.mjs', ['test'])");
@@ -270,7 +271,7 @@ describe('steps and the console installer', () => {
     const buildBlock = octo.slice(octo.indexOf("@{ Key = 'stepBuild'; Required"), octo.indexOf("@{ Key = 'stepShortcut'; Required"));
     expect(buildBlock).toContain("Invoke-Npm @('run', 'icons')");
     expect(buildBlock).toContain("Invoke-Npm @('run', 'build')");
-    expect(buildBlock).toContain("mode = 'prebuilt-electron'");
+    expect(buildBlock).toContain("mode = if ($nativeAvailable) { 'prebuilt-inkbrowser' } else { 'prebuilt-electron' }");
     expect(buildBlock).not.toContain('package:local:windows');
   });
 

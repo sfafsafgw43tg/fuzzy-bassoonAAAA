@@ -118,4 +118,6 @@ for (const app of apps) {
   if (chromiumRequired) verifyBundledChromium(outputResources);
   console.log(`[prepare-prebuilt-app] ${app.id}: ${path.relative(root, output)}`);
 }
-console.log(`[prepare-prebuilt-app] complete: self-contained Electron + InkBrowser Chromium ${chromiumVersion} app bundles are ready.`);
+console.log(chromiumRequired
+  ? `[prepare-prebuilt-app] complete: self-contained Electron + verified InkBrowser Chromium ${chromiumVersion} app bundles are ready.`
+  : '[prepare-prebuilt-app] complete: self-contained Electron compatibility bundles are ready; native InkBrowser Chromium was not supplied.');

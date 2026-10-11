@@ -2382,8 +2382,13 @@ function Get-SetupSteps {
         Assert-NotRunning @('octobrowser', 'octodetect')
         Invoke-Npm @('run', 'icons')
         Invoke-Npm @('run', 'build')
+        # A source checkout may not contain the 100GB+ Windows Chromium build.
+        # Still create a complete branded Electron bundle so the manager opens,
+        # but never mark native Chromium as installed. Release packaging remains
+        # strict and must supply the verified source-built payload.
+        $nativeAvailable = Test-AllChromiumRuntimes (Join-Path $InstallRoot 'resources')
         $previousNativeRequirement = $env:OCTO_REQUIRE_NATIVE_CHROMIUM
-        $env:OCTO_REQUIRE_NATIVE_CHROMIUM = '1'
+        $env:OCTO_REQUIRE_NATIVE_CHROMIUM = if ($nativeAvailable) { '1' } else { '0' }
         try { Invoke-Npm @('run', 'prepare:prebuilt:windows') }
         finally {
           if ($null -eq $previousNativeRequirement) { Remove-Item Env:OCTO_REQUIRE_NATIVE_CHROMIUM -ErrorAction SilentlyContinue }
@@ -2393,8 +2398,8 @@ function Get-SetupSteps {
         New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
         [ordered]@{
           schema = 'octo.local-ready.v1'
-          mode = 'prebuilt-inkbrowser'
-          nativeRuntimeVerified = $true
+          mode = if ($nativeAvailable) { 'prebuilt-inkbrowser' } else { 'prebuilt-electron' }
+          nativeRuntimeVerified = [bool]$nativeAvailable
           checkedAt = (Get-Date).ToUniversalTime().ToString('o')
         } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $releaseDir '.octo-local-ready.json') -Encoding UTF8
         return (Test-Ready)
@@ -2690,7 +2695,7 @@ function Test-Ready {
     $receipt = Get-Content -LiteralPath (Join-Path $InstallRoot 'release\.octo-local-ready.json') -Raw -Encoding UTF8 | ConvertFrom-Json
     if ([string]$receipt.schema -ne 'octo.local-ready.v1') { return $false }
   } catch { return $false }
-  if ([string]$receipt.mode -eq 'prebuilt-inkbrowser') {
+  if ([string]$receipt.mode -in @('prebuilt-inkbrowser', 'prebuilt-electron')) {
     foreach ($app in @('octobrowser', 'octodetect')) {
       $appRoot = Join-Path $InstallRoot ("release\{0}\win-unpacked" -f $app)
       $exe = Join-Path $appRoot $Apps[$app].Exe
@@ -2699,7 +2704,7 @@ function Test-Ready {
       if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { return $false }
       if (-not (Test-Path -LiteralPath $appJson -PathType Leaf)) { return $false }
       if (-not (Test-Path -LiteralPath $main -PathType Leaf)) { return $false }
-      if (-not (Test-NativeRuntimeReady 'chromium' 'win32-x64' '155.0.8059.39' (Join-Path $appRoot 'resources'))) { return $false }
+      if ([string]$receipt.mode -eq 'prebuilt-inkbrowser' -and -not (Test-NativeRuntimeReady 'chromium' 'win32-x64' '155.0.8059.39' (Join-Path $appRoot 'resources'))) { return $false }
     }
     return $true
   }

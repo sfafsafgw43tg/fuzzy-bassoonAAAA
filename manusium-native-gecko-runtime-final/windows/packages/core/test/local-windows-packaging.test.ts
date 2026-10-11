@@ -18,7 +18,7 @@ describe('branded local Windows setup', () => {
     expect(prebuilt).toContain("sha256(executable).toLowerCase() !== expected");
     expect(packaging).toContain("runNode('verify-packaged-chromium.mjs'");
     const buildStep = installer.slice(installer.indexOf("@{ Key = 'stepBuild'"), installer.indexOf("@{ Key = 'stepShortcut'"));
-    const stages = ["Invoke-Npm @('run', 'icons')", "Invoke-Npm @('run', 'build')", "OCTO_REQUIRE_NATIVE_CHROMIUM", "mode = 'prebuilt-inkbrowser'"];
+    const stages = ["Invoke-Npm @('run', 'icons')", "Invoke-Npm @('run', 'build')", "OCTO_REQUIRE_NATIVE_CHROMIUM", "prebuilt-inkbrowser' } else { 'prebuilt-electron"];
     const offsets = stages.map(stage => buildStep.indexOf(stage));
     expect(offsets.every(offset => offset >= 0)).toBe(true);
     expect(offsets).toEqual([...offsets].sort((a, b) => a - b));
@@ -27,7 +27,8 @@ describe('branded local Windows setup', () => {
   it('accepts only complete prebuilt InkBrowser readiness data', () => {
     const ready = fn('Test-Ready');
     expect(ready).toContain('release\\.octo-local-ready.json');
-    expect(ready).toContain("receipt.mode -eq 'prebuilt-inkbrowser'");
+    expect(ready).toContain("receipt.mode -in @('prebuilt-inkbrowser', 'prebuilt-electron')");
+    expect(ready).toContain("receipt.mode -eq 'prebuilt-inkbrowser' -and");
     expect(ready).toContain('release\\{0}\\win-unpacked');
     expect(ready).toContain('resources\\app\\package.json');
     expect(ready).toContain('resources\\app\\dist\\main.js');
