@@ -831,6 +831,22 @@ function Invoke-Open([string]$appId) {
     Warn (T 'nativeFallback')
   }
   $electronExe = Join-Path $InstallRoot 'node_modules\electron\dist\electron.exe'
+  $brandedElectronExe = Join-Path $InstallRoot 'node_modules\electron\dist\Octo.su.exe'
+  # npm must continue to own the `electron` package and its electron.exe;
+  # replacing that package or renaming its directory breaks npm ci and the
+  # Electron launcher. Create a disposable branded copy beside it instead.
+  if ($env:OS -eq 'Windows_NT' -and (Test-Path -LiteralPath $electronExe)) {
+    $brandScript = Join-Path $InstallRoot 'tools\brand-electron-dev.mjs'
+    $nodeForBrand = Resolve-Tool 'node'
+    if ($nodeForBrand -and (Test-Path -LiteralPath $brandScript)) {
+      $brandResult = Invoke-Native $nodeForBrand @($brandScript) $InstallRoot -Quiet
+      if ($brandResult.code -eq 0 -and (Test-Path -LiteralPath $brandedElectronExe)) {
+        $electronExe = $brandedElectronExe
+      } else {
+        Warn 'The Octo development icon could not be applied; using the package-managed Electron binary.'
+      }
+    }
+  }
   $electronCmd = Join-Path $InstallRoot 'node_modules\.bin\electron.cmd'
   $appDir = Join-Path $InstallRoot $a.DevDir
   $appMain = Join-Path $appDir 'dist\main.js'

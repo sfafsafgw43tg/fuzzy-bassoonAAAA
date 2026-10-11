@@ -35,4 +35,12 @@ describe('branded local Windows setup', () => {
     expect(open).toContain("Invoke-Npm @('run', 'build')");
     expect(installer).toContain('nativeFallback');
   });
+  it('keeps npm ownership of Electron while launching a disposable branded copy', () => {
+    const open = fn('Invoke-Open');
+    expect(open).toContain("node_modules\\electron\\dist\\electron.exe");
+    expect(open).toContain("node_modules\\electron\\dist\\Octo.su.exe");
+    expect(open).toContain('brand-electron-dev.mjs');
+    expect(open).toContain("$electronExe = $brandedElectronExe");
+    expect(open).toContain('npm must continue to own');
+  });
 });
