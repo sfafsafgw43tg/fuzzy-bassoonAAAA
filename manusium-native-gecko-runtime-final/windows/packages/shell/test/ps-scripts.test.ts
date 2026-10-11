@@ -213,7 +213,7 @@ describe('the graphical installer', () => {
   it('runs exactly the steps the console runs', () => {
     expect(uiSource).toContain('Get-SetupSteps');
     const keys = [...source.matchAll(/Key = '(step[A-Za-z]+)'/g)].map((m) => m[1]);
-    expect(keys).toEqual(['stepPrereqs', 'stepDeps', 'stepRuntimes', 'stepShortcut', 'stepBuild']);
+    expect(keys).toEqual(['stepPrereqs', 'stepDeps', 'stepRuntimes', 'stepBuild', 'stepShortcut']);
     for (const key of keys) {
       // Every step needs a label in both dictionaries.
       expect(source).toContain(`    ${key.padEnd(17)} = '`);
@@ -222,12 +222,12 @@ describe('the graphical installer', () => {
 });
 
 describe('the steps are required or optional', () => {
-  it('stops for prerequisites, dependencies, and the app build, but not optional native staging', () => {
+  it('requires dependencies, runtimes and packaging; only the shortcut is optional', () => {
     const block = source.slice(source.indexOf('function Get-SetupSteps'), source.indexOf('function Show-InstallerWindow'));
     const required = [...block.matchAll(/Key = '(step[A-Za-z]+)'; Required = \$true/g)].map((m) => m[1]);
     const optional = [...block.matchAll(/Key = '(step[A-Za-z]+)'; Required = \$false/g)].map((m) => m[1]);
-    expect(required).toEqual(['stepPrereqs', 'stepBuild']);
-    expect(optional).toEqual(['stepDeps', 'stepRuntimes', 'stepShortcut']);
+    expect(required).toEqual(['stepPrereqs', 'stepDeps', 'stepRuntimes', 'stepBuild']);
+    expect(optional).toEqual(['stepShortcut']);
   });
 });
 
@@ -272,7 +272,8 @@ describe('classic visible installer launch', () => {
 
   it('supports explicitly skipping npm dependency installation', () => {
     expect(source).toContain('[switch]$SkipDependencies');
-    expect(source).toContain('Skipping npm dependency installation at the user request (-SkipDependencies).');
+    expect(source).toContain("@('tools\\ensure-deps.mjs', '--check')");
+    expect(source).toContain('return ($check.code -eq 0)');
   });
 
   it('hides any console the window is attached to, and restores it', () => {
@@ -287,7 +288,7 @@ describe('desktop shortcut', () => {
   it('is created as its own setup step', () => {
     expect(source).toContain('function New-DesktopShortcut');
     expect(source).toContain("@{ Key = 'stepShortcut'");
-    // The step list order: the shortcut is made before the build finishes the run.
+    // The step list order: the shortcut is made only after packaging succeeds.
     const keys = [...source.matchAll(/Key = '(step[A-Za-z]+)'/g)].map((m) => m[1]);
     expect(keys).toContain('stepShortcut');
   });
@@ -295,10 +296,12 @@ describe('desktop shortcut', () => {
   it('points at Octo.su and starts it without a console', () => {
     const fn = /function New-DesktopShortcut \{([\s\S]*?)\n\}/.exec(source)?.[1] ?? '';
     expect(fn).toContain("'Octo.su.lnk'");
-    expect(fn).toContain("Join-Path $ScriptsDir 'open.bat'");
-    expect(fn).toContain('hidden.vbs');
-    expect(fn).toContain("branding\\octobrowser\\icon.ico");
-    expect(fn).toContain('$cut.WorkingDirectory = $InstallRoot');
+    expect(fn).toContain("Get-LocalPackagedExe 'octobrowser'");
+    expect(fn).toContain('$cut.TargetPath = $exe');
+    expect(fn).toContain('$cut.IconLocation = "$exe,0"');
+    expect(fn).toContain('$cut.WorkingDirectory = Split-Path -Parent $exe');
+    expect(fn).not.toContain('wscript.exe');
+    expect(fn).not.toContain('electron.exe');
     // A failure must never stop the installation.
     expect(fn).toContain("Warn (T 'shortcutFailed'");
   });

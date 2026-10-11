@@ -118,10 +118,8 @@ export function electronWinstallerArtifactsPresent(root) {
 }
 
 /**
- * Allows a transient registry/network/npm failure to be skipped only when the
- * already-present dependency tree can still build and launch the app. This is
- * deliberately not a general "ignore npm" switch: a fresh or partial install
- * still fails, and every build tool declared by the root manifest is checked.
+ * Diagnostic only: identifies some existing build artifacts. Their presence
+ * does not prove lockfile consistency and must never override a failed npm run.
  */
 export function existingDependencyArtifactsPresent(root, pkg) {
   if (electronRequired(pkg) && (!electronPackagePresent(root) || !electronBinaryPresent(root))) return false;
@@ -284,11 +282,7 @@ export function ensureDependencies(root, { checkOnly = false, run = runCommand, 
       log(`npm install failed with exit code ${installStatus}. Retrying with clean npm ci.`);
       const ciStatus = run('npm', ciArgs, root);
       if (ciStatus !== 0) {
-        if (existingDependencyArtifactsPresent(root, pkg)) {
-          log(`npm install and npm ci failed (${installStatus}/${ciStatus}); using the existing verified dependency tree and continuing.`);
-          return { status: 0, plan };
-        }
-        log(`Dependency installation failed: npm install=${installStatus}, npm ci=${ciStatus}. A complete usable dependency tree was not found.`);
+        log(`Dependency installation failed: npm install=${installStatus}, npm ci=${ciStatus}. Setup cannot continue after failed dependency installation; inspect the npm error above.`);
         return { status: 2, plan };
       }
     }

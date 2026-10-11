@@ -59,7 +59,9 @@
     "i18n:check": "node tools/i18n-keys.mjs",
     "e2e": "npm run build && playwright test -c e2e/playwright.config.ts",
     "check-fuses": "node tools/check-fuses.mjs",
-    "test:scripts": "pwsh -NoProfile -Command \"Invoke-Pester -Path scripts/tests -Output Detailed -CI\""
+    "test:scripts": "pwsh -NoProfile -Command \"Invoke-Pester -Path scripts/tests -Output Detailed -CI\"",
+    "package:local:windows": "node tools/package-local-windows.mjs",
+    "verify:windows:branding": "node tools/verify-windows-branding.mjs"
   },
   "devDependencies": {
     "@electron/fuses": "^2.1.3",

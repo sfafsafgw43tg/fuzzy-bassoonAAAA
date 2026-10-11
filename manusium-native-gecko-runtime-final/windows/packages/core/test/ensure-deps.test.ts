@@ -311,14 +311,14 @@ describe('ensureDependencies', () => {
     expect(existsSync(path.join(root, STAMP_PATH))).toBe(false);
   });
 
-  it('continues with a verified existing tree when both npm commands fail', () => {
+  it('fails when both npm commands fail even if stale dependency artifacts exist', () => {
     makeProject();
     fakeInstall();
     expect(existingDependencyArtifactsPresent(root, { devDependencies: { electron: '39.0.0' } })).toBe(true);
     const messages: string[] = [];
     const runner = recordingRunner(() => 1);
-    expect(ensureDependencies(root, { run: runner.run, log: (line: string) => messages.push(line) }).status).toBe(0);
-    expect(messages.join('\n')).toContain('using the existing verified dependency tree');
+    expect(ensureDependencies(root, { run: runner.run, log: (line: string) => messages.push(line) }).status).toBe(2);
+    expect(messages.join('\n')).toContain('Setup cannot continue after failed dependency installation');
     expect(existsSync(path.join(root, STAMP_PATH))).toBe(false);
   });
 

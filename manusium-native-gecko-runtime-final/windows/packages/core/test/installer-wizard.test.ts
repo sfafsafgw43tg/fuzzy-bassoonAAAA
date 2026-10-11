@@ -71,14 +71,14 @@ describe('success is reported only when every required step succeeded', () => {
     expect(body).toContain("Write-WizardMarker @('step', 'skip', $step.Key, $index, $total)");
   });
 
-  it('the fatal flag covers prerequisites but not optional native runtime staging', () => {
+  it('all prerequisites, dependencies, runtime verification and packaging are fatal', () => {
     const block = octo.slice(octo.indexOf('function Get-SetupSteps'), octo.indexOf('function Show-InstallerWindow'));
     const fatal = [...block.matchAll(/Key = '(step[A-Za-z]+)'; Required = \$(?:true|false); Fatal = \$true/g)].map((m) => m[1]);
-    expect(fatal).toEqual(['stepPrereqs']);
-    expect([...block.matchAll(/Fatal = \$false/g)]).toHaveLength(4);
+    expect(fatal).toEqual(['stepPrereqs', 'stepDeps', 'stepRuntimes', 'stepBuild']);
+    expect([...block.matchAll(/Fatal = \$false/g)]).toHaveLength(1);
     expect(octo).toContain('stepRuntimes');
-    expect(block).toContain("Key = 'stepDeps'; Required = $false; Fatal = $false");
-    expect(block).toContain("Key = 'stepRuntimes'; Required = $false; Fatal = $false");
+    expect(block).toContain("Key = 'stepDeps'; Required = $true; Fatal = $true");
+    expect(block).toContain("Key = 'stepRuntimes'; Required = $true; Fatal = $true");
   });
 
   it('the console installer never reports success after a failed required step', () => {
@@ -216,19 +216,20 @@ describe('steps and the console installer', () => {
     expect(chromium).toContain("distribution: 'source-built'");
     expect(chromium).not.toContain('chrome-for-testing-public');
     const runtimeStep = functionBody(octo, 'Get-SetupSteps');
-    expect(runtimeStep).toContain('bundled source-built Chromium runtime');
-    expect(runtimeStep).toContain('does not compile Chromium or install Visual Studio');
+    expect(runtimeStep).toContain('Test-AllChromiumRuntimes');
+    expect(runtimeStep).toContain('Never compile Chromium here');
     expect(runtimeStep).not.toContain('Ensure-ChromiumBuildToolchain');
     expect(runtimeStep).not.toContain("Invoke-Npm @('run', $stageChromium)");
-    expect(runtimeStep).toContain(String.raw`tools\verify-native-engines.mjs`);
-    expect(runtimeStep).toContain("'--allow-missing-firefox'");
-    expect(runtimeStep).toContain('Native Chromium verification failed');
+    expect(runtimeStep).toContain("Invoke-Npm @('run', 'package:local:windows')");
+    const packaging = fs.readFileSync(path.join(root, 'tools/package-local-windows.mjs'), 'utf8');
+    expect(packaging).toContain("runNode('chromium-versions.mjs', ['test'])");
+    expect(packaging).toContain("runNode('verify-windows-branding.mjs')");
     expect(runtimeStep).not.toContain('Ensure-FirefoxStagingToolchain');
     expect(runtimeStep).not.toContain('stage:firefox:windows');
     expect(octo).toContain('function Test-NativeRuntimeReady');
     expect(octo).toContain("[string]$manifest.distribution -ne 'source-built'");
     expect(octo).toContain('Get-FileHash -LiteralPath $exe -Algorithm SHA256');
-    expect(runtimeStep).toContain("Test-NativeRuntimeReady 'chromium' $target");
+    expect(functionBody(octo, 'Test-AllChromiumRuntimes')).toContain("Test-NativeRuntimeReady 'chromium' 'win32-x64'");
     expect(octo).toContain('function Ensure-ChromiumBuildToolchain');
     expect(octo).toContain("Invoke-Native $gclient @('--version') $depot");
     expect(octo).not.toContain('Invoke-Native $gclient @() $depot');
@@ -276,15 +277,15 @@ describe('steps and the console installer', () => {
 
   it('the Chromium installer steps keep their order', () => {
     const keys = [...octo.matchAll(/Key = '(step[A-Za-z]+)'/g)].map((match) => match[1]);
-    expect(keys).toEqual(['stepPrereqs', 'stepDeps', 'stepRuntimes', 'stepShortcut', 'stepBuild']);
+    expect(keys).toEqual(['stepPrereqs', 'stepDeps', 'stepRuntimes', 'stepBuild', 'stepShortcut']);
   });
 
-  it('the required steps include dependencies and the app build while native staging is optional', () => {
+  it('runtime verification and branded packaging are required', () => {
     const block = octo.slice(octo.indexOf('function Get-SetupSteps'), octo.indexOf('function Show-InstallerWindow'));
     const required = [...block.matchAll(/Key = '(step[A-Za-z]+)'; Required = \$true/g)].map((match) => match[1]);
-    expect(required).toEqual(['stepPrereqs', 'stepBuild']);
-    expect(block).toContain("Key = 'stepDeps'; Required = $false; Fatal = $false");
-    expect(block).toContain("Key = 'stepRuntimes'; Required = $false; Fatal = $false");
+    expect(required).toEqual(['stepPrereqs', 'stepDeps', 'stepRuntimes', 'stepBuild']);
+    expect(block).toContain("Key = 'stepDeps'; Required = $true; Fatal = $true");
+    expect(block).toContain("Key = 'stepRuntimes'; Required = $true; Fatal = $true");
   });
 
   it('the console installer stops after any fatal step', () => {
@@ -292,7 +293,7 @@ describe('steps and the console installer', () => {
     expect(octo).toContain("if (-not $ok -and $step.Fatal) { return $false }");
     expect(octo).toContain('if ($step.Fatal) { break }');
     const depsStep = octo.slice(octo.indexOf("Key = 'stepDeps'"), octo.indexOf("Key = 'stepRuntimes'"));
-    expect(depsStep).toContain('Fatal = $false');
+    expect(depsStep).toContain('Fatal = $true');
     expect(depsStep).toContain('return (Invoke-EnsureDependencies)');
   });
 });

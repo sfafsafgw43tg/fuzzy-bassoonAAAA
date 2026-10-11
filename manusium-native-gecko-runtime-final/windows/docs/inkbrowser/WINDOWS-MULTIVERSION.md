@@ -14,8 +14,8 @@ browser. Directory and manifest versions must match.
 - `155.0.8059.39` (catalog default)
 - `156.0.8078.12` (catalog beta)
 
-These are inherited project pins, not a claim that their upstream tags or security
-support have been independently verified here. The Windows source checkout must
+These are inherited project pins. Their tag references were checked through the
+Chromium GitHub mirror; native builds and security support remain unverified here. The Windows source checkout must
 resolve each exact tag; a missing tag fails the build. Update the catalog and pins
 together, and re-test before publishing.
 
@@ -91,6 +91,34 @@ password-save overlay. See `MIGRATION_NOTE.md`.
 No Windows executable was built or launched in the Linux sandbox. TypeScript,
 application bundling and fixture-based regression tests do not prove native
 Windows execution or visible taskbar behavior. The Windows workflow must pass
-and both visible runtimes must be manually checked before release. The existing
-palette tests also currently reject the untouched purple startup CSS; this
-unrelated suite failure is not suppressed by the workflow.
+and both visible runtimes must be manually checked before release. The startup CSS now uses the existing theme palette; the palette tests pass
+without suppressing them.
+
+
+## Installer and Electron taskbar follow-up
+
+`install.bat` in a source checkout is a developer setup, **not a downloadable
+prebuilt browser release**. It now fails on dependency or runtime errors instead
+of marking them optional. It requires both staged InkBrowser versions, including
+their DLLs, packs and valid manifests. A failed npm install/ci cannot be converted
+to success based on stale dependency files, and `-SkipDependencies` checks the
+existing dependency state rather than bypassing it.
+
+Source setup uses `npm run package:local:windows` to rebuild both applications,
+package their real branded executables, verify Windows product metadata, and run
+native tests against the copied runtimes. The desktop shortcut is created last
+and targets `release/octobrowser/win-unpacked/Octo.su.exe` directly. Normal source
+`open.bat` also uses this executable. `npm run dev` remains explicitly unbranded
+at the executable level. Close old Electron instances, unpin their taskbar icon,
+and pin the newly packaged Octo executable after successful setup.
+
+End users should install the complete `OctoSuite-Setup-*.exe` produced by the
+Windows release build (or extract its complete browser ZIP). That is the path
+that includes InkBrowser without npm, Visual Studio, or local Chromium compilation.
+No such executable has been built in this Linux session; the source ZIP alone
+still cannot supply the missing runtimes.
+
+Windows-only installer tests are in `scripts/tests/installer-runtime.Tests.ps1`
+and run in the Windows release workflow. They were not executed in the Linux
+sandbox. To diagnose an individual npm failure, retain the installer log; the
+completion screenshot does not include npm's underlying error.

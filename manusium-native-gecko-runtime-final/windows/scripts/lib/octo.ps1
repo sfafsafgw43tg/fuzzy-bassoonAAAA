@@ -207,8 +207,8 @@ $Messages = @{
     stepAndroid       = 'Android Studio and Java 17'
     stepSdk           = 'Android SDK command-line tools, adb and the emulator'
     stepDeps          = 'Project dependencies (npm ci)'
-    stepRuntimes      = 'Native Chromium source build'
-    stepBuild         = 'Building OctoBrowser and OctoDetect'
+    stepRuntimes      = 'Verify bundled InkBrowser runtimes'
+    stepBuild         = 'Package branded Octo applications'
     uiTitle              = 'OctoSuite installer'
     uiVersion            = 'Version {0}'
     uiHeading            = 'Install OctoSuite'
@@ -441,8 +441,8 @@ $Messages = @{
     stepAndroid       = 'Android Studio i Java 17'
     stepSdk           = 'Narzędzia wiersza poleceń Android SDK, adb i emulator'
     stepDeps          = 'Zależności projektu (npm ci)'
-    stepRuntimes      = 'Natywna kompilacja Chromium ze źródeł'
-    stepBuild         = 'Budowanie OctoBrowser i OctoDetect'
+    stepRuntimes      = 'Sprawdzanie dołączonych wersji InkBrowser'
+    stepBuild         = 'Pakowanie aplikacji z identyfikacją Octo'
     uiTitle              = 'Instalator OctoSuite'
     uiVersion            = 'Wersja {0}'
     uiHeading            = 'Instalacja OctoSuite'
@@ -813,16 +813,17 @@ function Invoke-Open([string]$appId) {
     else { Start-Process -FilePath $exe -WorkingDirectory (Split-Path -Parent $exe) }
     return
   }
-  # Development checkout: scripts\ lives in the repository root.
-  if (Test-DevCheckout) {
+  # Windows setup launches the resource-edited, packaged executable, not
+  # node_modules/electron.exe. npm run dev remains an explicit developer option.
+  if ((Test-DevCheckout) -and $env:OS -eq 'Windows_NT') {
     if (-not (Test-Ready)) {
-      $setupOk = Invoke-Setup
-      if (-not $setupOk -or -not (Test-Ready)) {
-        Fail (T 'notBuilt')
-      }
+      if (-not (Invoke-Setup) -or -not (Test-Ready)) { Fail (T 'wizardNotReady') }
     }
-    # A new version may have brought changed dependencies, so they are checked on every open.
-    [void](Invoke-EnsureDependencies)
+    $packagedExe = Get-LocalPackagedExe $appId
+    Say (T 'starting' $a.Product)
+    if ($Rest -and $Rest.Count -gt 0) { Start-Process -FilePath $packagedExe -ArgumentList $Rest -WorkingDirectory (Split-Path -Parent $packagedExe) }
+    else { Start-Process -FilePath $packagedExe -WorkingDirectory (Split-Path -Parent $packagedExe) }
+    return
   }
   $electronExe = Join-Path $InstallRoot 'node_modules\electron\dist\electron.exe'
   $electronCmd = Join-Path $InstallRoot 'node_modules\.bin\electron.cmd'
@@ -2241,32 +2242,27 @@ function Install-AndroidSdkComponents {
   return $true
 }
 
-# Full setup of a development checkout: prerequisites -> dependencies -> npm run build.
-# Desktop shortcut to Octo.su. It goes through lib\hidden.vbs so the
-# browser starts with no console window, carries the product icon, and is
-# rewritten on every setup so a moved checkout never leaves a dead link.
+# Full setup requires dependencies, staged runtimes and branded packaged executables.
+# Shortcuts point directly to the packaged GUI executable, never to electron.exe.
+function Get-LocalPackagedExe([string]$appId) {
+  return (Join-Path (Join-Path $InstallRoot "release\$appId\win-unpacked") $Apps[$appId].Exe)
+}
+
 function New-DesktopShortcut {
   $desktop = [Environment]::GetFolderPath('Desktop')
   if (-not $desktop -or -not (Test-Path -LiteralPath $desktop)) { Warn (T 'shortcutNoDesktop'); return $false }
-  $open = Join-Path $ScriptsDir 'open.bat'
-  $hidden = Join-Path $ScriptsDir 'lib\hidden.vbs'
-  if (-not (Test-Path -LiteralPath $open)) { Warn (T 'shortcutFailed' $open); return $false }
+  $exe = Get-AppExe 'octobrowser'
+  if (-not (Test-Path -LiteralPath $exe)) { $exe = Get-LocalPackagedExe 'octobrowser' }
+  if (-not (Test-Path -LiteralPath $exe)) { Warn (T 'shortcutFailed' $exe); return $false }
   $link = Join-Path $desktop 'Octo.su.lnk'
-  $icon = Join-Path $InstallRoot 'branding\octobrowser\icon.ico'
   try {
     $shell = New-Object -ComObject WScript.Shell
     $cut = $shell.CreateShortcut($link)
-    if (Test-Path -LiteralPath $hidden) {
-      $cut.TargetPath = Join-Path $env:SystemRoot 'System32\wscript.exe'
-      $q = [char]34
-      $cut.Arguments = '//nologo //B ' + $q + $hidden + $q + ' ' + $q + $open + $q
-    } else {
-      $cut.TargetPath = $open
-      $cut.Arguments = ''
-    }
-    $cut.WorkingDirectory = $InstallRoot
+    $cut.TargetPath = $exe
+    $cut.Arguments = ''
+    $cut.WorkingDirectory = Split-Path -Parent $exe
     $cut.Description = 'Octo.su'
-    if (Test-Path -LiteralPath $icon) { $cut.IconLocation = $icon }
+    $cut.IconLocation = "$exe,0"
     $cut.Save()
   } catch { Warn (T 'shortcutFailed' $_.Exception.Message); return $false }
   Say (T 'shortcutDone' $link) 'Green'
@@ -2279,8 +2275,11 @@ function New-DesktopShortcut {
 # through it. An installed copy has no sources to check and returns at once.
 function Invoke-EnsureDependencies {
   if ($SkipDependencies) {
-    Warn 'Skipping npm dependency installation at the user request (-SkipDependencies).'
-    return $true
+    # Skip repair, never skip validation: stale/missing dependencies cannot pass setup.
+    $nodeExe = Resolve-Tool 'node'
+    if (-not $nodeExe) { return $false }
+    $check = Invoke-Native $nodeExe @('tools\ensure-deps.mjs', '--check') $InstallRoot
+    return ($check.code -eq 0)
   }
   $ensureScript = Join-Path $InstallRoot 'tools\ensure-deps.mjs'
   if (-not (Test-Path -LiteralPath $ensureScript)) { return $true }
@@ -2300,10 +2299,12 @@ function Invoke-EnsureDependencies {
 # Validate one staged native runtime without trusting its filename alone. Chromium on
 # Windows must explicitly identify itself as a modified source build; a renamed vendor
 # archive is not accepted. Both engines must carry a manifest hash matching the file.
-function Test-NativeRuntimeReady([string]$kind, [string]$target) {
+function Test-NativeRuntimeReady([string]$kind, [string]$target, [string]$version = '', [string]$resourcesRoot = '') {
   $isWindows = $target -like 'win32-*'
-  $version = if ($kind -eq 'chromium') { '155.0.8059.39' } else { '140.0' }
-  $root = if ($kind -eq 'chromium') { Join-Path $InstallRoot "resources\engines\chromium\$version" } else { Join-Path $InstallRoot "resources\engines\gecko\$version" }
+  if (-not $version) { $version = if ($kind -eq 'chromium') { '155.0.8059.39' } else { '140.0' } }
+  if ($version -notmatch '^\d+\.\d+(?:\.\d+\.\d+)?$') { return $false }
+  if (-not $resourcesRoot) { $resourcesRoot = Join-Path $InstallRoot 'resources' }
+  $root = Join-Path $resourcesRoot "engines\$kind\$version"
   $exeName = if ($kind -eq 'chromium') { if ($isWindows) { 'inkbrowser-chrome.exe' } else { 'inkbrowser-chrome' } } else { if ($isWindows) { 'inkbrowser-firefox.exe' } else { 'inkbrowser-firefox' } }
   $exe = Join-Path $root $exeName
   $manifestPath = Join-Path $root 'runtime.json'
@@ -2311,6 +2312,12 @@ function Test-NativeRuntimeReady([string]$kind, [string]$target) {
   try {
     $manifest = Get-Content -LiteralPath $manifestPath -Raw -Encoding UTF8 | ConvertFrom-Json
     if ([string]$manifest.version -ne $version -or [string]$manifest.kind -ne $kind) { return $false }
+    if ($kind -eq 'chromium' -and $isWindows) {
+      if ([string]$manifest.schema -ne 'octo.engine-manifest.v1' -or [string]$manifest.executable -ne $exeName -or [string]$manifest.protocol -ne 'cdp') { return $false }
+      foreach ($file in @('chrome.dll', 'chrome_elf.dll', 'chrome_child.dll', 'resources.pak', 'chrome_100_percent.pak', 'chrome_200_percent.pak', 'icudtl.dat', 'v8_context_snapshot.bin', 'locales\en-US.pak')) {
+        if (-not (Test-Path -LiteralPath (Join-Path $root $file) -PathType Leaf)) { return $false }
+      }
+    }
     if (@($manifest.platforms) -notcontains $target) { return $false }
     if ($kind -eq 'chromium' -and $isWindows -and ([string]$manifest.distribution -ne 'source-built' -or $manifest.modified -ne $true)) { return $false }
     $expected = if ($manifest.executableSha256) { [string]$manifest.executableSha256 } else { [string]$manifest.sha256 }
@@ -2322,63 +2329,42 @@ function Test-NativeRuntimeReady([string]$kind, [string]$target) {
 
 # The setup broken into named steps. The console installer, the installer window and the
 # work process (wizard-run) all walk exactly this list, so they can never drift apart.
-# This installer pass is intentionally scoped to the Chromium source build. Android/media
+# This installer pass verifies prebuilt Chromium; it never compiles it locally. Android/media
 # prerequisites and Firefox staging remain available to their feature-specific flows but are
 # not downloaded here and cannot block a Chromium installation.
+function Test-AllChromiumRuntimes([string]$resourcesRoot) {
+  try {
+    $versions = @(Get-Content -LiteralPath (Join-Path $InstallRoot 'tools\chromium-versions.json') -Raw -Encoding UTF8 | ConvertFrom-Json)
+    if ($versions.Count -lt 2) { return $false }
+    foreach ($version in $versions) {
+      if (-not (Test-NativeRuntimeReady 'chromium' 'win32-x64' ([string]$version) $resourcesRoot)) {
+        Warn "InkBrowser $version is missing or incomplete under $resourcesRoot\engines\chromium. Install the complete prebuilt Octo Windows release, not the source ZIP. Developers: stage both runtimes on the Windows build runner first. No browser was installed by this step."
+        return $false
+      }
+    }
+    return $true
+  } catch { Warn $_.Exception.Message; return $false }
+}
+
 function Get-SetupSteps {
   return @(
     @{ Key = 'stepPrereqs'; Required = $true; Fatal = $true; Action = {
         if (Test-GitCheckout) { return (ConvertTo-StepResult (Install-Prerequisites -GitRequired)) }
         return (ConvertTo-StepResult (Install-Prerequisites))
       } }
-    # Dependency repair is warning-only so an already-built checkout can still
-    # open when npm/registry access is temporarily unavailable. Test-Ready below
-    # still prevents a fresh or incomplete checkout from being reported ready.
-    @{ Key = 'stepDeps'; Required = $false; Fatal = $false; Action = { return (Invoke-EnsureDependencies) } }
-    @{ Key = 'stepRuntimes'; Required = $false; Fatal = $false; Action = {
-        $target = if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { 'win32-arm64' } else { 'win32-x64' }
-        if ($env:OS -ne 'Windows_NT') { $target = 'linux-x64' }
-        if ($target -notin @('win32-x64', 'linux-x64')) { Warn "Native runtimes are not staged for $target"; return $false }
-        try {
-          # Normal users receive Chromium prebuilt inside the signed installer.
-          # Never invoke Visual Studio, depot_tools, fetch, gclient, or a local
-          # source build from install.bat. The source build is developer/CI-only.
-          if (-not (Test-NativeRuntimeReady 'chromium' $target)) {
-            Warn 'The bundled source-built Chromium runtime is missing or failed verification. This installer does not compile Chromium or install Visual Studio; rebuild the signed Windows release package on the CI/build machine.'
-            return $false
-          } else {
-            Say 'Verified bundled source-built Chromium runtime; no local compiler setup is required.' 'Green'
-          }
-          $nodeExe = Resolve-Tool 'node'
-          if (-not $nodeExe) { throw 'Node.js is unavailable for native runtime verification.' }
-          $check = Invoke-Native $nodeExe @('tools\verify-native-engines.mjs', '--allow-missing-firefox') $InstallRoot
-          if ($check.code -ne 0) { throw "Native Chromium verification failed with exit code $($check.code)." }
-          return $true
-        } catch { Warn $_.Exception.Message; return $false }
+    @{ Key = 'stepDeps'; Required = $true; Fatal = $true; Action = { return (Invoke-EnsureDependencies) } }
+    @{ Key = 'stepRuntimes'; Required = $true; Fatal = $true; Action = {
+        if ($env:PROCESSOR_ARCHITECTURE -eq 'ARM64') { Warn 'This installer requires Windows x64.'; return $false }
+        # Normal users receive complete prebuilt runtimes. Never compile Chromium here.
+        return (Test-AllChromiumRuntimes (Join-Path $InstallRoot 'resources'))
+      } }
+    @{ Key = 'stepBuild'; Required = $true; Fatal = $true; Action = {
+        # Always rebuild/package: an old dist/main.js is not proof of success.
+        Assert-NotRunning @('octobrowser', 'octodetect')
+        Invoke-Npm @('run', 'package:local:windows')
+        return (Test-Ready)
       } }
     @{ Key = 'stepShortcut'; Required = $false; Fatal = $false; Action = { return (ConvertTo-StepResult (New-DesktopShortcut)) } }
-    @{ Key = 'stepBuild'; Required = $true; Fatal = $false; Action = {
-        $built = (Test-Path -LiteralPath (Join-Path $InstallRoot 'apps\octobrowser\dist\main.js')) -and
-                 (Test-Path -LiteralPath (Join-Path $InstallRoot 'apps\octodetect\dist\main.js'))
-        if (-not $built) {
-          Say (T 'ghBuilding')
-          try {
-            Invoke-Npm @('run', 'build')
-          } catch {
-            Warn "npm run build failed, attempting direct build with node: $($_.Exception.Message)"
-            $nodeExe = Resolve-Tool 'node'
-            $buildMjs = Join-Path $InstallRoot 'tools\build.mjs'
-            if ($nodeExe -and (Test-Path -LiteralPath $buildMjs)) {
-              $res = Invoke-Native $nodeExe @($buildMjs) $InstallRoot
-              if ($res.code -ne 0) { Fail "build.mjs failed with code $($res.code)" }
-            } else {
-              throw
-            }
-          }
-          Say (T 'setupBuilt') 'Green'
-        }
-        return $true
-      } }
   )
 }
 
@@ -2452,7 +2438,6 @@ function Invoke-FirstInstall {
       if ($step.Fatal) { break }
     }
   }
-  [void](New-DesktopShortcut)
   if ($requiredFailed) { Fail (T 'wizardFailed') }
   if (-not (Test-Ready)) { Fail (T 'wizardNotReady') }
   if ($optionalFailed) {
@@ -2665,18 +2650,18 @@ function Resolve-WizardOutcome([string]$outcome) {
 
 # Everything that must be true before the apps can start from sources.
 function Test-Ready {
-  Update-SessionPath
-  $node = Get-ToolVersion 'node'
-  if (-not $node -or $node -lt [version]'22.12.0') { return $false }
-  if (-not (Test-Path -LiteralPath (Join-Path $InstallRoot 'node_modules\.bin\electron.cmd')) -and -not (Test-Path -LiteralPath (Join-Path $InstallRoot 'node_modules\electron\dist\electron.exe'))) { return $false }
-  foreach ($a in @('octobrowser', 'octodetect')) {
-    if (-not (Test-Path -LiteralPath (Join-Path $InstallRoot "apps\$a\dist\main.js"))) { return $false }
+  try {
+    $receipt = Get-Content -LiteralPath (Join-Path $InstallRoot 'release\.octo-local-ready.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+    if ([string]$receipt.schema -ne 'octo.local-ready.v1') { return $false }
+  } catch { return $false }
+  foreach ($id in @('octobrowser', 'octodetect')) {
+    $exe = Get-LocalPackagedExe $id
+    if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { return $false }
+    if ((Get-Item -LiteralPath $exe).VersionInfo.ProductName -ne $Apps[$id].Product) { return $false }
+    if (-not (Test-Path -LiteralPath (Join-Path (Split-Path -Parent $exe) 'resources\app.asar'))) { return $false }
   }
-  # Native Chromium is an optional enhancement in the source installer. If its
-  # toolchain or checkout is unavailable, Electron still provides the usable
-  # desktop application; native staging can be run later as a separate setup action.
-  # Firefox is intentionally not part of the current install pass either.
-  return $true
+  $resources = Join-Path (Split-Path -Parent (Get-LocalPackagedExe 'octobrowser')) 'resources'
+  return (Test-AllChromiumRuntimes $resources)
 }
 
 # run.bat has no visible window, so it can neither show progress nor ask anything.
@@ -2810,14 +2795,7 @@ function Update-DevCheckout {
   $changed = ($after -ne $before)
   if (-not $changed) { Say (T 'ghGitUpToDate' $after) 'Green' } else { Say (T 'ghGitPulled' $before $after) 'Green' }
   if ($CheckOnly) { return }
-  # Dependencies follow the pulled manifests: only changed ones are installed.
-  [void](Invoke-EnsureDependencies)
-  $built = (Test-Path -LiteralPath (Join-Path $InstallRoot 'apps\octobrowser\dist\main.js')) -and
-           (Test-Path -LiteralPath (Join-Path $InstallRoot 'apps\octodetect\dist\main.js'))
-  if ($changed -or -not $built) {
-    Say (T 'ghBuilding')
-    Invoke-Npm @('run', 'build')
-  }
+  if (-not (Invoke-Setup)) { Fail (T 'wizardFailed') }
   Say (T 'ghDevDone') 'Green'
 }
 

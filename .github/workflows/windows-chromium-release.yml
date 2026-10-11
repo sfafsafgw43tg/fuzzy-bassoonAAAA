@@ -57,6 +57,17 @@ jobs:
           npm test 2>&1 | Tee-Object -FilePath ci-logs/unit-tests.log
           if ($LASTEXITCODE -ne 0) { throw "unit tests failed with exit code $LASTEXITCODE" }
 
+      - name: Installer contract tests (PowerShell)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not (Get-Module -ListAvailable Pester | Where-Object { $_.Version -ge [version]'5.3.0' })) {
+            Install-Module Pester -MinimumVersion 5.3.0 -Force -Scope CurrentUser
+          }
+          Import-Module Pester -MinimumVersion 5.3.0
+          Invoke-Pester -Path scripts/tests/installer-runtime.Tests.ps1 -CI -Output Detailed
+          if ($LASTEXITCODE -ne 0) { throw 'Installer contract tests failed' }
+
       - name: Bootstrap depot_tools
         shell: pwsh
         run: |
@@ -134,6 +145,12 @@ jobs:
         run: |
           npm run dist:detect
           if ($LASTEXITCODE -ne 0) { throw 'OctoDetect packaging failed' }
+
+      - name: Verify branded Windows executables
+        shell: pwsh
+        run: |
+          npm run verify:windows:branding
+          if ($LASTEXITCODE -ne 0) { throw 'Octo Windows executable branding failed verification' }
 
       - name: Check Electron fuses
         shell: pwsh
