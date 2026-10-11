@@ -2352,8 +2352,9 @@ function Test-NativeRuntimeReady([string]$kind, [string]$target, [string]$versio
 
 # The setup broken into named steps. The console installer, the installer window and the
 # work process (wizard-run) all walk exactly this list, so they can never drift apart.
-# This installer pass packages the Electron fallback without requiring a native runtime. Native
-# Chromium verification remains strict in release/CI packaging, not in this local setup flow.
+# This installer pass packages Electron together with the bundled source-built
+# InkBrowser Chromium base. Electron remains a separate legacy engine, not a
+# substitute for the Chrome Base payload.
 function Test-AllChromiumRuntimes([string]$resourcesRoot) {
   try {
     $versions = @(Get-Content -LiteralPath (Join-Path $InstallRoot 'tools\chromium-versions.json') -Raw -Encoding UTF8 | ConvertFrom-Json)
@@ -2381,13 +2382,19 @@ function Get-SetupSteps {
         Assert-NotRunning @('octobrowser', 'octodetect')
         Invoke-Npm @('run', 'icons')
         Invoke-Npm @('run', 'build')
-        Invoke-Npm @('run', 'prepare:prebuilt:windows')
+        $previousNativeRequirement = $env:OCTO_REQUIRE_NATIVE_CHROMIUM
+        $env:OCTO_REQUIRE_NATIVE_CHROMIUM = '1'
+        try { Invoke-Npm @('run', 'prepare:prebuilt:windows') }
+        finally {
+          if ($null -eq $previousNativeRequirement) { Remove-Item Env:OCTO_REQUIRE_NATIVE_CHROMIUM -ErrorAction SilentlyContinue }
+          else { $env:OCTO_REQUIRE_NATIVE_CHROMIUM = $previousNativeRequirement }
+        }
         $releaseDir = Join-Path $InstallRoot 'release'
         New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
         [ordered]@{
           schema = 'octo.local-ready.v1'
-          mode = 'prebuilt-electron'
-          nativeRuntimeVerified = $false
+          mode = 'prebuilt-inkbrowser'
+          nativeRuntimeVerified = $true
           checkedAt = (Get-Date).ToUniversalTime().ToString('o')
         } | ConvertTo-Json | Set-Content -LiteralPath (Join-Path $releaseDir '.octo-local-ready.json') -Encoding UTF8
         return (Test-Ready)
@@ -2683,7 +2690,7 @@ function Test-Ready {
     $receipt = Get-Content -LiteralPath (Join-Path $InstallRoot 'release\.octo-local-ready.json') -Raw -Encoding UTF8 | ConvertFrom-Json
     if ([string]$receipt.schema -ne 'octo.local-ready.v1') { return $false }
   } catch { return $false }
-  if ([string]$receipt.mode -eq 'prebuilt-electron') {
+  if ([string]$receipt.mode -eq 'prebuilt-inkbrowser') {
     foreach ($app in @('octobrowser', 'octodetect')) {
       $appRoot = Join-Path $InstallRoot ("release\{0}\win-unpacked" -f $app)
       $exe = Join-Path $appRoot $Apps[$app].Exe
@@ -2692,6 +2699,7 @@ function Test-Ready {
       if (-not (Test-Path -LiteralPath $exe -PathType Leaf)) { return $false }
       if (-not (Test-Path -LiteralPath $appJson -PathType Leaf)) { return $false }
       if (-not (Test-Path -LiteralPath $main -PathType Leaf)) { return $false }
+      if (-not (Test-NativeRuntimeReady 'chromium' 'win32-x64' '155.0.8059.39' (Join-Path $appRoot 'resources'))) { return $false }
     }
     return $true
   }

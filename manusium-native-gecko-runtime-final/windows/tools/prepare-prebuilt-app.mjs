@@ -9,6 +9,7 @@
  * Native engines, when supplied by a release, live in resources/engines.
  */
 import fs from 'node:fs';
+import crypto from 'node:crypto';
 import path from 'node:path';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
@@ -25,6 +26,42 @@ const electronDist = path.join(electronDir, 'dist');
 const electronExe = path.join(electronDist, 'electron.exe');
 if (!fs.existsSync(electronExe)) {
   throw new Error(`Prebuilt Electron/Chromium binary is missing: ${electronExe}. Run the dependency repair step first.`);
+}
+
+const chromiumVersion = process.env.INKBROWSER_CHROMIUM_VERSION ?? '155.0.8059.39';
+const chromiumRequired = process.env.OCTO_REQUIRE_NATIVE_CHROMIUM !== '0';
+const chromiumRequiredFiles = [
+  'inkbrowser-chrome.exe', 'chrome.dll', 'chrome_elf.dll', 'chrome_child.dll',
+  'resources.pak', 'chrome_100_percent.pak', 'chrome_200_percent.pak',
+  'icudtl.dat', 'v8_context_snapshot.bin', 'locales/en-US.pak',
+];
+function sha256(file) {
+  return crypto.createHash('sha256').update(fs.readFileSync(file)).digest('hex');
+}
+function verifyBundledChromium(resourcesRoot) {
+  const runtimeRoot = path.join(resourcesRoot, 'engines', 'chromium', chromiumVersion);
+  const manifestPath = path.join(runtimeRoot, 'runtime.json');
+  if (!fs.existsSync(manifestPath)) throw new Error(`Bundled InkBrowser Chromium manifest is missing: ${manifestPath}`);
+  let manifest;
+  try { manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')); }
+  catch (error) { throw new Error(`Bundled InkBrowser Chromium manifest is invalid: ${error.message}`); }
+  if (manifest.schema !== 'octo.engine-manifest.v1' || manifest.kind !== 'chromium') throw new Error('Bundled InkBrowser Chromium manifest schema/kind is invalid.');
+  if (manifest.version !== chromiumVersion || manifest.executable !== 'inkbrowser-chrome.exe') throw new Error(`Bundled InkBrowser Chromium is not pinned to ${chromiumVersion}.`);
+  if (manifest.distribution !== 'source-built' || manifest.modified !== true) throw new Error('Bundled Chromium is not marked as a modified source-built InkBrowser runtime.');
+  if (!Array.isArray(manifest.platforms) || !manifest.platforms.includes('win32-x64')) throw new Error('Bundled InkBrowser Chromium does not declare win32-x64 support.');
+  for (const relative of chromiumRequiredFiles) {
+    const file = path.join(runtimeRoot, ...relative.split('/'));
+    if (!fs.existsSync(file) || !fs.statSync(file).isFile()) throw new Error(`Bundled InkBrowser Chromium file is missing: ${file}`);
+  }
+  const executable = path.join(runtimeRoot, 'inkbrowser-chrome.exe');
+  const expected = String(manifest.sha256 ?? manifest.executableSha256 ?? '').toLowerCase();
+  if (!/^[a-f0-9]{64}$/.test(expected) || sha256(executable).toLowerCase() !== expected) throw new Error('Bundled InkBrowser Chromium executable SHA-256 does not match runtime.json.');
+  return runtimeRoot;
+}
+const sourceEngines = path.join(root, 'resources', 'engines');
+if (chromiumRequired) {
+  verifyBundledChromium(sourceEngines);
+  console.log(`[prepare-prebuilt-app] verified source-built InkBrowser Chromium ${chromiumVersion}`);
 }
 
 const apps = [
@@ -78,6 +115,7 @@ for (const app of apps) {
     const source = path.join(root, 'resources', name);
     if (fs.existsSync(source)) copyTree(source, path.join(outputResources, name));
   }
+  if (chromiumRequired) verifyBundledChromium(outputResources);
   console.log(`[prepare-prebuilt-app] ${app.id}: ${path.relative(root, output)}`);
 }
-console.log('[prepare-prebuilt-app] complete: self-contained Electron/Chromium app bundles are ready.');
+console.log(`[prepare-prebuilt-app] complete: self-contained Electron + InkBrowser Chromium ${chromiumVersion} app bundles are ready.`);

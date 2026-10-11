@@ -411,7 +411,9 @@ function general(b: HTMLElement, d: Draft, creating: boolean, p: Profile | null,
   }
   b.append(section(t('profile.kind'), grid, h('p', { class: 'hint', text: t(`profile.kindDesc.${d.kind}`) }), !creating ? h('p', { class: 'hint', text: t('ui.kindFixed') }) : null));
 
-  // Base is the real browser engine choice. The visual shell is derived from it.
+  // Base is the real browser engine choice. Chrome (Chromium) is the primary
+  // choice and maps to the bundled, source-built InkBrowser executable. The
+  // visual shell is derived from the selected engine; it is not the engine.
   const base = d.engine === 'firefox' ? 'firefox' : d.engine === 'electron' ? 'electron' : 'chromium';
   const baseGrid = h('div', { class: 'kind-grid browser-base-grid', role: 'radiogroup' });
   for (const choice of ['chromium', 'firefox', 'electron'] as const) {

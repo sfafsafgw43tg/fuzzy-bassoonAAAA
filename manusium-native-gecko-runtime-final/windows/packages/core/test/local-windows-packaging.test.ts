@@ -12,21 +12,26 @@ describe('branded local Windows setup', () => {
     expect(installer).toContain("prepare:prebuilt:windows");
     expect(prebuilt).toContain("path.join(outputResources, 'app')");
     expect(prebuilt).toContain('copyTree(electronDist, output)');
+    expect(prebuilt).toContain('verifyBundledChromium(sourceEngines)');
+    expect(prebuilt).toContain("manifest.distribution !== 'source-built'");
+    expect(prebuilt).toContain("manifest.executable !== 'inkbrowser-chrome.exe'");
+    expect(prebuilt).toContain("sha256(executable).toLowerCase() !== expected");
     expect(packaging).toContain("runNode('verify-packaged-chromium.mjs'");
     const buildStep = installer.slice(installer.indexOf("@{ Key = 'stepBuild'"), installer.indexOf("@{ Key = 'stepShortcut'"));
-    const stages = ["Invoke-Npm @('run', 'icons')", "Invoke-Npm @('run', 'build')", "mode = 'prebuilt-electron'"];
+    const stages = ["Invoke-Npm @('run', 'icons')", "Invoke-Npm @('run', 'build')", "OCTO_REQUIRE_NATIVE_CHROMIUM", "mode = 'prebuilt-inkbrowser'"];
     const offsets = stages.map(stage => buildStep.indexOf(stage));
     expect(offsets.every(offset => offset >= 0)).toBe(true);
     expect(offsets).toEqual([...offsets].sort((a, b) => a - b));
     expect(packaging).not.toContain('build-chromium-source');
   });
-  it('accepts only complete prebuilt Electron readiness data', () => {
+  it('accepts only complete prebuilt InkBrowser readiness data', () => {
     const ready = fn('Test-Ready');
     expect(ready).toContain('release\\.octo-local-ready.json');
-    expect(ready).toContain("receipt.mode -eq 'prebuilt-electron'");
+    expect(ready).toContain("receipt.mode -eq 'prebuilt-inkbrowser'");
     expect(ready).toContain('release\\{0}\\win-unpacked');
     expect(ready).toContain('resources\\app\\package.json');
     expect(ready).toContain('resources\\app\\dist\\main.js');
+    expect(ready).toContain("Test-NativeRuntimeReady 'chromium' 'win32-x64'");
   });
   it('starts the packaged GUI executable in Windows source installs', () => {
     const open = fn('Invoke-Open');
