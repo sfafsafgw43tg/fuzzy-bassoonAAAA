@@ -209,6 +209,8 @@ describe('steps and the console installer', () => {
     expect(chromium).toContain('[build-chromium-source] exit:');
     expect(chromium).toContain("spawnSync('where.exe', [command]");
     expect(chromium).toContain("const launchArgs = ['/d', '/s', '/c'");
+    expect(chromium).toContain("const commandLine = ['call', quoteCmdArg(resolved)");
+    expect(chromium).not.toContain("`\"${commandLine}\"`");
     expect(chromium).toContain('shell: false');
     expect(chromium).not.toContain('shell: process.platform === \'win32\'');
     expect(chromium).toContain("source checkout is incomplete at ${source}");

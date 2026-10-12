@@ -59,8 +59,12 @@ function prepareLaunch(command, args) {
   if (process.platform !== 'win32') return { file: command, args, display: displayCommand(command, args, process.cwd()) };
   const resolved = resolveWindowsCommand(command);
   if (!/\.(?:bat|cmd)$/i.test(resolved)) return { file: resolved, args, display: displayCommand(resolved, args, process.cwd()) };
-  const commandLine = [quoteCmdArg(resolved), ...args.map(quoteCmdArg)].join(' ');
-  const launchArgs = ['/d', '/s', '/c', `"${commandLine}"`];
+  // A .bat/.cmd file must be entered through CALL. Do not wrap the complete
+  // command line in another pair of quotes: Node already preserves the
+  // individual quoted path argument when it builds the cmd.exe command line,
+  // and the extra wrapper makes cmd.exe treat the quotes as literal text.
+  const commandLine = ['call', quoteCmdArg(resolved), ...args.map(quoteCmdArg)].join(' ');
+  const launchArgs = ['/d', '/s', '/c', commandLine];
   return { file: process.env.ComSpec || 'cmd.exe', args: launchArgs, display: displayCommand(process.env.ComSpec || 'cmd.exe', launchArgs, process.cwd()) };
 }
 function run(command, args, cwd, label = command) {
