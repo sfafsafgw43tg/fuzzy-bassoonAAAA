@@ -82,6 +82,18 @@ it('uses the profile graphics identity overlay while preserving native rendering
   expect(source).toContain("p === 0x9245");
 });
 
+it('covers Canvas exports and all common AudioBuffer/Analyser readback APIs', () => {
+  const source = readFileSync(path.resolve(__dirname, '..', 'src', 'preload', 'page-shim.ts'), 'utf8');
+  for (const name of ['toDataURL', 'toBlob', 'convertToBlob', 'transferToImageBitmap', 'getImageData']) {
+    expect(source).toContain(`'${name}'`);
+  }
+  for (const name of ['getChannelData', 'copyFromChannel', 'getFloatFrequencyData', 'getByteFrequencyData', 'getFloatTimeDomainData', 'getByteTimeDomainData', 'startRendering']) {
+    expect(source).toContain(`'${name}'`);
+  }
+  expect(source).toContain('perturbAudio');
+  expect(source).toContain('perturbBytes');
+});
+
 it('applies process-level GPU disabling when a profile turns WebGL/WebGPU off', () => {
   const source = readFileSync(path.resolve(__dirname, '..', '..', '..', 'packages', 'shell', 'src', 'prepare.ts'), 'utf8');
   expect(source).toContain("fingerprint.webgl === 'off'");

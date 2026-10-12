@@ -649,7 +649,6 @@ export function pageShim(c: PageConfig, eventName: string): void {
         const nativeToDataURL = gOPD(HC, 'toDataURL')?.value as Fn;
         const nativeToBlob = gOPD(HC, 'toBlob')?.value as Fn;
         method(HC, 'toDataURL', (self, args, orig) => {
-          orig();
           const copy = noisedCopy(self as HTMLCanvasElement);
           return copy ? R.apply(nativeToDataURL, copy, args) : orig(...args);
         });
@@ -715,14 +714,21 @@ export function pageShim(c: PageConfig, eventName: string): void {
     // ---- audio noise ----
     if (fp.audio === 'noise') {
       const done = new WeakSet<object>();
+      const perturbAudio = (data: Float32Array, salt: number, amplitude = 2e-6): void => {
+        for (let i = 0; i < data.length; i += 17) {
+          const delta = (((hash(i, salt) & 0xffff) / 0xffff) - 0.5) * amplitude;
+          const value = data[i] + delta;
+          data[i] = Math.max(-1, Math.min(1, value));
+        }
+      };
+      const perturbBytes = (data: Uint8Array, salt: number): void => {
+        for (let i = 0; i < data.length; i += 13) data[i] ^= hash(i, salt) & 1;
+      };
       method(proto('AudioBuffer'), 'getChannelData', (self, args, orig) => {
         const data = orig(...args) as Float32Array;
         if (!done.has(data)) {
           done.add(data);
-          for (let i = 0; i < data.length; i += 97) {
-            const h = hash(i, Number(args[0]) | 0);
-            data[i] += ((h & 0xffff) / 0xffff - 0.5) * 1e-7;
-          }
+          perturbAudio(data, Number(args[0]) | 0);
         }
         void self;
         return data;
@@ -734,10 +740,7 @@ export function pageShim(c: PageConfig, eventName: string): void {
           done.add(destination);
           const channel = Number(args[1]) | 0;
           const start = Number(args[2]) | 0;
-          for (let i = 0; i < destination.length; i += 97) {
-            const h = hash(start + i, channel);
-            destination[i] += ((h & 0xffff) / 0xffff - 0.5) * 1e-7;
-          }
+          perturbAudio(destination, start ^ channel);
         }
         void self;
         return r;
@@ -745,13 +748,25 @@ export function pageShim(c: PageConfig, eventName: string): void {
       method(proto('AnalyserNode'), 'getFloatFrequencyData', (_self, args, orig) => {
         const r = orig(...args);
         const arr = args[0] as Float32Array;
-        if (arr && arr.length) for (let i = 0; i < arr.length; i += 7) arr[i] += ((hash(i, 7) & 0xff) / 0xff - 0.5) * 1e-4;
+        if (arr && arr.length) perturbAudio(arr, 7, 2e-4);
         return r;
       });
       method(proto('AnalyserNode'), 'getByteFrequencyData', (_self, args, orig) => {
         const r = orig(...args);
         const arr = args[0] as Uint8Array;
-        if (arr && arr.length) for (let i = 0; i < arr.length; i += 11) arr[i] ^= (hash(i, 11) & 1);
+        if (arr && arr.length) perturbBytes(arr, 11);
+        return r;
+      });
+      method(proto('AnalyserNode'), 'getFloatTimeDomainData', (_self, args, orig) => {
+        const r = orig(...args);
+        const arr = args[0] as Float32Array;
+        if (arr && arr.length) perturbAudio(arr, 17, 2e-6);
+        return r;
+      });
+      method(proto('AnalyserNode'), 'getByteTimeDomainData', (_self, args, orig) => {
+        const r = orig(...args);
+        const arr = args[0] as Uint8Array;
+        if (arr && arr.length) perturbBytes(arr, 19);
         return r;
       });
       const OAC = proto('OfflineAudioContext');
@@ -764,10 +779,7 @@ export function pageShim(c: PageConfig, eventName: string): void {
                 const data = buf.getChannelData(c);
                 if (!done.has(data)) {
                   done.add(data);
-                  for (let i = 0; i < data.length; i += 97) {
-                    const h = hash(i, c);
-                    data[i] += ((h & 0xffff) / 0xffff - 0.5) * 1e-7;
-                  }
+                  perturbAudio(data, c);
                 }
               }
             }
