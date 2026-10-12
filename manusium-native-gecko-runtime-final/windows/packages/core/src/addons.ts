@@ -25,6 +25,8 @@ export interface AddonInfo {
   source: string;
   /** Native module, list source, separate desktop app, or a reviewed bundled WebExtension. */
   kind: 'builtin' | 'filter-list' | 'external-app' | 'extension';
+  /** A reviewed unpacked MV3 bundle is also shipped for standalone Chromium. */
+  nativeChromiumBundle?: boolean;
   status: 'stable' | 'experimental';
   defaultEnabled: boolean;
   /** Can this module be enabled in the Tor profile? Always false: extra modules increase uniqueness. */
@@ -72,8 +74,9 @@ export const ADDONS: readonly AddonInfo[] = Object.freeze([
     version: '1.0',
     license: 'MPL-2.0 (own implementation)',
     permissions: [{ en: 'Read and rewrite URLs of top-level navigations', pl: 'Odczyt i modyfikacja adresów URL nawigacji' }],
-    source: 'built-in (packages/core/src/privacy.ts)',
+    source: 'built-in (packages/core/src/privacy.ts); Chromium MV3 bundle: resources/addons/clearurls',
     kind: 'builtin',
+    nativeChromiumBundle: true,
     status: 'stable',
     defaultEnabled: true,
     allowedInTor: false,
@@ -123,8 +126,9 @@ export const ADDONS: readonly AddonInfo[] = Object.freeze([
     version: '1.0',
     license: 'MPL-2.0 (own implementation)',
     permissions: [{ en: 'Inject CSS into pages', pl: 'Wstrzykiwanie CSS do stron' }],
-    source: 'built-in',
+    source: 'built-in; Chromium MV3 bundle: resources/addons/dark-pages',
     kind: 'builtin',
+    nativeChromiumBundle: true,
     status: 'stable',
     defaultEnabled: false,
     allowedInTor: false,

@@ -67,6 +67,7 @@ import { discoverEngineRuntime, EngineRunnerError } from '@octo/shell/engine-run
 import { catalogEntry, catalogForPlatform, listInstalled, installChromium, removeChromium, DEFAULT_CHROMIUM_VERSION } from '@octo/shell/runtime-catalog';
 import { discoverFirefoxRuntime, geckoCatalogEntry, installFirefoxRuntime, inspectFirefoxRuntime } from '@octo/shell/gecko-runtime';
 import { chromiumPrivacyArgs, prepareChromiumPrivacy, prepareFirefoxPrivacy } from '@octo/shell/engine-privacy';
+import { nativeBundledExtensionPaths } from './extensions';
 
 let importedHandsetsLoaded = false;
 
@@ -914,13 +915,17 @@ export class Manager {
         restoreUrls.push(first);
       }
       restoreUrls.push(...startPages);
+      const nativeAddonPaths = nativeBundledExtensionPaths(p.addons, app.getAppPath(), app.isPackaged, process.resourcesPath);
       const engine = await spawnNativeEngine('chromium', exe, {
         profileDir: profileFolder,
         url: restoreUrls[0] ?? (/^https?:\/\//i.test(p.homePage) ? p.homePage : 'about:blank'),
         debugPort,
         headless: false,
         appMode: p.appMode,
-        extraArgs: chromiumPrivacyArgs(p.enginePrivacy.chromium),
+        extraArgs: [
+          ...chromiumPrivacyArgs(p.enginePrivacy.chromium),
+          ...(nativeAddonPaths.length ? [`--load-extension=${nativeAddonPaths.join(',')}`] : []),
+        ],
       });
       const tabs = await NativeChromiumTabs.connect(debugPort);
       // Non-active CDP tabs are independent. Create them concurrently so a

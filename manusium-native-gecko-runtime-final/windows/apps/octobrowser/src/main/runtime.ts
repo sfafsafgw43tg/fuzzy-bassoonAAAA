@@ -617,7 +617,10 @@ export class ProfileRuntime {
 
   /** Only catalogue entries that have a reviewed extension bundle participate. */
   private bundledExtensionIds(addons = this.profile.addons): string[] {
-    return addons.filter((id) => !!bundledExtension(id));
+    return addons.filter((id) => {
+      const extension = bundledExtension(id);
+      return !!extension && !extension.nativeOnly;
+    });
   }
 
   private hasSameBundledExtensions(a: string[], b: string[]): boolean {

@@ -1,0 +1,11 @@
+{
+  "manifest_version": 3,
+  "name": "Octo Dark Pages",
+  "version": "1.0.0",
+  "description": "A local, user-enabled dark reading surface for ordinary web pages.",
+  "content_scripts": [{
+    "matches": ["http://*/*", "https://*/*"],
+    "css": ["dark.css"],
+    "run_at": "document_start"
+  }]
+}

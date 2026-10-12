@@ -25,6 +25,10 @@
       {
         "from": "../../resources/engines",
         "to": "engines"
+      },
+      {
+        "from": "../../resources/addons",
+        "to": "addons"
       }
     ],
     "linux": {

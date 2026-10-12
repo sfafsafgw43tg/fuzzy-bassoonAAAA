@@ -2,7 +2,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { bundledExtension, bundledExtensionPath } from '../src/main/extensions';
+import { bundledExtension, bundledExtensionPath, nativeBundledExtensionPaths } from '../src/main/extensions';
 import { ADDONS } from '@octo/core';
 
 const root = process.cwd();
@@ -31,5 +31,26 @@ describe('bundled PrOximAl Editor extension', () => {
     expect(manifest.permissions).toEqual(expect.arrayContaining(['activeTab', 'contextMenus', 'scripting', 'storage']));
     expect(manifest.host_permissions ?? []).toEqual([]);
     expect(manifest.content_security_policy?.extension_pages).toContain("connect-src 'none'");
+  });
+});
+
+describe('native Chromium addon bundles', () => {
+  it('resolves only application-owned MV3 bundles', () => {
+    const resources = fs.mkdtempSync(path.join('/tmp', 'octo-addons-'));
+    const addon = path.join(resources, 'addons', 'dark-pages');
+    fs.mkdirSync(addon, { recursive: true });
+    fs.writeFileSync(path.join(addon, 'manifest.json'), JSON.stringify({ manifest_version: 3, name: 'test', version: '1.0.0' }));
+    expect(nativeBundledExtensionPaths(['dark-pages', 'not-a-bundle'], '', true, resources)).toEqual([addon]);
+  });
+
+  it('fails clearly when a reviewed bundle is absent or malformed', () => {
+    const resources = fs.mkdtempSync(path.join('/tmp', 'octo-addons-invalid-'));
+    expect(() => nativeBundledExtensionPaths(['dark-pages'], '', true, resources)).toThrow(/missing: dark-pages/);
+    const addon = path.join(resources, 'addons', 'clearurls');
+    fs.mkdirSync(addon, { recursive: true });
+    fs.writeFileSync(path.join(addon, 'manifest.json'), '{not-json');
+    expect(() => nativeBundledExtensionPaths(['clearurls'], '', true, resources)).toThrow(/invalid: clearurls/);
+    fs.writeFileSync(path.join(addon, 'manifest.json'), JSON.stringify({ manifest_version: 2 }));
+    expect(() => nativeBundledExtensionPaths(['clearurls'], '', true, resources)).toThrow(/unsupported: clearurls/);
   });
 });
