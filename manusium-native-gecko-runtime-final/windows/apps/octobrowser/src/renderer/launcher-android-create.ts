@@ -63,9 +63,20 @@ export interface CreatorContext {
 
 const MB = 1_000_000;
 const GB = 1_000_000_000;
+const ANDROID_CREATE_DIRECTORY_KEY = 'octo.android.create.lastDirectory';
 const size = (value: number) => value >= GB ? `${(value / GB).toFixed(value >= 10 * GB ? 1 : 2)} GB` : `${Math.max(0, Math.round(value / MB))} MB`;
 const NAME_RX = /^[A-Za-z0-9_-]{1,64}$/;
 const COMPARE_LIMIT = 4;
+
+function lastAndroidCreateDirectory(): string {
+  try { return localStorage.getItem(ANDROID_CREATE_DIRECTORY_KEY) ?? ''; } catch { return ''; }
+}
+
+function rememberAndroidCreateDirectory(value: string): void {
+  const directory = value.trim();
+  if (!directory) return;
+  try { localStorage.setItem(ANDROID_CREATE_DIRECTORY_KEY, directory); } catch { /* storage is optional */ }
+}
 
 const VARIANTS: Array<{ id: string; labelKey: string; descKey: string }> = [
   { id: 'play', labelKey: 'android.variant.play', descKey: 'android.variantDesc.play' },
@@ -251,7 +262,9 @@ export function androidCreateWizard(context: CreatorContext): void {
     customPackage: '',
     apps: [], appFiles: {},
     notify: true,
-    directory: '',
+    // One target folder holds both the system-image download and the AVD's
+    // virtual disk. Reuse the last selection, while keeping it editable.
+    directory: lastAndroidCreateDirectory(),
     brand: firstBrand,
     manufacturer: first?.identity.manufacturer ?? 'Google',
     model: first ? handsetName(first) : 'Google Pixel 9 Pro XL',
@@ -1097,6 +1110,7 @@ export function androidCreateWizard(context: CreatorContext): void {
     const storageNote = h('p', { class: 'hint' });
     const directory = input(draft.directory, { maxlength: '2048', placeholder: t('android.directoryPlaceholder'), autocomplete: 'off', 'aria-label': t('android.downloadDirectory') }, (value) => {
       draft.directory = value;
+      rememberAndroidCreateDirectory(value);
       void refreshTarget().then(drawStorage);
     });
     const choose = h('button', { class: 'btn small' }, icon('folder', 14), h('span', { text: t('android.chooseDirectory') }));
@@ -1104,6 +1118,7 @@ export function androidCreateWizard(context: CreatorContext): void {
       const chosen = await run(api.invoke<string | null>('mgr:pick-folder'));
       if (!chosen) return;
       draft.directory = chosen;
+      rememberAndroidCreateDirectory(chosen);
       directory.value = chosen;
       await refreshTarget();
       drawStorage();
@@ -1111,6 +1126,7 @@ export function androidCreateWizard(context: CreatorContext): void {
     const useDefault = h('button', { class: 'btn small', text: t('android.useDefaultFolder') });
     useDefault.onclick = async () => {
       draft.directory = target?.suggested ?? '';
+      rememberAndroidCreateDirectory(draft.directory);
       directory.value = draft.directory;
       await refreshTarget();
       drawStorage();

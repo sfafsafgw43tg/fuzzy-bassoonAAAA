@@ -20,11 +20,23 @@ import { androidBuildIdentity, registerHandsetFile } from '../src/main/android-c
 
 const root = path.resolve(__dirname, '..', '..', '..');
 const read = (rel: string) => fs.readFileSync(path.join(root, rel), 'utf8');
+const creatorSource = read('apps/octobrowser/src/renderer/launcher-android-create.ts');
 
 /** Read a vStudio source directly with Node so the test also runs on Windows,
  * where GitHub's Python launcher is `python`, not necessarily `python3`. */
 const studioEntryCache = new Map<string, string>();
 const studioArchive = fs.readFileSync(path.join(root, 'studio.zip'));
+
+describe('Android creation folder persistence', () => {
+  it('remembers the last folder used for the image download and virtual disk', () => {
+    expect(creatorSource).toContain("const ANDROID_CREATE_DIRECTORY_KEY = 'octo.android.create.lastDirectory'");
+    expect(creatorSource).toContain('directory: lastAndroidCreateDirectory()');
+    expect(creatorSource).toContain('rememberAndroidCreateDirectory(value)');
+    expect(creatorSource).toContain('rememberAndroidCreateDirectory(chosen)');
+    expect(creatorSource).toContain('localStorage.setItem(ANDROID_CREATE_DIRECTORY_KEY, directory)');
+  });
+});
+
 function studioEntryNames(): string[] {
   const eocd = studioArchive.lastIndexOf(Buffer.from([0x50, 0x4b, 0x05, 0x06]));
   if (eocd < 0) throw new Error('studio.zip has no central directory');
@@ -243,7 +255,7 @@ describe('vStudio Mobile inside the phones', () => {
     expect(page).toContain("getUserMedia({ audio: true, video: false })");
     expect(page).toContain('microphoneDevice');
     expect(studio).toContain('input.microphoneDevice === undefined');
-    expect(studio).toContain("args.push('-allow-host-audio')");
+    expect(studio).not.toContain("args.push('-allow-host-audio')");
     expect(studio).toContain("...(forPicker ? ['-webcam-list', '-verbose'] : ['-webcam-list'])];");
     expect(studio).toContain('runCameraList(tools.emulator, args, tools.root, timeout)');
     // Nothing is numbered from Windows: the only webcam names come from the emulator.
