@@ -3,6 +3,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
+import { execFileSync } from 'node:child_process';
 import { CHROMIUM_CATALOG, DEFAULT_CHROMIUM_VERSION, catalogForPlatform, catalogEntry, validateCatalog, listInstalled, installChromium } from '../src/runtime-catalog';
 import { FIREFOX_CATALOG, geckoCatalogEntry, listInstalledGecko } from '../src/gecko-runtime';
 
@@ -34,6 +35,42 @@ describe('Chromium runtime catalog', () => {
       expect(() => installChromium(catalogEntry('155.0.8059.39', 'win32', 'x64'), root)).toThrow(/built from the pinned source checkout/i);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
+    }
+  });
+  it('extracts a verified ungoogled-Chromium archive without renaming chrome.exe', () => {
+    const work = fs.mkdtempSync(path.join(os.tmpdir(), 'octo-ungoogled-catalog-'));
+    const root = path.join(work, 'installed');
+    const archiveRoot = 'ungoogled-test_windows_x64';
+    const source = path.join(work, archiveRoot);
+    const archive = path.join(work, 'runtime.zip');
+    try {
+      fs.mkdirSync(source, { recursive: true });
+      fs.writeFileSync(path.join(source, 'chrome.exe'), 'verified browser payload');
+      for (const name of ['chrome.dll', 'chrome_elf.dll', 'chrome_wer.dll', 'chrome_100_percent.pak', 'chrome_200_percent.pak', 'resources.pak', 'icudtl.dat', 'v8_context_snapshot.bin', 'libEGL.dll', 'libGLESv2.dll', 'LICENSE.chromium', 'LICENSE.ungoogled-chromium', 'THIRD-PARTY-NOTICES.txt']) {
+        const file = path.join(source, ...name.split('/'));
+        fs.mkdirSync(path.dirname(file), { recursive: true });
+        fs.writeFileSync(file, 'runtime fixture');
+      }
+      fs.mkdirSync(path.join(source, 'locales'), { recursive: true });
+      fs.writeFileSync(path.join(source, 'locales', 'en-US.pak'), 'locale');
+      execFileSync('zip', ['-q', '-r', archive, archiveRoot], { cwd: work });
+      const archiveSha256 = crypto.createHash('sha256').update(fs.readFileSync(archive)).digest('hex');
+      const entry = { ...CHROMIUM_CATALOG.find((candidate) => candidate.distribution === 'ungoogled-chromium')!, version: '155.0.8059.39-test', archiveRoot, archiveSha256 };
+      const previous = process.env.OCTO_CHROMIUM_ARCHIVE;
+      process.env.OCTO_CHROMIUM_ARCHIVE = archive;
+      try {
+        const installed = installChromium(entry, root, false);
+        expect(installed.executablePath.endsWith(`${path.sep}chrome.exe`)).toBe(true);
+        const manifest = JSON.parse(fs.readFileSync(path.join(installed.rootDir, 'runtime.json'), 'utf8')) as Record<string, unknown>;
+        expect(manifest.distribution).toBe('ungoogled-chromium');
+        expect(manifest.modified).toBe(false);
+        expect(fs.existsSync(path.join(installed.rootDir, 'LICENSE.chromium'))).toBe(true);
+      } finally {
+        if (previous === undefined) delete process.env.OCTO_CHROMIUM_ARCHIVE;
+        else process.env.OCTO_CHROMIUM_ARCHIVE = previous;
+      }
+    } finally {
+      fs.rmSync(work, { recursive: true, force: true });
     }
   });
   it('pins official Mozilla Gecko archives for Linux and Windows', () => {

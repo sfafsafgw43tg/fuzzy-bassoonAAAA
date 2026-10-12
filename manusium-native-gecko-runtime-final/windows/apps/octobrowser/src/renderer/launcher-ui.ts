@@ -117,7 +117,7 @@ export interface PluginEntry {
 export interface Init {
   lang: 'en' | 'pl'; dicts: Dicts; version: string; dataDir: string; searchEngines: string[]; addons: AddonInfo[]; kinds: Kind[];
   windowsSandbox: boolean; torBrowser: boolean; firefoxAvailable: boolean; inkbrowserInstalled: boolean;
-  chromiumRuntimes: Array<{ entry: { version: string; channel: string; support: string; default?: boolean }; rootDir: string; executablePath: string; installed: boolean; bundled?: boolean; installable?: boolean }>;
+  chromiumRuntimes: Array<{ entry: { version: string; channel: string; support: string; default?: boolean; displayName?: string; distribution?: string }; rootDir: string; executablePath: string; installed: boolean; bundled?: boolean; installable?: boolean }>;
   settings: Settings; update: UpdateStatus; logMode: 'off' | 'standard' | 'diagnostic'; filtersUpdatedAt: string | null;
   keyringMode: 'os' | 'password' | null; keyringRequiresPassword: boolean; secretBackend: 'local';
 }

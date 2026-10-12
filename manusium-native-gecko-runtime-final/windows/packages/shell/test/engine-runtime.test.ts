@@ -75,7 +75,7 @@ describe('packaged engine runtime discovery', () => {
     const { root } = runtimeRoot('chromium', 'inkbrowser-chrome.exe');
     expect(() => discoverEngineRuntime('chromium', {
       resourcesPath: '/does-not-exist', env: { OCTO_CHROMIUM_RUNTIME: root }, platform: 'win32', arch: 'x64',
-    })).toThrow(/not source-built/i);
+    })).toThrow(/unsupported Windows Chromium distribution/i);
     fs.rmSync(root, { recursive: true, force: true });
   });
 
@@ -91,6 +91,22 @@ describe('packaged engine runtime discovery', () => {
       resourcesPath: '/does-not-exist', env: { OCTO_CHROMIUM_RUNTIME: root }, platform: 'win32', arch: 'x64',
     });
     expect(found.executablePath).toBe(exe);
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it('accepts a hashed Windows unmodified ungoogled-Chromium manifest with chrome.exe', () => {
+    const { root, exe } = runtimeRoot('chromium', 'chrome.exe');
+    const manifestPath = path.join(root, '1.0.0', 'runtime.json');
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as Record<string, unknown>;
+    manifest.distribution = 'ungoogled-chromium';
+    manifest.modified = false;
+    manifest.platforms = ['win32-x64'];
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest));
+    const found = discoverEngineRuntime('chromium', {
+      resourcesPath: '/does-not-exist', env: { OCTO_CHROMIUM_RUNTIME: root }, platform: 'win32', arch: 'x64',
+    });
+    expect(found.executablePath).toBe(exe);
+    expect(found.manifest.distribution).toBe('ungoogled-chromium');
     fs.rmSync(root, { recursive: true, force: true });
   });
 });

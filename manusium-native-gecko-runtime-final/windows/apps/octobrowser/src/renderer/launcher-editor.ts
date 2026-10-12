@@ -1873,13 +1873,13 @@ function browser(b: HTMLElement, d: Draft, draw: () => void, summary: () => void
   function refreshRuntime() {
     const version = runtimeSelect.value;
     const current = runtimeEntries().find((r) => r.entry.version === version);
-    const labels = runtimeEntries().map((r) => `InkBrowser ${r.entry.version} · ${r.entry.channel} · ${r.bundled ? 'bundled' : r.installed ? 'installed' : 'not installed'}${r.entry.support === 'retired' ? ' · retired' : ''}`);
+    const labels = runtimeEntries().map((r) => `${r.entry.displayName ?? 'InkBrowser'} ${r.entry.version} · ${r.entry.channel} · ${r.bundled ? 'bundled' : r.installed ? 'installed' : 'not installed'}${r.entry.support === 'retired' ? ' · retired' : ''}`);
     runtimeSelect.querySelectorAll('.select-option').forEach((option, index) => { option.textContent = labels[index]; });
     const label = runtimeSelect.querySelector('.select-trigger .ell');
     if (label) label.textContent = labels[runtimeEntries().findIndex((r) => r.entry.version === version)] ?? version;
     (installRuntime as HTMLButtonElement).disabled = !current || current.installed || current.installable === false || current.entry.support === 'retired';
     (removeRuntime as HTMLButtonElement).disabled = !current?.installed || !!current.bundled;
-    runtimeHint.textContent = current?.bundled ? 'Included with Octo. This exact InkBrowser version will launch for this profile.' : current?.installable === false && !current.installed ? 'Not bundled. Install an Octo release containing this source-built InkBrowser version.' : 'The selected version must be installed before launching this profile.';
+    runtimeHint.textContent = current?.bundled ? `Included with Octo. This exact ${current.entry.displayName ?? 'InkBrowser'} version will launch for this profile.` : current?.installable === false && !current.installed ? `Not bundled. Install an Octo release containing this ${current.entry.displayName ?? 'InkBrowser'} version.` : 'The selected version must be installed before launching this profile.';
   }
   refreshRuntime();
   installRuntime.onclick = async () => {

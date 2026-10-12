@@ -26,9 +26,10 @@ export interface EngineManifest {
   platforms: Array<'win32-x64' | 'win32-arm64' | 'linux-x64' | 'linux-arm64' | 'darwin-x64' | 'darwin-arm64'>;
   capabilities: EngineCapability[];
   sha256?: string;
-  /** Windows Chromium must identify itself as a source build, never CfT. */
-  distribution?: 'source-built' | 'catalog-archive';
+  /** Windows Chromium distributions retain distinct executable/validation contracts. */
+  distribution?: 'source-built' | 'catalog-archive' | 'ungoogled-chromium';
   modified?: boolean;
+  notices?: 'complete' | 'incomplete';
   source?: { url: string; archiveSha256: string; license: string };
 }
 
@@ -120,7 +121,7 @@ function targetPlatform(platform: NodeJS.Platform, arch: string): EngineManifest
   return null;
 }
 
-function executableName(kind: EngineKind, platform: NodeJS.Platform): string {
+function executableName(kind: EngineKind, platform: NodeJS.Platform, distribution?: EngineManifest['distribution']): string {
   if (kind === 'chromium') return platform === 'win32' ? 'inkbrowser-chrome.exe' : 'inkbrowser-chrome';
   return platform === 'win32' ? 'inkbrowser-firefox.exe' : 'inkbrowser-firefox';
 }
@@ -172,15 +173,20 @@ export function discoverEngineRuntime(kind: EngineKind, options: RuntimeDiscover
       const manifest = readManifest(manifestPath);
       if (manifest.version !== version) throw new EngineRunnerError('manifest-invalid', `Runtime directory ${version} does not match manifest version ${manifest.version}`);
       if (manifest.kind !== kind) throw new EngineRunnerError('manifest-invalid', `Manifest kind does not match ${kind}: ${manifestPath}`);
-      if (kind === 'chromium' && platform === 'win32' && (manifest.distribution !== 'source-built' || manifest.modified !== true)) {
-        throw new EngineRunnerError('manifest-invalid', `Windows Chromium runtime is not source-built: ${manifestPath}`);
+      if (kind === 'chromium' && platform === 'win32') {
+        const sourceBuilt = manifest.distribution === 'source-built' && manifest.modified === true && manifest.executable === 'inkbrowser-chrome.exe';
+        const ungoogled = manifest.distribution === 'ungoogled-chromium' && manifest.modified === false && manifest.executable === 'chrome.exe';
+        if (!sourceBuilt && !ungoogled) throw new EngineRunnerError('manifest-invalid', `Unsupported Windows Chromium distribution: ${manifestPath}`);
       }
       if (!manifest.platforms.includes(target)) throw new EngineRunnerError('unsupported-platform', `${manifest.kind} ${manifest.version} does not support ${target}`);
       const executablePath = path.resolve(runtimeRoot, manifest.executable);
       if (!executablePath.startsWith(`${path.resolve(runtimeRoot)}${path.sep}`) || !fs.existsSync(executablePath)) {
         throw new EngineRunnerError('executable-missing', `Engine executable is missing or escapes its runtime directory: ${executablePath}`);
       }
-      if (path.basename(executablePath) !== executableName(kind, platform)) {
+      const expectedExecutable = kind === 'chromium' && manifest.distribution === 'ungoogled-chromium'
+        ? 'chrome.exe'
+        : executableName(kind, platform, manifest.distribution);
+      if (path.basename(executablePath) !== expectedExecutable) {
         throw new EngineRunnerError('manifest-invalid', `Unexpected ${kind} executable name: ${path.basename(executablePath)}`);
       }
       if (typeof manifest.sha256 !== 'string' || !/^[a-f0-9]{64}$/i.test(manifest.sha256)) throw new EngineRunnerError('manifest-invalid', `Missing or invalid executable SHA-256 in ${manifestPath}`);
