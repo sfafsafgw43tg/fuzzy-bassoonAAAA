@@ -372,6 +372,12 @@ describe('browser entry UI', () => {
     expect(browser).not.toContain('const opensNow = async');
     expect(browser).toContain('const scanDevices = async (revealLabels = false)');
     expect(browser).toContain("control.replaceChildren(new Option(t('media.systemDefault'), ''))");
+    expect(browser).toContain('const isVirtualDevice = (label: string): boolean');
+    expect(browser).toContain("t('media.virtualDevice')");
+    expect(browser).toContain("role: 'status', 'aria-live': 'polite'");
+    expect(browser).toContain("selectionStatus.textContent = t('media.selectionApplied')");
+    expect(browser).toContain("selectionStatus.textContent = t('media.previewReady')");
+    expect(browser).toContain("navigator.mediaDevices?.addEventListener?.('devicechange', onDeviceChange)");
     expect(browser).toContain('if (root.isConnected) void scanDevices()');
     // Scanning settings never opens every DirectShow camera. One default
     // permission stream is allowed only after the user presses Refresh.

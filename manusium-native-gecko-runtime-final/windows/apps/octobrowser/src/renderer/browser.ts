@@ -2276,9 +2276,16 @@ async function browserMediaSettings(data: WindowSettings, autoScan = false): Pro
     control.replaceChildren(option);
     control.disabled = true;
   };
+  const isVirtualDevice = (label: string): boolean => /virtual|unity|obs|vstudio|droidcam|manycam|xsplit|snap camera/i.test(label);
   const fillDevices = (control: HTMLSelectElement, devices: MediaDeviceInfo[], saved: string) => {
     control.replaceChildren(new Option(t('media.systemDefault'), ''));
-    for (const device of devices) control.append(new Option(device.label, device.label));
+    for (const device of devices) {
+      const label = isVirtualDevice(device.label) ? `${t('media.virtualDevice')} · ${device.label}` : device.label;
+      const option = new Option(label, device.label);
+      option.dataset.deviceLabel = device.label;
+      option.dataset.virtual = isVirtualDevice(device.label) ? 'true' : 'false';
+      control.append(option);
+    }
     // Preserve a disconnected/temporarily busy selection visibly instead of
     // silently replacing it with an unrelated default endpoint.
     if (saved && !devices.some((device) => device.label === saved)) {
@@ -2287,6 +2294,7 @@ async function browserMediaSettings(data: WindowSettings, autoScan = false): Pro
     control.disabled = false;
     control.value = saved;
   };
+  const selectionStatus = h('p', { class: 'media-selection-status muted small', role: 'status', 'aria-live': 'polite' });
   const save = async (quiet = false): Promise<void> => {
     const mediaCapture = { cameraLabel: camera.value, microphoneLabel: microphone.value };
     if (mediaCapture.cameraLabel === data.profile.mediaCapture.cameraLabel
@@ -2294,6 +2302,7 @@ async function browserMediaSettings(data: WindowSettings, autoScan = false): Pro
     const applied = await api.invoke<boolean>('ui:profile-set', { mediaCapture }).catch(() => false);
     if (!applied) { if (!quiet) toast('media.permissionFailed'); return; }
     data.profile.mediaCapture = mediaCapture;
+    selectionStatus.textContent = t('media.selectionApplied');
     if (!quiet) toast('toast.saved');
   };
   camera.onchange = () => void save(); microphone.onchange = () => void save();
@@ -2386,14 +2395,34 @@ async function browserMediaSettings(data: WindowSettings, autoScan = false): Pro
         drawLevel();
       }
       window.setTimeout(stop, 20_000);
-    } catch { toast('media.permissionFailed'); }
+      selectionStatus.textContent = t('media.previewReady');
+    } catch {
+      selectionStatus.textContent = t('media.previewFailed');
+      toast('media.permissionFailed');
+    }
   };
   const root = h('div', { class: 'settings-media' },
     scanStatus,
     h('div', { class: 'set-row' }, h('span', { text: t('media.activeCamera') }), camera),
     h('div', { class: 'set-row' }, h('span', { text: t('media.activeMicrophone') }), microphone),
-    h('div', { class: 'row' }, detect, preview, listen), video, meter, monitor,
+    h('div', { class: 'row' }, detect, preview, listen), selectionStatus,
+    h('p', { class: 'muted small', text: t('media.permissionHint') }),
+    video, meter, monitor,
     h('p', { class: 'muted small', text: t('media.browserRoutingHint') }));
+  let deviceChangeTimer = 0;
+  const onDeviceChange = () => {
+    if (!root.isConnected) return;
+    window.clearTimeout(deviceChangeTimer);
+    deviceChangeTimer = window.setTimeout(() => { if (root.isConnected) void scanDevices(false); }, 700);
+  };
+  navigator.mediaDevices?.addEventListener?.('devicechange', onDeviceChange);
+  const cleanup = window.setInterval(() => {
+    if (root.isConnected) return;
+    window.clearInterval(cleanup);
+    window.clearTimeout(deviceChangeTimer);
+    navigator.mediaDevices?.removeEventListener?.('devicechange', onDeviceChange);
+    stop();
+  }, 1_000);
   // Opening the panel performs detection immediately; Refresh remains available
   // for hot-plugged or newly released devices.
   if (autoScan) window.setTimeout(() => { if (root.isConnected) void scanDevices(); }, 0);
