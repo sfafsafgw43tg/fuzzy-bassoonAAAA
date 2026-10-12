@@ -2396,23 +2396,19 @@ function Get-SetupSteps {
       } }
     @{ Key = 'stepDeps'; Required = $true; Fatal = $true; Action = { return (Invoke-EnsureDependencies) } }
     @{ Key = 'stepBuild'; Required = $true; Fatal = $true; Action = {
-        # Normal setup uses the prebuilt Electron distribution installed by npm.
-        # It must not run electron-builder or compile Chromium on the user's machine.
+        # Normal setup uses the prebuilt Electron distribution installed by npm
+        # and acquires the separately built InkBrowser runtime from the signed
+        # GitHub release asset. It must never compile Chromium on the user's PC.
         Assert-NotRunning @('octobrowser', 'octodetect')
+        Invoke-Npm @('run', 'fetch:chromium:windows')
         Invoke-Npm @('run', 'icons')
         Invoke-Npm @('run', 'build')
-        # A source checkout may not contain the 100GB+ Windows Chromium build.
-        # Still create a complete branded Electron bundle so the manager opens,
-        # but never mark native Chromium as installed. Release packaging remains
-        # strict and must supply the verified source-built payload.
+        # Packaging remains strict: a missing or invalid native runtime aborts
+        # before the app is advertised as a working Chrome base.
+        $env:OCTO_REQUIRE_NATIVE_CHROMIUM = '1'
+        Invoke-Npm @('run', 'prepare:prebuilt:windows')
         $nativeAvailable = Test-AllChromiumRuntimes (Join-Path $InstallRoot 'resources')
-        $previousNativeRequirement = $env:OCTO_REQUIRE_NATIVE_CHROMIUM
-        $env:OCTO_REQUIRE_NATIVE_CHROMIUM = if ($nativeAvailable) { '1' } else { '0' }
-        try { Invoke-Npm @('run', 'prepare:prebuilt:windows') }
-        finally {
-          if ($null -eq $previousNativeRequirement) { Remove-Item Env:OCTO_REQUIRE_NATIVE_CHROMIUM -ErrorAction SilentlyContinue }
-          else { $env:OCTO_REQUIRE_NATIVE_CHROMIUM = $previousNativeRequirement }
-        }
+        if (-not $nativeAvailable) { Warn 'The prebuilt InkBrowser runtime did not pass the final installer check.'; return $false }
         $releaseDir = Join-Path $InstallRoot 'release'
         New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
         [ordered]@{

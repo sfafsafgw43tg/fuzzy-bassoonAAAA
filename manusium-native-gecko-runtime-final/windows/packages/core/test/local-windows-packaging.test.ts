@@ -4,6 +4,7 @@ import { describe, expect, it } from 'vitest';
 const root = path.resolve(__dirname, '../../..');
 const packaging = fs.readFileSync(path.join(root, 'tools/package-local-windows.mjs'), 'utf8');
 const prebuilt = fs.readFileSync(path.join(root, 'tools/prepare-prebuilt-app.mjs'), 'utf8');
+const fetchRuntime = fs.readFileSync(path.join(root, 'tools/fetch-prebuilt-chromium.mjs'), 'utf8');
 const installer = fs.readFileSync(path.join(root, 'scripts/lib/octo.ps1'), 'utf8');
 const fn = (name: string) => new RegExp(`function ${name}(?:\\([^\\n]*\\))? \\{([\\s\\S]*?)\\r?\\n\\}`).exec(installer)?.[1] ?? '';
 describe('branded local Windows setup', () => {
@@ -66,5 +67,14 @@ describe('branded local Windows setup', () => {
     expect(editor).toContain("d.engine = choice === 'chromium' ? 'inkbrowser' : choice");
     expect(engine).toContain("export const NEW_PROFILE_ENGINE: BrowserEngine = 'inkbrowser'");
     expect(open).toContain("$electronExe = Get-ElectronLauncherExe 'octobrowser'");
+  });
+  it('bootstraps Chrome Base from a verified source-built release asset before packaging', () => {
+    const buildStep = installer.slice(installer.indexOf("@{ Key = 'stepBuild'"), installer.indexOf("@{ Key = 'stepShortcut'"));
+    expect(buildStep).toContain("Invoke-Npm @('run', 'fetch:chromium:windows')");
+    expect(buildStep).toContain("$env:OCTO_REQUIRE_NATIVE_CHROMIUM = '1'");
+    expect(fetchRuntime).toContain('releases/latest/download');
+    expect(fetchRuntime).toContain('distribution !== \'source-built\' || manifest.modified !== true');
+    expect(fetchRuntime).toContain('runtime archive SHA-256 mismatch');
+    expect(fetchRuntime).toContain('runtime executable SHA-256 does not match runtime.json');
   });
 });

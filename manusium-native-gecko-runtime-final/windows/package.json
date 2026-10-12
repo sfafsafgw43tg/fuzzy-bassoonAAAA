@@ -17,6 +17,7 @@
     "build:browser": "node tools/build.mjs octobrowser",
     "build:detect": "node tools/build.mjs octodetect",
     "build:chromium:windows": "node tools/chromium-versions.mjs build",
+    "fetch:chromium:windows": "node tools/fetch-prebuilt-chromium.mjs",
     "check:chromium-patches": "node tools/inkbrowser/apply-chromium-patches.mjs --check",
     "verify:chromium:windows": "node tools/chromium-versions.mjs verify",
     "verify:chromium:packaged": "node tools/chromium-versions.mjs verify-packaged",

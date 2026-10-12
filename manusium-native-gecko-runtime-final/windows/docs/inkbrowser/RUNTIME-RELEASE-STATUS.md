@@ -6,8 +6,13 @@ InkBrowser release.** The original uploaded ZIP contains older source only.
 
 ## What the source actually is
 
-There is no separate InkBrowser source fork or runtime download configured in
-this repository. The implemented Windows builder uses upstream
+There is no separate InkBrowser source fork in this repository. Normal Windows
+setup now downloads the prebuilt runtime from the repository's latest GitHub
+release using `tools/fetch-prebuilt-chromium.mjs`, verifies the archive SHA-256,
+then verifies the source-built manifest and executable SHA-256 before staging.
+The release asset is created only after the Windows build and clean-install
+job pass. Until that release exists, a source checkout correctly cannot launch
+Chrome Base. The implemented Windows builder uses upstream
 `https://chromium.googlesource.com/chromium/src.git`, fetched with Chromium's
 `depot_tools`, plus the project-owned source overlay. GitHub's Chromium mirror
 confirmed these tags during this audit:
@@ -65,8 +70,10 @@ fingerprinting shims. The profile manager rejects incompatible protection modes.
   download hosts. A GitHub source mirror alone is not a complete build input:
   `DEPS`, hooks and toolchains still need their upstream download services.
 - `resources/engines` contains only its README. GitHub releases and Actions
-  artifacts were empty at audit time. No trusted prebuilt InkBrowser download
-  URL, binary package, checksums or build provenance has been supplied.
+  artifacts were empty at audit time. The new workflow publishes
+  `InkBrowser-Chromium-win32-x64-155.0.8059.39.zip` and its `.sha256` sidecar
+  after clean-install validation; until the first tagged run succeeds, no
+  trusted runtime is available to install.
 - Runner inventory API returned **403 Resource not accessible by integration**.
   This means runner availability is unknown, NOT proof that no runner exists.
   The workflow requires labels `self-hosted, windows, x64, inkbrowser-chromium`.
