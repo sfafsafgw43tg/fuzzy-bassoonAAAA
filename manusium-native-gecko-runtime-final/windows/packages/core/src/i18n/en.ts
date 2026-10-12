@@ -1031,6 +1031,8 @@ export const en: Record<string, string> = {
   'settings.resetRestarting': 'Resetting the app and opening first-run setup…',
   'settings.theme': 'Theme',
   'settings.themeHint': 'Choose a minimal colour system for the local launcher.',
+  'settings.defaultThemes': 'Default browser themes',
+  'settings.seasons': 'Seasons',
   'settings.theme.ink': 'Neutral graphite with a cool ink accent',
   'settings.theme.obsidian': 'Near-black and low glare',
   'settings.theme.slate': 'Balanced dark grey',

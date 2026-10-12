@@ -1029,6 +1029,8 @@ export const pl: Record<string, string> = {
   'settings.resetAppConfirm': 'Całkowicie zresetować tę aplikację? Uruchomi się ponownie w konfiguracji pierwszego uruchomienia, a wszystkie jej dane lokalne zostaną usunięte.',
   'settings.resetRestarting': 'Resetowanie aplikacji i otwieranie konfiguracji pierwszego uruchomienia…',
   'settings.theme': 'Motyw',
+  'settings.defaultThemes': 'Domyślne motywy przeglądarki',
+  'settings.seasons': 'Pory roku',
   'settings.themeHint': 'Wybierz minimalistyczny zestaw kolorów dla lokalnego launchera.',
   'settings.theme.ink': 'Neutralny grafit z chłodnym akcentem atramentu',
   'settings.theme.obsidian': 'Prawie czerń i niski kontrast',

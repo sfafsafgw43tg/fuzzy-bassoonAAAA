@@ -701,11 +701,12 @@ function renderSettings(v: HTMLElement): void {
     ['christmas', 'Christmas', 'settings.theme.christmas'], ['coral', 'Coral', 'settings.theme.coral'],
     ['digitalHorizon', 'Digital Horizon', 'settings.theme.digitalHorizon'], ['express', 'Express', 'settings.theme.express'],
   ];
-  const themeGrid = h('div', { class: 'theme-grid', role: 'radiogroup', 'aria-label': t('settings.theme') });
-  const funGrid = h('div', { class: 'theme-grid fun-theme-grid', role: 'radiogroup', 'aria-label': t('settings.funThemes') });
+  const themeGrid = h('div', { class: 'theme-grid', role: 'radiogroup', 'aria-label': t('settings.defaultThemes') });
+  const funGrid = h('div', { class: 'theme-grid fun-theme-grid', role: 'radiogroup', 'aria-label': t('settings.seasons') });
   const paletteGrid = h('div', { class: 'theme-grid palette-theme-grid', role: 'radiogroup', 'aria-label': t('settings.paletteThemes') });
   const preview = () => h('span', { class: 'theme-swatch', 'aria-hidden': 'true' },
-    h('span', { class: 'theme-preview-bar' }, h('i'), h('i'), h('i')),
+    h('span', { class: 'theme-preview-bar' }, h('i'), h('i'), h('i'), h('span', { class: 'theme-preview-tab', text: 'Octo' })),
+    h('span', { class: 'theme-preview-address' }, h('i', { class: 'theme-preview-back' }), h('i', { class: 'theme-preview-forward' }), h('span', { text: 'octo.su' }), h('i', { class: 'theme-preview-menu' })),
     h('span', { class: 'theme-preview-body' },
       h('span', { class: 'theme-preview-rail' }, h('i'), h('i'), h('i'), h('i')),
       h('span', { class: 'theme-preview-page' }, h('i', { class: 'wide' }), h('i'), h('i'), h('i', { class: 'short' })),
@@ -742,20 +743,18 @@ function renderSettings(v: HTMLElement): void {
   addThemeCards(themeGrid, themes);
   addThemeCards(funGrid, funThemes);
   addThemeCards(paletteGrid, paletteThemes);
-  const funPanel = h('details', { class: 'fun-themes-panel' }) as HTMLDetailsElement;
-  funPanel.open = funThemes.some(([id]) => s.ui.theme === id);
-  funPanel.append(h('summary', { text: t('settings.funThemes') }), h('p', { class: 'hint', text: t('settings.funThemesHint') }), funGrid);
-  const palettePanel = h('details', { class: 'fun-themes-panel palette-themes-panel' }) as HTMLDetailsElement;
-  palettePanel.open = paletteThemes.some(([id]) => s.ui.theme === id);
-  palettePanel.append(h('summary', { text: t('settings.paletteThemes') }), h('p', { class: 'hint', text: t('settings.paletteThemesHint') }), paletteGrid);
   const themePanel = h('details', { class: 'panel theme-panel theme-panel-collapsible' }) as HTMLDetailsElement;
-  themePanel.open = sessionStorage.getItem('octo-themes-open') === '1';
+  themePanel.open = sessionStorage.getItem('octo-themes-open') !== '0';
   themePanel.addEventListener('toggle', () => sessionStorage.setItem('octo-themes-open', themePanel.open ? '1' : '0'));
   themePanel.append(
     h('summary', { class: 'theme-panel-summary' },
       h('span', { class: 'theme-summary-title' }, h('h2', { text: t('settings.theme') })),
       h('span', { class: 'theme-summary-hint', text: t('settings.themeHint') })),
-    h('div', { class: 'theme-panel-content' }, h('p', { class: 'hint', text: t('settings.themeHint') }), themeGrid, funPanel, palettePanel),
+    h('div', { class: 'theme-panel-content' },
+      h('p', { class: 'hint theme-gallery-intro', text: t('settings.themeHint') }),
+      h('section', { class: 'theme-gallery-section' }, h('h3', { class: 'theme-gallery-heading' }, h('span', { class: 'theme-gallery-icon', text: '▣' }), h('span', { text: t('settings.defaultThemes') })), themeGrid),
+      h('section', { class: 'theme-gallery-section' }, h('h3', { class: 'theme-gallery-heading' }, h('span', { class: 'theme-gallery-icon', text: '◌' }), h('span', { text: t('settings.seasons') })), funGrid),
+      h('section', { class: 'theme-gallery-section' }, h('h3', { class: 'theme-gallery-heading' }, h('span', { class: 'theme-gallery-icon', text: '◇' }), h('span', { text: t('settings.paletteThemes') })), paletteGrid)),
   );
   v.append(themePanel);
 
