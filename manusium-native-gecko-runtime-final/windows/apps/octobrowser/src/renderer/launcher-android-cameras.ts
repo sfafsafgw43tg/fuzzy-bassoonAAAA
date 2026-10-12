@@ -127,8 +127,8 @@ async function countWindowsCameras(): Promise<number> {
 
 /** The name shown for a camera: its Windows name, else its hardware ID, else a plain label. Never a device path or a number. */
 function displayName(camera: EmulatorCamera): string {
-  if (camera.device) return camera.device;
-  return camera.hardwareId ? t('android.camera.hardwareName', { id: camera.hardwareId }) : t('android.camera.webcam');
+  const label = camera.device || (camera.hardwareId ? t('android.camera.hardwareName', { id: camera.hardwareId }) : t('android.camera.webcam'));
+  return camera.virtual ? `${t('android.camera.virtualDevice')} · ${label}` : label;
 }
 
 /** One open camera, so that whatever happens it can be released at once. */
@@ -398,6 +398,14 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
       if (refused.some((item) => item.failure === 'permission')) lines.push(line(false, t('android.camera.blocked')));
       else if (refused.some((item) => item.failure === 'unavailable')) lines.push(line(false, t('android.camera.notFound')));
       else if (refused.length) lines.push(line(false, t('android.camera.notSending')));
+      if (cameraTests.enabled && working().length) {
+        const selected = [selection.frontDevice, selection.backDevice]
+          .filter((id, index, all): id is string => !!id && all.indexOf(id) === index)
+          .map((id) => listed.find((camera) => camera.name === id))
+          .filter((camera): camera is EmulatorCamera => !!camera && checkOf(camera)?.ok === true)
+          .map(displayName);
+        if (selected.length) lines.push(line(false, t('android.camera.selectedWorking', { cameras: selected.join(', ') })));
+      }
     }
     statusSlot.replaceChildren(...lines);
   }

@@ -18,4 +18,10 @@ describe('the camera picker follows the cameras by itself', () => {
   it('keeps the manual Refresh button', () => {
     expect(picker).toContain('refreshButton.onclick = () => void scan(true);');
   });
+
+  it('labels virtual endpoints and confirms a selected source only after a live frame check', () => {
+    expect(picker).toContain("camera.virtual ? `${t('android.camera.virtualDevice')} · ${label}` : label");
+    expect(picker).toContain("t('android.camera.selectedWorking', { cameras: selected.join(', ') })");
+    expect(picker).toContain('cameraTests.enabled && working().length');
+  });
 });
