@@ -15,6 +15,7 @@ const root = path.resolve(__dirname, '..', '..', '..');
 const octo = fs.readFileSync(path.join(root, 'scripts', 'lib', 'octo.ps1'), 'utf8').replace(/^\uFEFF/, '');
 const ui = fs.readFileSync(path.join(root, 'scripts', 'lib', 'octo-ui.ps1'), 'utf8').replace(/^\uFEFF/, '');
 const pageShim = fs.readFileSync(path.join(root, 'apps', 'octobrowser', 'src', 'preload', 'page-shim.ts'), 'utf8');
+const mainProcess = fs.readFileSync(path.join(root, 'apps', 'octobrowser', 'src', 'main', 'main.ts'), 'utf8');
 const browserWindow = fs.readFileSync(path.join(root, 'apps', 'octobrowser', 'src', 'main', 'window.ts'), 'utf8');
 const androidPage = fs.readFileSync(path.join(root, 'apps', 'octobrowser', 'src', 'renderer', 'launcher-virtualbox.ts'), 'utf8');
 const icons = fs.readFileSync(path.join(root, 'packages', 'shell', 'renderer', 'icons.ts'), 'utf8');
@@ -194,6 +195,8 @@ describe('steps and the console installer', () => {
     expect(pageShim).toContain("names.set(WrappedWorker, 'Worker')");
     expect(pageShim).toContain("fp.webgl === 'noise' || fp.webglVendor || fp.webglRenderer");
     expect(pageShim).toContain("kind === 'experimental-webgl2'");
+    expect(mainProcess).toContain("p.fingerprint?.enabled === true && p.fingerprint.webgl !== 'off'");
+    expect(mainProcess).toContain("&& !fingerprintUsesWebgl");
     expect(pageShim).toContain('const requestedViewport = fp.windowSize');
     expect(browserWindow).toContain('deviceScaleFactor: null');
     expect(androidPage).toContain("t('android.privateSpace.title')");

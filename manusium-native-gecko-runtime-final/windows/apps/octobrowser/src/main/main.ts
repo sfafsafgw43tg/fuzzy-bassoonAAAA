@@ -44,7 +44,14 @@ if (runCliVerifyIfRequested('octobrowser')) {
         const s = effectiveSettings(p.protection);
         const appSettings = createSettingsStore(layout).load();
         const switches: Array<[string, string?]> = [['force-webrtc-ip-handling-policy', s.webrtc]];
-        if (appSettings.privacyRuntime.graphicsExposure === 'block') {
+        // Keep hardware rendering available for fingerprint profiles that need
+        // native WebGL. The page shim masks the adapter for WebGL=Noise, while
+        // WebGL=Real intentionally exposes the active adapter. Only WebGL=Off
+        // (or profiles without a fingerprint policy) should force GPU isolation;
+        // otherwise Electron falls back to d3d11-warp-webgl and every profile
+        // reports Microsoft Basic Render Driver regardless of its selection.
+        const fingerprintUsesWebgl = p.fingerprint?.enabled === true && p.fingerprint.webgl !== 'off';
+        if (appSettings.privacyRuntime.graphicsExposure === 'block' && !fingerprintUsesWebgl) {
           // Honest containment: disable GPU-backed web graphics; never replace it
           // with a fabricated renderer or an unsafe software GPU.
           switches.push(['disable-gpu'], ['disable-gpu-compositing']);
