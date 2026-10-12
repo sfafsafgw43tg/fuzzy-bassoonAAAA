@@ -194,6 +194,9 @@ describe('steps and the console installer', () => {
     expect(chromium).toContain("'sync', '-n', '-v'");
     expect(chromium).toContain('`-j${jobs}`');
     expect(chromium).toContain("'depot-tools.allowGlobalGitConfig', 'false'");
+    expect(chromium).toContain("const command = process.platform === 'win32' ? 'git.exe' : 'git';");
+    expect(chromium).toContain('optional Git recommendation setting was not changed; continuing');
+    expect(chromium).not.toContain("await run('git', ['config', '--global', 'depot-tools.allowGlobalGitConfig', 'false']");
     expect(chromium).toContain("['sync', '-n', '-v'");
     expect(chromium).toContain('using compatible gclient sync flags');
     expect(chromium).toContain("process.env.DEPOT_TOOLS_UPDATE = '0'");

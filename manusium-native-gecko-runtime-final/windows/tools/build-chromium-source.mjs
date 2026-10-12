@@ -112,6 +112,15 @@ function runCapture(command, args, cwd, label = command) {
   if (result.error || result.status !== 0) fail(`${label} failed: ${(result.stderr || result.stdout || result.error?.message || '').trim()}`);
   return result.stdout.trim();
 }
+function suppressGitRecommendation(cwd) {
+  const command = process.platform === 'win32' ? 'git.exe' : 'git';
+  const launch = prepareLaunch(command, ['config', '--global', 'depot-tools.allowGlobalGitConfig', 'false']);
+  console.log(`[build-chromium-source] exec: ${displayCommand(launch.file, launch.args, cwd)}`);
+  const result = spawnSync(launch.file, launch.args, { cwd, encoding: 'utf8', shell: false, windowsHide: true });
+  if (result.error || result.status !== 0) {
+    console.warn(`[build-chromium-source] optional Git recommendation setting was not changed; continuing (${result.error?.message ?? `exit code ${result.status ?? 'unknown'}`})`);
+  }
+}
 function chromiumVersion(source) {
   const versionFile = path.join(source, 'chrome', 'VERSION');
   if (!fs.existsSync(versionFile)) fail(`Chromium source is missing ${versionFile}`);
@@ -136,7 +145,8 @@ async function sourceCheckout(source, version, skipSync) {
   const versionFile = path.join(source, 'chrome', 'VERSION');
   const sourceGit = path.join(source, '.git');
   const parentGclient = path.join(parent, '.gclient');
-  await run('git', ['config', '--global', 'depot-tools.allowGlobalGitConfig', 'false'], parent, 'suppressing depot_tools global Git recommendation');
+  console.log('[build-chromium-source] suppressing depot_tools global Git recommendation');
+  suppressGitRecommendation(parent);
   const jobs = String(Math.max(2, Math.min(12, os.cpus().length)));
   // Keep the base command compatible with older depot_tools shipped on clean
   // Windows machines. Long-form options vary between depot_tools revisions.
