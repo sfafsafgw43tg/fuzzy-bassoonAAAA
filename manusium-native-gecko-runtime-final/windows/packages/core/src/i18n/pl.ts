@@ -325,7 +325,7 @@ export const pl: Record<string, string> = {
   'sec.never': 'Nigdy',
   // ---------------------------------------------------------------- menedżer profili
   'launcher.nav.profiles': 'Profile',
-  'launcher.nav.virtualbox': 'Urządzenia Android',
+  'launcher.nav.virtualbox': 'Urządzenia',
   'launcher.nav.trash': 'Kosz',
   'launcher.nav.security': 'Bezpieczeństwo',
   'launcher.nav.updates': 'Aktualizacje',

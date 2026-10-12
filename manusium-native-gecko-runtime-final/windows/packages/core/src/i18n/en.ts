@@ -326,7 +326,7 @@ export const en: Record<string, string> = {
   'sec.never': 'Never',
   // ---------------------------------------------------------------- launcher
   'launcher.nav.profiles': 'Profiles',
-  'launcher.nav.virtualbox': 'Android devices',
+  'launcher.nav.virtualbox': 'Devices',
   'launcher.nav.trash': 'Trash',
   'launcher.nav.security': 'Security',
   'launcher.nav.updates': 'Updates',
