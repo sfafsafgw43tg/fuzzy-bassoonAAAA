@@ -306,8 +306,11 @@ describe('vStudio Mobile inside the phones', () => {
     expect(studio).toContain('void startAndroidCameraDiagnostics(name)');
     expect(studio).toContain("'CameraProvider:V'");
     expect(studio).toContain("'AndroidRuntime:E'");
-    // A camera that fell back is still a launch, with the reason shown.
+    // A preserved or unverified camera is still a launch; informational notes
+    // must not be shown as though the camera was disabled.
     expect(studio).toContain('return { cameraWarning, notes: launchNotes };');
+    expect(studio).toContain('launchNotes.push(`${explicitFallback[0].name} was preserved');
+    expect(studio).toContain('if (assignments.warning) launchNotes.push(assignments.warning);');
     expect(page).toContain("t('android.camera.disabledForLaunch')");
   });
 

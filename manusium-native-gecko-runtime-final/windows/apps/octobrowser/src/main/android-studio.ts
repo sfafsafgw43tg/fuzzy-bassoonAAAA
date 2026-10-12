@@ -3510,6 +3510,7 @@ export async function launchAndroidAvd(input: AndroidLaunchInput): Promise<Andro
   const front = requestedCameras.front;
   const back = requestedCameras.back;
   let cameraWarning = '';
+  const launchNotes: string[] = [];
   // Explicit webcam endpoints survive failed discovery. An unlisted endpoint
   // is reported as unverified, and Off remains off. No synthetic image is used.
   const emulatorRoot = rootForPackage(avdSystemPackage(avd)) || tools.root;
@@ -3533,7 +3534,7 @@ export async function launchAndroidAvd(input: AndroidLaunchInput): Promise<Andro
     [],
     input.cameraDevice ?? avd.cameraDevice ?? '',
   );
-  if (assignments.warning) cameraWarning = [cameraWarning, assignments.warning].filter(Boolean).join(' ');
+  if (assignments.warning) launchNotes.push(assignments.warning);
   if (!webcams.length && (front === 'webcam' || back === 'webcam')) {
     const reason = webcamReport.detail || webcamReport.problem === 'timeout'
       ? 'The selected Android Emulator could not enumerate a host camera. Close camera-using apps, allow desktop camera access in Windows Privacy settings, then refresh.'
@@ -3541,9 +3542,9 @@ export async function launchAndroidAvd(input: AndroidLaunchInput): Promise<Andro
     cameraWarning = [cameraWarning, reason].filter(Boolean).join(' ');
   }
   if (explicitFallback.length && (front === 'webcam' || back === 'webcam')) {
-    cameraWarning = [cameraWarning, `${explicitFallback[0].name} was preserved from the saved AVD configuration and will be verified after boot.`].filter(Boolean).join(' ');
+    launchNotes.push(`${explicitFallback[0].name} was preserved from the saved AVD configuration and will be verified after boot.`);
   } else if (fallback.length && (front === 'webcam' || back === 'webcam')) {
-    cameraWarning = [cameraWarning, 'The emulator did not enumerate cameras; webcam0 was configured automatically and must be verified after the cold boot.'].filter(Boolean).join(' ');
+    launchNotes.push('The emulator did not enumerate cameras; webcam0 was configured automatically and must be verified after the cold boot.');
   }
   writeConfigValues(avd.path, mediaConfig(
     assignments.front, assignments.back, input.microphoneEnabled,
@@ -3578,7 +3579,6 @@ export async function launchAndroidAvd(input: AndroidLaunchInput): Promise<Andro
   args.push(...timezoneArgsFor(configValue(avd.path, 'octobrowser.timezone')));
   args.push(...await emulatorTelemetryArgs(emulator, emulatorRoot));
   // The telephony number is a plain emulator setting (not identity). It is passed only when this build lists the flag.
-  const launchNotes: string[] = [];
   const telephone = configValue(avd.path, 'octobrowser.telephony');
   if (telephone) {
     const help = await emulatorHelpText(emulator, rootForPackage(avdSystemPackage(avd)) || tools.root);
