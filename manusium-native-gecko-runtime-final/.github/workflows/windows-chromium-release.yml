@@ -4,7 +4,10 @@ on:
   workflow_dispatch:
   push:
     branches: ['arena/c10966b9-fuzzy-bassoonaaaa']
-    paths: ['.github/workflows/windows-chromium-release.yml']
+    paths:
+      - '.github/workflows/windows-chromium-release.yml'
+      - 'windows/**'
+      - 'windows/package-lock.json'
     tags:
       - 'v*'
 
