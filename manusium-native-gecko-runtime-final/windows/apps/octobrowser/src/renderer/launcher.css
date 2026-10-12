@@ -682,6 +682,41 @@ button.tg:hover { border-color: var(--accent); }
 @keyframes theme-preview-wash { 0% { clip-path:circle(0 at var(--theme-end-x) var(--theme-end-y)); opacity:0; } 25% { opacity:.7; } 100% { clip-path:circle(145% at var(--theme-end-x) var(--theme-end-y)); opacity:0; } }
 @keyframes theme-preview-ripple { 0% { opacity:0; transform:translate(-50%, -50%) scale(.25); } 28% { opacity:.7; } 100% { opacity:0; transform:translate(-50%, -50%) scale(18); } }
 @media (prefers-reduced-motion: reduce) { .theme-transition-layer { display:none; } }
+
+/* Theme gallery overhaul: a calm, layered material system driven by the
+   existing theme tokens. The launcher remains above these atmosphere layers. */
+body { background:
+  radial-gradient(ellipse 70% 48% at 8% 0%, color-mix(in srgb, var(--accent) 15%, transparent), transparent 72%),
+  radial-gradient(ellipse 52% 52% at 100% 100%, color-mix(in srgb, var(--accent) 10%, transparent), transparent 75%),
+  linear-gradient(135deg, var(--bg), var(--bg2)); }
+#appTitlebar, #rail, #side2, main, #statusbar { position: relative; z-index: 1; }
+.panel, .theme-panel, .theme-card { border-color: color-mix(in srgb, var(--line) 82%, var(--accent)); box-shadow: 0 14px 34px rgb(0 0 0 / .12), inset 0 1px 0 rgb(255 255 255 / .045); }
+.theme-panel { background: color-mix(in srgb, var(--panel) 88%, transparent); overflow: hidden; }
+.theme-panel-summary { min-height: 62px; padding: 14px 18px; background: linear-gradient(100deg, color-mix(in srgb, var(--accent) 8%, transparent), transparent 55%); }
+.theme-gallery-intro { max-width: 70ch; margin: 0 0 16px; }
+.theme-gallery-section { position: relative; padding: 14px 0 4px; }
+.theme-gallery-section + .theme-gallery-section { border-top: 1px solid color-mix(in srgb, var(--line) 55%, transparent); }
+.theme-gallery-heading { display: flex; align-items: center; gap: 8px; margin: 0 0 11px; color: var(--text); letter-spacing: .01em; }
+.theme-gallery-icon { display: grid; place-items: center; width: 25px; height: 25px; border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent); border-radius: 8px; color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent); font-size: 13px; }
+.theme-card { position: relative; isolation: isolate; min-height: 130px; padding: 8px; border-radius: 13px; background: linear-gradient(145deg, color-mix(in srgb, var(--panel2) 92%, transparent), color-mix(in srgb, var(--panel) 94%, transparent)); transition: transform .22s cubic-bezier(.2,.75,.2,1), border-color .22s ease, box-shadow .22s ease, background .22s ease; }
+.theme-card::before { content: ''; position: absolute; inset: 1px; z-index: -1; border-radius: 12px; background: radial-gradient(circle at 80% 10%, color-mix(in srgb, var(--preview-accent) 13%, transparent), transparent 46%); pointer-events: none; }
+.theme-card:hover, .theme-card:focus-visible { transform: translateY(-3px); border-color: color-mix(in srgb, var(--accent) 78%, var(--line)); box-shadow: 0 18px 34px rgb(0 0 0 / .18), 0 0 0 3px color-mix(in srgb, var(--accent) 15%, transparent); }
+.theme-card.on { background: linear-gradient(145deg, color-mix(in srgb, var(--accent-bg) 68%, var(--panel2)), color-mix(in srgb, var(--panel) 92%, transparent)); border-color: var(--accent); box-shadow: 0 12px 28px rgb(0 0 0 / .18), inset 0 0 0 1px color-mix(in srgb, var(--accent) 28%, transparent); }
+.theme-swatch { height: 76px; border-radius: 9px; box-shadow: inset 0 0 0 1px rgb(255 255 255 / .12), inset 0 -18px 32px rgb(0 0 0 / .16), 0 5px 12px rgb(0 0 0 / .12); }
+.theme-preview-art { display: grid; place-items: center; width: 38px; height: 38px; right: 9px; bottom: 5px; border: 1px solid color-mix(in srgb, var(--preview-accent) 55%, transparent); border-radius: 50%; background: radial-gradient(circle, color-mix(in srgb, var(--preview-accent) 28%, transparent), transparent 70%); box-shadow: 0 0 15px color-mix(in srgb, var(--preview-accent) 24%, transparent); }
+.theme-art-ring { width: 22px; height: 22px; border-style: solid; border-color: color-mix(in srgb, var(--preview-accent) 70%, transparent); opacity: .65; }
+.theme-art-icon { display: grid; place-items: center; color: var(--preview-accent); text-shadow: 0 0 9px color-mix(in srgb, var(--preview-accent) 80%, transparent); }
+.theme-preview-icon { width: 15px; height: 15px; stroke-width: 1.7; }
+.theme-card.theme-winterNight .theme-preview-atmosphere { background-image: radial-gradient(circle at 9% 18%, #fff9 0 .8px, transparent 1.6px), radial-gradient(circle at 31% 61%, #dff7ffb8 0 .55px, transparent 1.45px), radial-gradient(circle at 52% 12%, #fff9 0 .42px, transparent 1.3px), radial-gradient(circle at 73% 44%, #dff7ffb0 0 .9px, transparent 1.8px), radial-gradient(circle at 91% 78%, #fff8 0 .55px, transparent 1.5px), radial-gradient(circle at 16% 86%, #dff7ff99 0 .7px, transparent 1.7px), radial-gradient(circle at 61% 86%, #fff8 0 .42px, transparent 1.25px), radial-gradient(circle at 84% 8%, #dff7ff99 0 .62px, transparent 1.55px), radial-gradient(ellipse at 72% 70%, #85c9ee22, transparent 56%); background-size: 173px 241px, 293px 371px, 431px 293px, 521px 337px, 617px 433px, 347px 479px, 733px 389px, 463px 607px, 100% 100%; animation: theme-preview-snow 14s linear infinite alternate; }
+:root[data-app-theme="winterNight"] body::before { opacity: .61; background-image: radial-gradient(circle at 8% 13%, rgb(255 255 255 / 46%) 0 .5px, transparent 1.35px), radial-gradient(circle at 37% 79%, rgb(220 245 255 / 34%) 0 .8px, transparent 1.8px), radial-gradient(circle at 74% 24%, rgb(255 255 255 / 30%) 0 .35px, transparent 1.1px), radial-gradient(circle at 92% 67%, rgb(220 245 255 / 30%) 0 .95px, transparent 2.2px), radial-gradient(circle at 54% 52%, rgb(255 255 255 / 25%) 0 .55px, transparent 1.5px), radial-gradient(circle at 19% 43%, rgb(207 237 253 / 25%) 0 .7px, transparent 1.75px), radial-gradient(circle at 83% 91%, rgb(255 255 255 / 23%) 0 .3px, transparent 1px), radial-gradient(circle at 63% 6%, rgb(207 233 248 / 21%) 0 .65px, transparent 1.7px); background-size: 293px 467px, 557px 733px, 811px 397px, 977px 613px, 433px 907px, 719px 521px, 1181px 691px, 641px 983px; animation: seasonal-snowfall-random 91s linear infinite alternate; }
+:root[data-app-theme="winterNight"] body::after { background: radial-gradient(ellipse at 14% 0%, #9bdfff1b, transparent 35%), radial-gradient(ellipse at 84% 85%, #5a91d51c, transparent 46%), linear-gradient(125deg, transparent 0 58%, #bddfff08 72%, transparent 84%); }
+:root[data-app-theme="springBloom"] body { background: radial-gradient(ellipse at 80% 0%, #efb8d522, transparent 36%), linear-gradient(145deg, var(--bg), #263d30); }
+:root[data-app-theme="summerSolstice"] body { background: radial-gradient(ellipse at 75% 0%, #ffd9793b, transparent 38%), linear-gradient(145deg, var(--bg), #4b3018); }
+:root[data-app-theme="autumnHarvest"] body { background: radial-gradient(ellipse at 15% 0%, #ffb15a26, transparent 37%), linear-gradient(145deg, var(--bg), #47261d); }
+:root[data-app-theme="valentines"] body { background: radial-gradient(ellipse at 82% 0%, #ff9fbd25, transparent 38%), linear-gradient(145deg, var(--bg), #4b2439); }
+:root[data-app-theme="halloweenNight"] body { background: radial-gradient(ellipse at 86% 2%, #8d6ac633, transparent 32%), linear-gradient(145deg, var(--bg), #201b3d); }
+:root[data-app-theme="liquidGlass"] body { background: radial-gradient(ellipse at 12% 0%, #fff9, transparent 28%), radial-gradient(ellipse at 88% 100%, #8cc9ed55, transparent 42%), linear-gradient(145deg, #c5dce9, #eef7fb); }
+@media (prefers-reduced-motion: reduce) { .theme-card, .theme-preview-atmosphere, .theme-art-ring { animation: none !important; transition: none !important; } }
 .sidebar-panel { max-width: 720px; }
 .sidebar-prefs { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
 .sidebar-pref-row { display: flex; align-items: center; gap: 8px; min-height: 46px; padding: 5px 8px; border-bottom: 1px solid var(--line); background: var(--bg2); }

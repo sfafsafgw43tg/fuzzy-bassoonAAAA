@@ -738,14 +738,23 @@ function renderSettings(v: HTMLElement): void {
   const themeGrid = h('div', { class: 'theme-grid', role: 'radiogroup', 'aria-label': t('settings.defaultThemes') });
   const funGrid = h('div', { class: 'theme-grid fun-theme-grid', role: 'radiogroup', 'aria-label': t('settings.seasons') });
   const paletteGrid = h('div', { class: 'theme-grid palette-theme-grid', role: 'radiogroup', 'aria-label': t('settings.paletteThemes') });
-  const preview = () => h('span', { class: 'theme-swatch', 'aria-hidden': 'true' },
+  const themeGlyphs: Partial<Record<Settings['ui']['theme'], string>> = {
+    ink: 'diamond', obsidian: 'shield', slate: 'box', midnight: 'moon', navy: 'globe', charcoal: 'activity',
+    amethyst: 'wand', purple: 'star', forest: 'folder', emerald: 'diamond', olive: 'activity', rose: 'star',
+    sunset: 'activity', copper: 'diamond', frutigerAero: 'globe', liquidGlass: 'layers', halloweenDay: 'moon', halloweenNight: 'moon',
+    kush: 'wand', tactical: 'shield', winterNight: 'moon', winterDay: 'activity', springBloom: 'star', summerSolstice: 'activity',
+    autumnHarvest: 'wand', valentines: 'star', aubergine: 'diamond', aqua: 'activity', banana: 'activity', blend: 'star',
+    blossom: 'star', bubblegum: 'star', candyCane: 'diamond', cherry: 'star', christmas: 'star', coral: 'activity',
+    digitalHorizon: 'activity', express: 'rocket',
+  };
+  const preview = (id: Settings['ui']['theme']) => h('span', { class: 'theme-swatch', 'aria-hidden': 'true' },
     h('span', { class: 'theme-preview-bar' }, h('i'), h('i'), h('i'), h('span', { class: 'theme-preview-tab', text: 'Octo' })),
     h('span', { class: 'theme-preview-address' }, h('i', { class: 'theme-preview-back' }), h('i', { class: 'theme-preview-forward' }), h('span', { text: 'octo.su' }), h('i', { class: 'theme-preview-menu' })),
     h('span', { class: 'theme-preview-body' },
       h('span', { class: 'theme-preview-atmosphere' }),
       h('span', { class: 'theme-preview-rail' }, h('i'), h('i'), h('i'), h('i')),
       h('span', { class: 'theme-preview-page' }, h('i', { class: 'wide' }), h('i'), h('i'), h('i', { class: 'short' })),
-      h('span', { class: 'theme-preview-art' }, h('span', { class: 'theme-art-ring' }), h('span', { class: 'theme-art-icon' }))));
+      h('span', { class: 'theme-preview-art' }, h('span', { class: 'theme-art-ring' }), h('span', { class: 'theme-art-icon' }, icon(themeGlyphs[id] ?? 'diamond', 15, 'theme-preview-icon')))));
   const markTheme = (active: Settings['ui']['theme']) => {
     for (const item of v.querySelectorAll<HTMLElement>('.theme-card')) {
       const selected = item.dataset.theme === active;
@@ -759,7 +768,7 @@ function renderSettings(v: HTMLElement): void {
     for (const [id, name, desc] of choices) {
       const selected = s.ui.theme === id;
       const card = h('button', { type: 'button', class: `theme-card theme-${id}${selected ? ' on' : ''}`, 'data-theme': id, role: 'radio', 'aria-checked': String(selected) },
-        h('span', { class: 'theme-check' }, selected ? icon('check', 14) : null), preview(), h('b', { text: name }), h('span', { text: t(desc) }));
+        h('span', { class: 'theme-check' }, selected ? icon('check', 14) : null), preview(id), h('b', { text: name }), h('span', { text: t(desc) }));
     card.onclick = async (event) => {
       if (init.settings.ui.theme === id) return;
       const previous = init.settings.ui.theme;

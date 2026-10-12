@@ -121,6 +121,14 @@ describe('browser entry UI', () => {
     expect(launcherCss).toContain('opacity:.12; background-image:radial-gradient(circle at 18% 28%');
     expect(launcherCss).toContain('pointer-events:none;');
   });
+  it('gives the theme gallery custom icon previews and a richer Winter Night backdrop', () => {
+    expect(launcher).toContain('const themeGlyphs');
+    expect(launcher).toContain('theme-preview-icon');
+    expect(launcherCss).toContain('.theme-card:hover, .theme-card:focus-visible');
+    expect(launcherCss).toContain(':root[data-app-theme="winterNight"] body::before');
+    expect(launcherCss).toContain('seasonal-snowfall-random 91s linear infinite alternate');
+    expect(launcherCss).toContain('.theme-panel-summary');
+  });
 
   it('restores the selected profile folder after the launcher is reopened', () => {
     expect(launcherProfiles).toContain("const ACTIVE_FOLDER_KEY = 'octo.active-profile-folder';");
