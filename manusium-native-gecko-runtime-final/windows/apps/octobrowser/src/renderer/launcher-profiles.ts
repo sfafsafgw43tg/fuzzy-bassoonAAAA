@@ -967,7 +967,7 @@ export function renderProfiles(v: HTMLElement): void {
     if (expanded) search.focus();
   };
   searchToggle.onclick = () => setSearchExpanded(searchBox.classList.contains('collapsed'));
-  searchToggle.setAttribute('aria-expanded', 'true');
+  setSearchExpanded(false);
   v.append(h('div', { class: 'toolbar' },
     h('h1', { class: 'ell', text: title }),
     h('div', { class: 'grow' }),
