@@ -172,8 +172,21 @@ function visibleProfiles(): Profile[] {
 /** START: launch directly; dialogs only when something is needed (passphrase, Tor Browser...). */
 export async function startProfile(p: Profile): Promise<void> {
   if (p.encrypted && p.sealed) { void preLaunch(p); return; }
+  const local = S.profiles.find((entry) => entry.id === p.id);
+  const optimisticStart = Boolean(local && !local.running);
+  if (local && optimisticStart) {
+    local.running = true;
+    local.ready = false;
+    local.stopping = false;
+    S.render();
+  }
   const r = await run(api.invoke<{ status: string; detail?: string }>('mgr:launch', p.id, {}));
-  if (!r) return;
+  if (!r) {
+    if (local && optimisticStart) { local.running = false; local.ready = false; S.render(); }
+    return;
+  }
+  const failed = !['started', 'focused', 'wsb-launched', 'tor-launched', 'inkbrowser-launched', 'firefox-launched'].includes(r.status);
+  if (failed && local && optimisticStart) { local.running = false; local.ready = false; S.render(); }
   switch (r.status) {
     case 'started': case 'focused': case 'wsb-launched': case 'tor-launched': case 'inkbrowser-launched': case 'firefox-launched': break;
     case 'need-passphrase': case 'wrong-passphrase': void preLaunch(p); break;

@@ -200,6 +200,18 @@ describe('browser entry UI', () => {
     expect(manager).toContain('NativeChromiumTabs.connect(debugPort)');
   });
 
+  it('gives native Chromium a real new-tab fallback and applies the selected search engine', () => {
+    expect(manager).toContain('prepareChromiumSearchPreference(profileFolder');
+    expect(manager).toContain('default_search_provider_data');
+    expect(manager).toContain("startPages.shift() ?? 'chrome://newtab/'");
+  });
+
+  it('shows Starting immediately while a profile launch waits for readiness', () => {
+    expect(launcherProfiles).toContain('const optimisticStart = Boolean(local && !local.running);');
+    expect(launcherProfiles).toContain("local.ready = false;");
+    expect(launcherProfiles).toContain("h('span', { class: 'spin' }), h('span', { text: t('ui.starting') })");
+  });
+
   it('uses a compact functional shell menu without a fake Octo account badge', () => {
     expect(browser).not.toContain("$('octoAccount')");
     expect(browser).toContain('function renderChromeMenu()');

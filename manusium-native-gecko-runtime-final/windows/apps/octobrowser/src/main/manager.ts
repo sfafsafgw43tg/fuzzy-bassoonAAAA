@@ -86,6 +86,39 @@ function launcherChrome(theme: string): { color: string; symbolColor: string } {
   return LAUNCHER_CHROME_COLORS[theme] ?? LAUNCHER_CHROME_COLORS.ink;
 }
 
+/**
+ * Apply the profile's ordinary search-engine choice to Chromium's documented
+ * JSON Preferences file. This is deliberately a normal browser preference:
+ * it does not rewrite identity, inject scripts, or alter site behavior.
+ */
+function prepareChromiumSearchPreference(profileFolder: string, engine: string | undefined): void {
+  const queryUrl = engine && Object.prototype.hasOwnProperty.call(SEARCH_ENGINES, engine)
+    ? SEARCH_ENGINES[engine as SearchEngine]
+    : SEARCH_ENGINES.duckduckgo;
+  const preferencesPath = path.join(profileFolder, 'Default', 'Preferences');
+  fs.mkdirSync(path.dirname(preferencesPath), { recursive: true });
+  let preferences: Record<string, unknown> = {};
+  try {
+    if (fs.existsSync(preferencesPath)) {
+      const parsed = JSON.parse(fs.readFileSync(preferencesPath, 'utf8')) as unknown;
+      if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) preferences = parsed as Record<string, unknown>;
+    }
+  } catch {
+    // A corrupt Preferences file must not prevent the browser from starting.
+    // Chromium will repair it; leave the existing file untouched in that case.
+    return;
+  }
+  preferences.default_search_provider_data = {
+    template_url_data: {
+      short_name: engine && Object.prototype.hasOwnProperty.call(SEARCH_ENGINES, engine) ? engine : 'duckduckgo',
+      keyword: engine && Object.prototype.hasOwnProperty.call(SEARCH_ENGINES, engine) ? engine : 'duckduckgo',
+      url: `${queryUrl}%s`,
+      safe_for_autoreplace: false,
+    },
+  };
+  fs.writeFileSync(preferencesPath, JSON.stringify(preferences));
+}
+
 assertSafeWebPreferences({ ...SAFE_WEB_PREFERENCES, webviewTag: false });
 const importedHandsetsDir = () => path.join(os.homedir(), '.octobrowser', 'handsets');
 
@@ -848,6 +881,7 @@ export class Manager {
       if (!exe) return { status: 'inkbrowser-missing', detail: 'bundled-runtime-missing' };
       const profileFolder = path.join(this.ctx.layout.profileEngineDir(p.id), 'inkbrowser-profile');
       prepareChromiumPrivacy(profileFolder, p.enginePrivacy.chromium);
+      prepareChromiumSearchPreference(profileFolder, p.searchEngine ?? this.ctx.settings.load().network.searchEngine);
       const debugPort = await this.freePort();
       let restoreUrls: string[] = [];
       let restoreActiveIndex = 0;
@@ -865,7 +899,7 @@ export class Manager {
         .filter((url) => !restoreUrls.includes(url))
         .slice(0, 20);
       if (!restoreUrls.length) {
-        const first = /^https?:\/\//i.test(p.homePage) ? p.homePage : startPages.shift() ?? 'about:blank';
+        const first = /^https?:\/\//i.test(p.homePage) ? p.homePage : startPages.shift() ?? 'chrome://newtab/';
         restoreUrls.push(first);
       }
       restoreUrls.push(...startPages);
