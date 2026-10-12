@@ -2439,6 +2439,18 @@ export class Manager {
         return { ok: false, message: error instanceof Error ? error.message : 'Could not open folder' };
       }
     });
+    handle('mgr:android-studio-open', L, async () => {
+      const status = await androidStudioStatusAsync();
+      if (!status.studioAppPath || !fs.existsSync(status.studioAppPath)) {
+        return { ok: false, message: 'Android Studio was not found. Install it, then try again.' };
+      }
+      try {
+        launchDetached(status.studioAppPath);
+        return { ok: true, message: '' };
+      } catch (error) {
+        return { ok: false, message: error instanceof Error ? error.message : 'Android Studio could not be opened.' };
+      }
+    });
     handle('mgr:profile-launch-isolated-vm', L, async (_e, id: string) => {
       try {
         const p = this.profiles.get(String(id));

@@ -17,6 +17,7 @@ const browserCss = read('apps/octobrowser/src/renderer/browser.css');
 const launcherProfiles = read('apps/octobrowser/src/renderer/launcher-profiles.ts');
 const launcherDialogs = read('apps/octobrowser/src/renderer/launcher-dialogs.ts');
 const launcher = read('apps/octobrowser/src/renderer/launcher.ts');
+const launcherVirtualBox = read('apps/octobrowser/src/renderer/launcher-virtualbox.ts');
 const launcherUi = read('apps/octobrowser/src/renderer/launcher-ui.ts');
 const launcherCss = read('apps/octobrowser/src/renderer/launcher.css');
 const launcherBg = read('apps/octobrowser/src/renderer/launcher-backup.ts');
@@ -39,6 +40,18 @@ const i18nEn = read('packages/core/src/i18n/en.ts');
 const i18nPl = read('packages/core/src/i18n/pl.ts');
 
 describe('browser entry UI', () => {
+  it('uses a truthful local Android Studio introduction instead of VM setup controls', () => {
+    expect(launcherVirtualBox).toContain("t('android.studio.title')");
+    expect(launcherVirtualBox).toContain("t('android.studio.open')");
+    expect(launcherVirtualBox).toContain("mgr:android-studio-open");
+    expect(launcherVirtualBox).not.toContain('Create & Auto-Setup Linux VM');
+    expect(launcherVirtualBox).not.toContain('mgr:virtualbox-studio-vm-create');
+    expect(launcherVirtualBox).not.toContain('mgr:virtualbox-studio-vm-script');
+    expect(manager).toContain("handle('mgr:android-studio-open'");
+    expect(i18nEn).toContain("'android.studio.title': 'Android Studio'");
+    expect(i18nEn).toContain("'android.studio.open': 'Open Android Studio'");
+  });
+
   it('uses three balanced titlebar controls and an icon-only launcher brand', () => {
     for (const code of [browserHtml, launcherHtml, browser, launcher]) {
       expect(code).not.toContain('windowFullscreen');
