@@ -274,11 +274,15 @@ describe('browser entry UI', () => {
   it('keeps stable normal-sized tabs and uses reduced-motion-aware browser animation', () => {
     expect(browser).toContain("prefers-reduced-motion: reduce");
     expect(browser).toContain('playClosingTabMotion');
+    expect(browser).toContain('const activeChanged = tabMotionPrimed && lastRenderedActiveId !== state.activeId;');
+    expect(browser).toContain("duration: 145, easing: 'cubic-bezier(.2,.8,.2,1)'");
     expect(browser).toContain('TAB_MOTION_DURATION = 220');
     expect(browser).toContain('TAB_MOTION_EASING');
     expect(browserCss).toContain('flex: 0 1 220px');
     expect(browserCss).toContain('width: 220px');
     expect(browserCss).toContain('#tabs { display: flex; gap: 2px; min-width: 0; flex: 0 1 auto;');
+    expect(browserCss).toContain('transition: background-color .14s ease, color .14s ease, box-shadow .14s ease;');
+    expect(browserCss).toContain('.tab.active { will-change: transform, opacity; }');
     expect(browserHtml.indexOf('id="newTab"')).toBeGreaterThan(browserHtml.indexOf('id="tabs"'));
     expect(browserHtml.indexOf('class="drag"')).toBeGreaterThan(browserHtml.indexOf('id="newTab"'));
     expect(browserCss).toContain('@keyframes browser-pop');

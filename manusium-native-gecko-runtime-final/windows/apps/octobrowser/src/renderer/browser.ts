@@ -533,6 +533,7 @@ const SOFT_OPEN_DURATION = 160;
 const SOFT_OPEN_EASING = 'cubic-bezier(.2,.8,.2,1)';
 let tabMotionPrimed = false;
 let lastTabSignature = '';
+let lastRenderedActiveId: number | null = null;
 
 type TabMotion = { node: HTMLElement; rect: DOMRect };
 
@@ -571,6 +572,7 @@ function renderTabs(): void {
   const other = vertical ? $('tabs') : $('vtabs');
   const signature = `${vertical ? 'v' : 'h'}|${state.activeId}|${state.splitId}|${state.tabs.map((tab) => tab.id).join(',')}`;
   const structureChanged = signature !== lastTabSignature;
+  const activeChanged = tabMotionPrimed && lastRenderedActiveId !== state.activeId;
   lastTabSignature = signature;
   const nextIds = new Set(state.tabs.map((tab) => String(tab.id)));
   const previous = new Map<string, TabMotion>();
@@ -622,7 +624,19 @@ function renderTabs(): void {
       }
     });
   }
+  if (activeChanged && tabMotionEnabled()) {
+    requestAnimationFrame(() => {
+      const active = box.querySelector<HTMLElement>('.tab.active');
+      if (!active) return;
+      active.getAnimations().forEach((animation) => animation.cancel());
+      active.animate([
+        { opacity: .72, transform: vertical ? 'translate3d(0,2px,0) scale(.985)' : 'translate3d(0,2px,0) scale(.985)' },
+        { opacity: 1, transform: 'translate3d(0,0,0) scale(1)' },
+      ], { duration: 145, easing: 'cubic-bezier(.2,.8,.2,1)' });
+    });
+  }
   tabMotionPrimed = true;
+  lastRenderedActiveId = state.activeId;
   renderBars();
 }
 

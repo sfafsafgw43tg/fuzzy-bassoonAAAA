@@ -53,7 +53,8 @@ body.vertical #tabstrip #tabs { display: none; }
 .tab { display: flex; align-items: center; gap: 6px; height: 34px; width: 220px; min-width: 64px; max-width: 220px; flex: 0 1 220px; padding: 0 10px;
   background: transparent; border-radius: 9px 9px 0 0; color: var(--muted); cursor: default; position: relative;
   touch-action: none; -webkit-app-region: no-drag;
-  transition: background-color .16s ease, color .14s ease; }
+  transition: background-color .14s ease, color .14s ease, box-shadow .14s ease; }
+.tab.active { will-change: transform, opacity; }
 .tab, .tab * { -webkit-user-drag: none; }
 body.tab-dragging, body.tab-dragging .tab { cursor: grabbing; }
 .tab.tab-drag-source { opacity: .28; }
