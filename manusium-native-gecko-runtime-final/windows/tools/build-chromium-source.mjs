@@ -99,7 +99,7 @@ function run(command, args, cwd, label = command) {
     const heartbeat = setInterval(() => {
       if (Date.now() - lastOutput >= 10000) {
         const elapsed = Math.floor((Date.now() - started) / 1000);
-        console.log(`[build-chromium-source] still active: ${label} (${elapsed}s; waiting for Git/network output)`);
+        console.log(`[build-chromium-source] still active: ${label} (${elapsed}s; child process has not emitted output yet)`);
         lastOutput = Date.now();
       }
     }, 10000);
@@ -195,7 +195,7 @@ async function sourceCheckout(source, version, skipSync) {
   const actual = chromiumVersion(source);
   if (actual !== version) {
     const tag = `refs/tags/${version}`;
-    await run('git', ['fetch', '--depth=1', 'origin', `${tag}:${tag}`], source, `fetching pinned Chromium tag ${tag}`);
+    await run('git', ['fetch', '--progress', '--depth=1', 'origin', `${tag}:${tag}`], source, `fetching pinned Chromium tag ${tag}`);
     const pinnedCommit = runCapture('git', ['rev-list', '-n', '1', tag], source, `resolving Chromium tag ${tag}`).trim();
     if (!/^[0-9a-f]{40}$/i.test(pinnedCommit)) fail(`Chromium tag ${tag} did not resolve to a commit`);
     await run('git', ['checkout', '--detach', pinnedCommit], source, `checking out Chromium ${version} (${pinnedCommit})`);
