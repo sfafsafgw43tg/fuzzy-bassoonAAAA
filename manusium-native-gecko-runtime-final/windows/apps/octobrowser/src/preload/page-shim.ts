@@ -507,10 +507,19 @@ export function pageShim(c: PageConfig, eventName: string): void {
           if (p === 0x9246 && fp.webglRenderer) return fp.webglRenderer;
           return orig(...args);
         });
+        method(P, 'getSupportedExtensions', (_self, _args, orig) => {
+          const list = orig() as unknown;
+          if (!Array.isArray(list) || !(fp.webgl === 'noise' || fp.webglVendor || fp.webglRenderer)) return list;
+          return list.includes('WEBGL_debug_renderer_info') ? list : [...list, 'WEBGL_debug_renderer_info'];
+        });
         method(P, 'getExtension', (self, args, orig) => {
           const ext = orig(...args) as Record<string, unknown> | null;
-          if (args[0] === 'WEBGL_debug_renderer_info' && ext) {
-            return new Proxy(ext, {
+          if (args[0] === 'WEBGL_debug_renderer_info' && (fp.webgl === 'noise' || fp.webglVendor || fp.webglRenderer)) {
+            // Keep the selected identity readable through the debug path even
+            // when a software adapter does not expose the native extension.
+            // No limits or rendering capabilities are fabricated here.
+            const debugExt = ext ?? { UNMASKED_VENDOR_WEBGL: 0x9245, UNMASKED_RENDERER_WEBGL: 0x9246 };
+            return new Proxy(debugExt, {
               get(target, prop) {
                 if (prop === 'UNMASKED_VENDOR_WEBGL') return 0x9245;
                 if (prop === 'UNMASKED_RENDERER_WEBGL') return 0x9246;
@@ -580,6 +589,11 @@ export function pageShim(c: PageConfig, eventName: string): void {
           if (parameter === 0x9245 && config.vendor) return config.vendor;
           if (parameter === 0x9246 && config.renderer) return config.renderer;
           return orig(...args);
+        });
+        replace(P, 'getSupportedExtensions', (_self, _args, orig) => {
+          const list = orig() as unknown;
+          if (!Array.isArray(list) || !(config.webgl === 'noise' || config.vendor || config.renderer)) return list;
+          return list.includes('WEBGL_debug_renderer_info') ? list : [...list, 'WEBGL_debug_renderer_info'];
         });
         replace(P, 'getExtension', (_self, args, orig) => {
           const extension = orig(...args) as Record<string, unknown> | null;

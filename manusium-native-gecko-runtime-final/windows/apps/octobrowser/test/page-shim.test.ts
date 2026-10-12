@@ -98,7 +98,7 @@ describe('pageShim Graphics Card Emulation', () => {
       getShaderPrecisionFormat(s: number, p: number): unknown {
         return { rangeMin: 62, rangeMax: 62, precision: 16 };
       }
-      getSupportedExtensions(): string[] { return ['OES_texture_float', 'WEBGL_debug_renderer_info']; }
+      getSupportedExtensions(): string[] { return ['OES_texture_float']; }
       getExtension(n: string): unknown {
         if (n === 'WEBGL_debug_renderer_info') return { UNMASKED_VENDOR_WEBGL: 0x9245, UNMASKED_RENDERER_WEBGL: 0x9246 };
         return null;
