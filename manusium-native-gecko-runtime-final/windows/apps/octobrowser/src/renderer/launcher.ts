@@ -708,6 +708,7 @@ function renderSettings(v: HTMLElement): void {
     h('span', { class: 'theme-preview-bar' }, h('i'), h('i'), h('i'), h('span', { class: 'theme-preview-tab', text: 'Octo' })),
     h('span', { class: 'theme-preview-address' }, h('i', { class: 'theme-preview-back' }), h('i', { class: 'theme-preview-forward' }), h('span', { text: 'octo.su' }), h('i', { class: 'theme-preview-menu' })),
     h('span', { class: 'theme-preview-body' },
+      h('span', { class: 'theme-preview-atmosphere' }),
       h('span', { class: 'theme-preview-rail' }, h('i'), h('i'), h('i'), h('i')),
       h('span', { class: 'theme-preview-page' }, h('i', { class: 'wide' }), h('i'), h('i'), h('i', { class: 'short' })),
       h('span', { class: 'theme-preview-art' }, h('span', { class: 'theme-art-ring' }), h('span', { class: 'theme-art-icon' }))));
