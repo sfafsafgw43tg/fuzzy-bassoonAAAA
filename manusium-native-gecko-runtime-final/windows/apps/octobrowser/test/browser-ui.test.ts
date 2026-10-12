@@ -660,6 +660,14 @@ describe('browser entry UI', () => {
     expect(launcherCss).toContain('max-width: 420px;');
     expect(launcherCss).toContain('backdrop-filter: blur(10px);');
   });
+  it('collapses the profile search into an animated magnifying-glass toggle', () => {
+    expect(launcherProfiles).toContain("class: 'search-toggle'");
+    expect(launcherProfiles).toContain("searchBox.classList.contains('collapsed')");
+    expect(launcherProfiles).toContain("searchToggle.setAttribute('aria-expanded'");
+    expect(launcherCss).toContain('.profile-search.collapsed { width: 38px;');
+    expect(launcherCss).toContain('.profile-search.collapsed input { flex: 0 0 0;');
+    expect(launcherCss).toContain('transition: width .22s var(--mo-ease)');
+  });
 });
 
 describe('tab right-click dropdown', () => {

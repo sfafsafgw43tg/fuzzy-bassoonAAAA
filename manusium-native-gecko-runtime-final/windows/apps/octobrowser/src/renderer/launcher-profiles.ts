@@ -959,7 +959,15 @@ export function renderProfiles(v: HTMLElement): void {
   const organization = h('div', { class: 'profile-organization' }, category, sorting);
   const search = input(S.search, { type: 'search', placeholder: t('ui.searchPh'), 'aria-label': t('ui.searchPh'), id: 'profileSearch' });
   search.oninput = () => { S.search = search.value; drawTable(); };
-  const searchBox = h('div', { class: 'search' }, icon('search', 16), search);
+  const searchToggle = h('button', { class: 'search-toggle', type: 'button', 'aria-label': t('ui.searchPh'), title: t('ui.searchPh') }, icon('search', 16));
+  const searchBox = h('div', { class: 'search profile-search' }, searchToggle, search);
+  const setSearchExpanded = (expanded: boolean): void => {
+    searchBox.classList.toggle('collapsed', !expanded);
+    searchToggle.setAttribute('aria-expanded', String(expanded));
+    if (expanded) search.focus();
+  };
+  searchToggle.onclick = () => setSearchExpanded(searchBox.classList.contains('collapsed'));
+  searchToggle.setAttribute('aria-expanded', 'true');
   v.append(h('div', { class: 'toolbar' },
     h('h1', { class: 'ell', text: title }),
     h('div', { class: 'grow' }),
