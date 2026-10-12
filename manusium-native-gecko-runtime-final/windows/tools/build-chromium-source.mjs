@@ -51,8 +51,15 @@ function quoteCmdArg(value) {
 }
 function resolveWindowsCommand(command) {
   if (process.platform !== 'win32' || path.isAbsolute(command) || /[\\/]/.test(command)) return command;
-  const located = spawnSync('where.exe', [command], { encoding: 'utf8', windowsHide: true });
-  if (located.status === 0 && located.stdout.trim()) return located.stdout.trim().split(/\r?\n/)[0];
+  const names = /\.[A-Za-z0-9]+$/.test(command) ? [command] : [command, `${command}.bat`, `${command}.cmd`, `${command}.exe`];
+  for (const name of names) {
+    const located = spawnSync('where.exe', [name], { encoding: 'utf8', windowsHide: true });
+    if (located.status === 0 && located.stdout.trim()) {
+      const matches = located.stdout.trim().split(/\r?\n/).map((entry) => entry.trim()).filter(Boolean);
+      const preferred = matches.find((entry) => /\.(?:bat|cmd|exe)$/i.test(entry));
+      if (preferred) return preferred;
+    }
+  }
   return command;
 }
 function prepareLaunch(command, args) {

@@ -197,6 +197,8 @@ describe('steps and the console installer', () => {
     expect(chromium).toContain("const command = process.platform === 'win32' ? 'git.exe' : 'git';");
     expect(chromium).toContain('optional Git recommendation setting was not changed; continuing');
     expect(chromium).not.toContain("await run('git', ['config', '--global', 'depot-tools.allowGlobalGitConfig', 'false']");
+    expect(chromium).toContain("[command, `${command}.bat`, `${command}.cmd`, `${command}.exe`]");
+    expect(chromium).toContain('preferred = matches.find((entry) => /\\.(?:bat|cmd|exe)$/i.test(entry))');
     expect(chromium).toContain("['sync', '-n', '-v'");
     expect(chromium).toContain('using compatible gclient sync flags');
     expect(chromium).toContain("process.env.DEPOT_TOOLS_UPDATE = '0'");
@@ -210,7 +212,7 @@ describe('steps and the console installer', () => {
     expect(chromium).toContain('removing the recognized incomplete Chromium checkout');
     expect(chromium).toContain('displayCommand(command, args, cwd)');
     expect(chromium).toContain('[build-chromium-source] exit:');
-    expect(chromium).toContain("spawnSync('where.exe', [command]");
+    expect(chromium).toContain("spawnSync('where.exe', [name]");
     expect(chromium).toContain("const launchArgs = ['/d', '/s', '/c'");
     expect(chromium).toContain("const commandLine = ['call', quoteCmdArg(resolved)");
     expect(chromium).not.toContain("`\"${commandLine}\"`");
