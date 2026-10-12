@@ -213,6 +213,10 @@ describe('browser entry UI', () => {
   it('gives native Chromium a real new-tab fallback and applies the selected search engine', () => {
     expect(manager).toContain('prepareChromiumSearchPreference(profileFolder');
     expect(manager).toContain('default_search_provider_data');
+    expect(manager).toContain("url: `${queryUrl}{searchTerms}`");
+    expect(manager).toContain('nativeChromiumNavigationTarget');
+    expect(manager).toContain('return searchEngineQueryUrl(selected, value);');
+    expect(manager).toContain('Promise.all(restoreUrls.slice(1).map((url) => tabs.newTab(url, false)))');
     expect(manager).toContain("startPages.shift() ?? 'chrome://newtab/'");
   });
 

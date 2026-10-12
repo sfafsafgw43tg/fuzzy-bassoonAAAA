@@ -22,7 +22,7 @@ import {
   checkConsistency, effectiveSettings, PROFILE_KINDS, privateBrowsingPatch, privateBrowsingStamp, validateBaseDir,
   PasswordStore, ProxyRotationMode, PROXY_ROTATION_MODES, proxyRotation,
   ProxyStore, ParsedProxy, ProxyType, PROXY_TYPES, ProxyCheckResult, parseProxy, parseProxyList, parseCookies, ImportedCookie, MAX_COOKIES, checkExitIp, needsBridge,
-  SEARCH_ENGINES, SearchEngine, checkAllSearchLatency,
+  SEARCH_ENGINES, SearchEngine, searchEngineQueryUrl, checkAllSearchLatency,
   MEDIA_PLUGINS, MEDIA_PLUGIN_IDS, mediaPluginEnabled, type MediaPluginId,
   generateFingerprint, setEngineVersion, engineVersion, FP_OSES, FingerprintOs, FingerprintConfig, fingerprintWarnings, validateProfileFingerprintConsistency, gpuPresets, userAgentFor,
 } from '@octo/core';
@@ -92,9 +92,8 @@ function launcherChrome(theme: string): { color: string; symbolColor: string } {
  * it does not rewrite identity, inject scripts, or alter site behavior.
  */
 function prepareChromiumSearchPreference(profileFolder: string, engine: string | undefined): void {
-  const queryUrl = engine && Object.prototype.hasOwnProperty.call(SEARCH_ENGINES, engine)
-    ? SEARCH_ENGINES[engine as SearchEngine]
-    : SEARCH_ENGINES.duckduckgo;
+  const selected = engine && Object.prototype.hasOwnProperty.call(SEARCH_ENGINES, engine) ? engine as SearchEngine : 'duckduckgo';
+  const queryUrl = SEARCH_ENGINES[selected];
   const preferencesPath = path.join(profileFolder, 'Default', 'Preferences');
   fs.mkdirSync(path.dirname(preferencesPath), { recursive: true });
   let preferences: Record<string, unknown> = {};
@@ -110,13 +109,25 @@ function prepareChromiumSearchPreference(profileFolder: string, engine: string |
   }
   preferences.default_search_provider_data = {
     template_url_data: {
-      short_name: engine && Object.prototype.hasOwnProperty.call(SEARCH_ENGINES, engine) ? engine : 'duckduckgo',
-      keyword: engine && Object.prototype.hasOwnProperty.call(SEARCH_ENGINES, engine) ? engine : 'duckduckgo',
-      url: `${queryUrl}%s`,
+      short_name: selected,
+      keyword: selected,
+      // Chromium's TemplateURL format uses {searchTerms}, not %s.
+      url: `${queryUrl}{searchTerms}`,
       safe_for_autoreplace: false,
     },
+    enabled: true,
   };
   fs.writeFileSync(preferencesPath, JSON.stringify(preferences));
+}
+
+function nativeChromiumNavigationTarget(input: string, engine: string | undefined): string {
+  const value = input.trim();
+  if (!value) return 'about:blank';
+  if (/^(https?|about):/i.test(value)) return value;
+  if (/^(localhost|(?:\d{1,3}\.){3}\d{1,3}|\[[0-9a-f:]+\])(?::\d+)?(?:\/.*)?$/i.test(value)) return `http://${value}`;
+  if (!/\s/.test(value) && /^[^/?#]+\.[a-z]{2,}(?::\d+)?(?:[/?#].*)?$/i.test(value)) return `https://${value}`;
+  const selected = engine && Object.prototype.hasOwnProperty.call(SEARCH_ENGINES, engine) ? engine as SearchEngine : 'duckduckgo';
+  return searchEngineQueryUrl(selected, value);
 }
 
 assertSafeWebPreferences({ ...SAFE_WEB_PREFERENCES, webviewTag: false });
@@ -912,8 +923,10 @@ export class Manager {
         extraArgs: chromiumPrivacyArgs(p.enginePrivacy.chromium),
       });
       const tabs = await NativeChromiumTabs.connect(debugPort);
-      const restoredTabs = [await tabs.activeTab()];
-      for (const url of restoreUrls.slice(1)) restoredTabs.push(await tabs.newTab(url, false));
+      // Non-active CDP tabs are independent. Create them concurrently so a
+      // profile with many restored/start pages does not pay their connection
+      // cost one after another; Promise.all preserves their configured order.
+      const restoredTabs = [await tabs.activeTab(), ...await Promise.all(restoreUrls.slice(1).map((url) => tabs.newTab(url, false)))];
       if (restoredTabs[restoreActiveIndex]) await tabs.activateTab(restoredTabs[restoreActiveIndex].id);
       const native = { engine, tabs, startedAt: Date.now(), runtimeVersion: p.chromiumRuntime ?? DEFAULT_CHROMIUM_VERSION };
       this.nativeChromium.set(p.id, native);
@@ -3176,8 +3189,8 @@ export class Manager {
       const native = this.nativeChromium.get(String(id));
       if (!native) throw new Error('Profile is not running in native Chromium');
       const raw = String(url ?? '').trim();
-      const target = /^(https?:\/\/|about:blank$)/i.test(raw) ? raw : (/^localhost(?::\d+)?(?:\/.*)?$/i.test(raw) ? `http://${raw}` : `https://${raw}`);
-      if (!/^https?:\/\//i.test(target) && target !== 'about:blank') throw new Error('Native Chromium accepts only web URLs');
+      const profile = this.profiles.get(String(id));
+      const target = nativeChromiumNavigationTarget(raw, profile.searchEngine ?? this.ctx.settings.load().network.searchEngine);
       const active = await native.tabs.activeTab();
       await native.tabs.navigate(active.id, target);
       return native.tabs.state(active.id);
@@ -3195,14 +3208,18 @@ export class Manager {
     handle('mgr:native-tab-new', L, async (_e, id: string, url?: string) => {
       const native = this.nativeChromium.get(String(id));
       if (!native) throw new Error('Profile is not running in native Chromium');
-      return native.tabs.newTab(String(url ?? 'about:blank'), true);
+      const profile = this.profiles.get(String(id));
+      return native.tabs.newTab(nativeChromiumNavigationTarget(String(url ?? 'about:blank'), profile.searchEngine ?? this.ctx.settings.load().network.searchEngine), true);
     });
     handle('mgr:native-tab-action', L, async (_e, id: string, tabId: string, action: 'activate' | 'close' | 'navigate', value?: string) => {
       const native = this.nativeChromium.get(String(id));
       if (!native) throw new Error('Profile is not running in native Chromium');
       if (action === 'activate') await native.tabs.activateTab(String(tabId));
       else if (action === 'close') await native.tabs.closeTab(String(tabId));
-      else await native.tabs.navigate(String(tabId), String(value ?? 'about:blank'));
+      else {
+        const profile = this.profiles.get(String(id));
+        await native.tabs.navigate(String(tabId), nativeChromiumNavigationTarget(String(value ?? 'about:blank'), profile.searchEngine ?? this.ctx.settings.load().network.searchEngine));
+      }
       return native.tabs.tabs();
     });
     handle('mgr:app-close-choice', L, (_e, choice: 'quit' | 'cancel') => { this.answerLauncherClose(choice === 'quit' ? 'quit' : 'cancel'); return true; });
