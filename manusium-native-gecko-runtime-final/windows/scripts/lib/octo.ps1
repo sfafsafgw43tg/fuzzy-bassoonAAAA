@@ -184,6 +184,7 @@ $Messages = @{
     setupBuilt        = 'Applications built: apps\octobrowser\dist, apps\octodetect\dist'
     runHidden         = 'Starting without a console window...'
     nativeFallback    = 'The bundled InkBrowser runtime is not available in this source checkout. Starting the Electron app instead; native Chromium profiles remain unavailable until a packaged runtime is installed.'
+    nativeRuntimeNotPublished = 'No verified InkBrowser Windows runtime release is published yet. Continuing with the Electron compatibility app; Chrome (Chromium) profiles remain unavailable until the signed runtime release is published.'
     noSources         = 'No installer and no OctoSuite sources here ({0}). Unpack the whole repository (with package.json, apps\ and tools\) or put OctoSuite-Setup-*.exe next to the scripts.'
     installFromSources = 'No release installer found - setting up the source copy in {0}.'
     ghNoGitDir        = 'These sources are not a git clone (no .git folder), so they cannot be fast-forwarded. Only the build is refreshed. Use "git clone" to get updates from GitHub.'
@@ -418,6 +419,7 @@ $Messages = @{
     setupBuilt        = 'Zbudowano aplikacje: apps\octobrowser\dist, apps\octodetect\dist'
     runHidden         = 'Uruchamianie bez okna konsoli...'
     nativeFallback    = 'Do tej kopii źródłowej nie dołączono środowiska InkBrowser. Uruchamiam aplikację Electron; profile natywnego Chromium będą niedostępne do czasu zainstalowania pakietu wydania.'
+    nativeRuntimeNotPublished = 'Nie opublikowano jeszcze zweryfikowanego środowiska InkBrowser dla Windows. Kontynuuję z aplikacją zgodności Electron; profile Chrome (Chromium) będą niedostępne do czasu opublikowania podpisanego środowiska.'
     noSources         = 'Nie ma tu ani instalatora, ani źródeł OctoSuite ({0}). Rozpakuj całe repozytorium (z plikami package.json, apps\ i tools\) albo połóż obok skryptów plik OctoSuite-Setup-*.exe.'
     installFromSources = 'Nie znaleziono instalatora wydania – konfigurowanie kopii źródłowej w {0}.'
     ghNoGitDir        = 'Te źródła nie są klonem git (brak folderu .git), więc nie można pobrać zmian. Odbudowana zostanie tylko aplikacja. Aby dostawać aktualizacje, użyj „git clone”.'
@@ -2400,15 +2402,32 @@ function Get-SetupSteps {
         # and acquires the separately built InkBrowser runtime from the signed
         # GitHub release asset. It must never compile Chromium on the user's PC.
         Assert-NotRunning @('octobrowser', 'octodetect')
-        Invoke-Npm @('run', 'fetch:chromium:windows')
+        $nativeAvailable = $false
+        $fetch = Invoke-NpmResult @('run', 'fetch:chromium:windows')
+        if ($fetch.code -eq 0) {
+          $nativeAvailable = $true
+        } else {
+          # A repository with no published release returns HTTP 404. This is a
+          # release-publication gap, not a damaged runtime. Keep the Electron
+          # app usable, but do not hide checksum, manifest, or other failures.
+          $fetchError = [string]$fetch.text
+          if ($fetchError -match '(?i)HTTP 404|release not found|no release') {
+            Warn (T 'nativeRuntimeNotPublished')
+          } else {
+            foreach ($line in @($fetchError -split "`r?`n" | Select-Object -Last 20)) { Write-Log 'error' $line }
+            Fail (T 'ghNpmFailed' 'run fetch:chromium:windows' $fetch.code)
+          }
+        }
         Invoke-Npm @('run', 'icons')
         Invoke-Npm @('run', 'build')
-        # Packaging remains strict: a missing or invalid native runtime aborts
-        # before the app is advertised as a working Chrome base.
-        $env:OCTO_REQUIRE_NATIVE_CHROMIUM = '1'
+        # Strictly verify a downloaded runtime. When no release exists, package
+        # Electron only and record that native Chromium is unavailable.
+        $env:OCTO_REQUIRE_NATIVE_CHROMIUM = if ($nativeAvailable) { '1' } else { '0' }
         Invoke-Npm @('run', 'prepare:prebuilt:windows')
-        $nativeAvailable = Test-AllChromiumRuntimes (Join-Path $InstallRoot 'resources')
-        if (-not $nativeAvailable) { Warn 'The prebuilt InkBrowser runtime did not pass the final installer check.'; return $false }
+        if ($nativeAvailable) {
+          $nativeAvailable = Test-AllChromiumRuntimes (Join-Path $InstallRoot 'resources')
+          if (-not $nativeAvailable) { Warn 'The prebuilt InkBrowser runtime did not pass the final installer check.'; return $false }
+        }
         $releaseDir = Join-Path $InstallRoot 'release'
         New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
         [ordered]@{
@@ -2843,6 +2862,14 @@ function Invoke-Npm([string[]]$npmArgs) {
     foreach ($line in @($r.text -split "`r?`n" | Select-Object -Last 20)) { Write-Log 'error' $line }
     Fail (T 'ghNpmFailed' ($npmArgs -join ' ') $r.code)
   }
+}
+
+# Same command runner as Invoke-Npm, but preserves output for the one expected
+# bootstrap condition where the signed runtime release has not been published.
+function Invoke-NpmResult([string[]]$npmArgs) {
+  $npm = Resolve-Tool 'npm'
+  if (-not $npm) { Fail (T 'ghNpmMissing') }
+  return (Invoke-Native $npm $npmArgs $InstallRoot)
 }
 
 function Invoke-Git([string[]]$gitArgs) {

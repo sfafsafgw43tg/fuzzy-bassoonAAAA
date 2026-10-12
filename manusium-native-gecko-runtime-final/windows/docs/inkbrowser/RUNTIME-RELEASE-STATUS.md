@@ -11,8 +11,9 @@ setup now downloads the prebuilt runtime from the repository's latest GitHub
 release using `tools/fetch-prebuilt-chromium.mjs`, verifies the archive SHA-256,
 then verifies the source-built manifest and executable SHA-256 before staging.
 The release asset is created only after the Windows build and clean-install
-job pass. Until that release exists, a source checkout correctly cannot launch
-Chrome Base. The implemented Windows builder uses upstream
+job pass. If no release exists yet, the installer completes the Electron
+compatibility app with a warning instead of producing a broken partial setup;
+Chrome Base remains unavailable until that release exists. The implemented Windows builder uses upstream
 `https://chromium.googlesource.com/chromium/src.git`, fetched with Chromium's
 `depot_tools`, plus the project-owned source overlay. GitHub's Chromium mirror
 confirmed these tags during this audit:

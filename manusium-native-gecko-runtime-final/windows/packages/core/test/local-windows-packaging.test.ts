@@ -17,6 +17,10 @@ describe('branded local Windows setup', () => {
     expect(prebuilt).toContain("manifest.distribution !== 'source-built'");
     expect(prebuilt).toContain("manifest.executable !== 'inkbrowser-chrome.exe'");
     expect(prebuilt).toContain("sha256(executable).toLowerCase() !== expected");
+    expect(installer).toContain('Invoke-NpmResult @(');
+    expect(installer).toContain("HTTP 404|release not found|no release");
+    expect(installer).toContain("T 'nativeRuntimeNotPublished'");
+    expect(installer).toContain("$env:OCTO_REQUIRE_NATIVE_CHROMIUM = if ($nativeAvailable) { '1' } else { '0' }");
     expect(packaging).toContain("runNode('verify-packaged-chromium.mjs'");
     const buildStep = installer.slice(installer.indexOf("@{ Key = 'stepBuild'"), installer.indexOf("@{ Key = 'stepShortcut'"));
     const stages = ["Invoke-Npm @('run', 'icons')", "Invoke-Npm @('run', 'build')", "OCTO_REQUIRE_NATIVE_CHROMIUM", "prebuilt-inkbrowser' } else { 'prebuilt-electron"];
@@ -70,8 +74,8 @@ describe('branded local Windows setup', () => {
   });
   it('bootstraps Chrome Base from a verified source-built release asset before packaging', () => {
     const buildStep = installer.slice(installer.indexOf("@{ Key = 'stepBuild'"), installer.indexOf("@{ Key = 'stepShortcut'"));
-    expect(buildStep).toContain("Invoke-Npm @('run', 'fetch:chromium:windows')");
-    expect(buildStep).toContain("$env:OCTO_REQUIRE_NATIVE_CHROMIUM = '1'");
+    expect(buildStep).toContain("Invoke-NpmResult @('run', 'fetch:chromium:windows')");
+    expect(buildStep).toContain("$env:OCTO_REQUIRE_NATIVE_CHROMIUM = if ($nativeAvailable) { '1' } else { '0' }");
     expect(fetchRuntime).toContain('releases/latest/download');
     expect(fetchRuntime).toContain('distribution !== \'source-built\' || manifest.modified !== true');
     expect(fetchRuntime).toContain('runtime archive SHA-256 mismatch');
