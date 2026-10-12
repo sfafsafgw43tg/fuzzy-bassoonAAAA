@@ -828,18 +828,19 @@ function Invoke-Open([string]$appId) {
     }
     Warn (T 'nativeFallback')
   }
-  $electronExe = Join-Path $InstallRoot 'node_modules\electron\dist\electron.exe'
   $brandedElectronExe = Join-Path $InstallRoot 'node_modules\electron\dist\Octo.su.exe'
   # npm must continue to own the `electron` package and its electron.exe;
   # replacing that package or renaming its directory breaks npm ci and the
   # Electron launcher. Create a disposable branded copy beside it instead.
-  if ($env:OS -eq 'Windows_NT' -and (Test-Path -LiteralPath $electronExe)) {
+  $managedElectronExe = Join-Path $InstallRoot 'node_modules\electron\dist\electron.exe'
+  if ($env:OS -eq 'Windows_NT' -and (Test-Path -LiteralPath $managedElectronExe)) {
     $brandScript = Join-Path $InstallRoot 'tools\brand-electron-dev.mjs'
     $nodeForBrand = Resolve-Tool 'node'
     if ($nodeForBrand -and (Test-Path -LiteralPath $brandScript)) {
       $brandResult = Invoke-Native $nodeForBrand @($brandScript) $InstallRoot -Quiet
       if ($brandResult.code -eq 0 -and (Test-Path -LiteralPath $brandedElectronExe)) {
-        $electronExe = $brandedElectronExe
+        # The generated copy is used only as the app shell. It does not change
+        # the profile Base selection or turn Electron into native Chromium.
       } else {
         Warn 'The Octo development icon could not be applied; using the package-managed Electron binary.'
       }
@@ -881,7 +882,8 @@ function Invoke-Open([string]$appId) {
   $argString = $allArgs -join ' '
 
 
-  if (Test-Path -LiteralPath $electronExe) {
+  $electronExe = Get-ElectronLauncherExe 'octobrowser'
+  if ($electronExe) {
     if (-not (Test-Path -LiteralPath $appMain)) { Fail (T 'notBuilt') }
     Say (T 'devMode')
 
@@ -2269,6 +2271,23 @@ function Install-AndroidSdkComponents {
 # Shortcuts point directly to the packaged GUI executable, never to electron.exe.
 function Get-LocalPackagedExe([string]$appId) {
   return (Join-Path (Join-Path $InstallRoot "release\$appId\win-unpacked") $Apps[$appId].Exe)
+}
+
+# The launcher is always the branded Electron app shell.  A profile's Base
+# choice is handled inside the app: Chrome (Chromium) starts the separate
+# InkBrowser runtime, while Electron starts an embedded compatibility window.
+# Keeping this resolver separate prevents a missing native Chromium payload
+# from blocking the manager itself.
+function Get-ElectronLauncherExe([string]$appId) {
+  $packaged = Get-LocalPackagedExe $appId
+  if (Test-Path -LiteralPath $packaged -PathType Leaf) { return $packaged }
+  if ($appId -eq 'octobrowser') {
+    $branded = Join-Path $InstallRoot 'node_modules\electron\dist\Octo.su.exe'
+    if (Test-Path -LiteralPath $branded -PathType Leaf) { return $branded }
+  }
+  $managed = Join-Path $InstallRoot 'node_modules\electron\dist\electron.exe'
+  if (Test-Path -LiteralPath $managed -PathType Leaf) { return $managed }
+  return $null
 }
 
 function New-DesktopShortcut {

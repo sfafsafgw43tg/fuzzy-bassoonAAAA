@@ -53,7 +53,18 @@ describe('branded local Windows setup', () => {
     expect(open).toContain("node_modules\\electron\\dist\\electron.exe");
     expect(open).toContain("node_modules\\electron\\dist\\Octo.su.exe");
     expect(open).toContain('brand-electron-dev.mjs');
-    expect(open).toContain("$electronExe = $brandedElectronExe");
     expect(open).toContain('npm must continue to own');
+    expect(installer).toContain('function Get-ElectronLauncherExe');
+    expect(installer).toContain("return $branded");
+    expect(installer).toContain('The launcher is always the branded Electron app shell');
+  });
+  it('keeps the profile Base choice independent from the Electron launcher', () => {
+    const editor = fs.readFileSync(path.join(root, 'apps/octobrowser/src/renderer/launcher-editor.ts'), 'utf8');
+    const engine = fs.readFileSync(path.join(root, 'packages/core/src/inkbrowser.ts'), 'utf8');
+    const open = fn('Invoke-Open');
+    expect(editor).toContain("engine: 'inkbrowser'");
+    expect(editor).toContain("d.engine = choice === 'chromium' ? 'inkbrowser' : choice");
+    expect(engine).toContain("export const NEW_PROFILE_ENGINE: BrowserEngine = 'inkbrowser'");
+    expect(open).toContain("$electronExe = Get-ElectronLauncherExe 'octobrowser'");
   });
 });
