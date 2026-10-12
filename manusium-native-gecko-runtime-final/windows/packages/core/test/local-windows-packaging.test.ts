@@ -72,6 +72,12 @@ describe('branded local Windows setup', () => {
     expect(engine).toContain("export const NEW_PROFILE_ENGINE: BrowserEngine = 'inkbrowser'");
     expect(open).toContain("$electronExe = Get-ElectronLauncherExe 'octobrowser'");
   });
+  it('labels the primary base as Chrome while explaining its InkBrowser Chromium fork', () => {
+    const en = fs.readFileSync(path.join(root, 'packages/core/src/i18n/en.ts'), 'utf8');
+    expect(en).toContain("'profile.base.chromium': 'Chrome'");
+    expect(en).toContain('custom Octo InkBrowser fork based on Chromium');
+    expect(en).toContain('source-built Octo InkBrowser Chromium runtime');
+  });
   it('bootstraps Chrome Base from a verified source-built release asset before packaging', () => {
     const buildStep = installer.slice(installer.indexOf("@{ Key = 'stepBuild'"), installer.indexOf("@{ Key = 'stepShortcut'"));
     expect(buildStep).toContain("Invoke-NpmResult @('run', 'fetch:chromium:windows')");
