@@ -16,7 +16,15 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 
+const androidStudioSource = fs.readFileSync(path.join(__dirname, '../src/main/android-studio.ts'), 'utf8');
+
 describe('Android Studio local bridge', () => {
+  it('does not pass the obsolete host-audio switch and reports the emulator log tail', () => {
+    expect(androidStudioSource).not.toContain("args.push('-allow-host-audio')");
+    expect(androidStudioSource).toContain('const details = text.slice(-700)');
+    expect(androidStudioSource).toContain('Emulator log: ${emulatorLog}');
+  });
+
   it('uses LTE as the Android Studio network default without rewriting explicit choices', () => {
     expect(normalizeNetworkSpeed(undefined)).toBe('lte');
     expect(normalizeNetworkSpeed('not-a-speed')).toBe('lte');

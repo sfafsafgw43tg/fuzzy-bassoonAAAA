@@ -3555,8 +3555,9 @@ export async function launchAndroidAvd(input: AndroidLaunchInput): Promise<Andro
   );
   const args = [`@${name}`, '-camera-back', cameraValues.back, '-camera-front', cameraValues.front];
   if (!input.microphoneEnabled) args.push('-no-audio');
-
-  else args.push('-allow-host-audio');
+  // Audio is enabled by default. Do not pass the old `-allow-host-audio`
+  // switch: recent Windows emulator builds do not accept it and may exit
+  // during graphics/audio initialization before printing a useful error.
   // Quick-boot snapshots preserve CameraProvider/DirectShow state from the
   // previous Windows device graph. Restoring that state after webcam numbers
   // or the Unity Capture producer changed is a reproducible stock Camera app
@@ -4249,11 +4250,12 @@ async function startAndroidCameraDiagnostics(name: string): Promise<void> {
 /** Turn an emulator start-up failure into something the user can act on. */
 function emulatorError(raw: string, name: string): Error {
   const text = meaningfulOutput(String(raw || '')) || String(raw || '').trim();
+  const emulatorLog = androidEmulatorLogPath(name);
   if (/could not find|no such file|unknown avd|avd .* does not exist/i.test(text)) {
-    return new Error(`The Android Emulator could not open ${name}. Its folder or its system image is missing - use "Camera and microphone" > check, or delete the device and create it again. Full log: ${androidToolLogPath()}`);
+    return new Error(`The Android Emulator could not open ${name}. Its folder or its system image is missing - use "Camera and microphone" > check, or delete the device and create it again. Emulator log: ${emulatorLog}. SDK log: ${androidToolLogPath()}`);
   }
   if (/system image|kernel|ramdisk|userdata|missing.*image/i.test(text)) {
-    return new Error(`${name} has no usable system image, so it cannot boot. The image was probably never downloaded: create the device again, or install its Android version first. Full log: ${androidToolLogPath()}`);
+    return new Error(`${name} has no usable system image, so it cannot boot. The image was probably never downloaded: create the device again, or install its Android version first. Emulator log: ${emulatorLog}. SDK log: ${androidToolLogPath()}`);
   }
   if (/HAXM|WHPX|hypervisor|virtualization|KVM|vt-x|hyper-v/i.test(text)) {
     return new Error(`The Android Emulator cannot use hardware virtualisation on this computer. Enable virtualisation in the BIOS, or install the Windows Hypervisor Platform / HAXM. Details: ${text.slice(0, 240)}`);
@@ -4262,7 +4264,8 @@ function emulatorError(raw: string, name: string): Error {
   if (/x86_64|arm|abi/i.test(text) && /not supported|cannot run/i.test(text)) {
     return new Error(`${name} was built for another processor architecture and cannot run here. Create it again with an image this computer supports.`);
   }
-  return new Error(`${name} did not start: ${text.slice(0, 400) || 'the emulator gave no reason'}. Full log: ${androidToolLogPath()}`);
+  const details = text.slice(-700).replace(/\s+/g, ' ').trim();
+  return new Error(`${name} did not start: ${details || 'the emulator gave no reason'}. Emulator log: ${emulatorLog}. SDK log: ${androidToolLogPath()}`);
 }
 
 /** Full path of adb, for the modules that install into a running device. */
