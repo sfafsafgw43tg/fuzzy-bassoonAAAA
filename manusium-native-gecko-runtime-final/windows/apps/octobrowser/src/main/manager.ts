@@ -828,7 +828,7 @@ export class Manager {
         if (!discovered && (!p.chromiumRuntime || p.chromiumRuntime === DEFAULT_CHROMIUM_VERSION) && process.platform === 'win32' && process.arch === 'x64') {
           const fallback = catalogForPlatform('win32', 'x64').find((entry) => entry.distribution === 'ungoogled-chromium' && entry.support === 'supported');
           if (fallback) {
-            const installed = installChromium(fallback, path.join(this.ctx.layout.engine, 'runtimes', 'chromium'));
+            const installed = await installChromium(fallback, path.join(this.ctx.layout.engine, 'runtimes', 'chromium'));
             discovered = installed.executablePath;
             this.profiles.update(id, { chromiumRuntime: fallback.version });
             p = this.profiles.get(id);

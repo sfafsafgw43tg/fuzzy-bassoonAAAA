@@ -22,7 +22,7 @@ describe('Chromium runtime catalog', () => {
   it('rejects a catalog entry with an unpinned source or invalid checksum', () => {
     expect(() => validateCatalog([{ ...CHROMIUM_CATALOG[0], source: 'https://example.invalid/latest', archiveSha256: 'bad' }])).toThrow(/invalid catalog entry/i);
   });
-  it('does not treat a repackaged Windows archive as an installed source build', () => {
+  it('does not treat a repackaged Windows archive as an installed source build', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'octo-chromium-catalog-'));
     try {
       const runtime = path.join(root, '155.0.8059.39');
@@ -32,12 +32,12 @@ describe('Chromium runtime catalog', () => {
       const sha256 = crypto.createHash('sha256').update(fs.readFileSync(executable)).digest('hex');
       fs.writeFileSync(path.join(runtime, 'runtime.json'), JSON.stringify({ version: '155.0.8059.39', sha256, distribution: 'cft' }));
       expect(listInstalled(root, 'win32', 'x64').find((e) => e.entry.version === '155.0.8059.39')?.installed).toBe(false);
-      expect(() => installChromium(catalogEntry('155.0.8059.39', 'win32', 'x64'), root)).toThrow(/built from the pinned source checkout/i);
+      await expect(installChromium(catalogEntry('155.0.8059.39', 'win32', 'x64'), root)).rejects.toThrow(/built from the pinned source checkout/i);
     } finally {
       fs.rmSync(root, { recursive: true, force: true });
     }
   });
-  it('extracts a verified ungoogled-Chromium archive without renaming chrome.exe', () => {
+  it('extracts a verified ungoogled-Chromium archive without renaming chrome.exe', async () => {
     const work = fs.mkdtempSync(path.join(os.tmpdir(), 'octo-ungoogled-catalog-'));
     const root = path.join(work, 'installed');
     const archiveRoot = 'ungoogled-test_windows_x64';
@@ -59,7 +59,7 @@ describe('Chromium runtime catalog', () => {
       const previous = process.env.OCTO_CHROMIUM_ARCHIVE;
       process.env.OCTO_CHROMIUM_ARCHIVE = archive;
       try {
-        const installed = installChromium(entry, root, false);
+        const installed = await installChromium(entry, root, false);
         expect(installed.executablePath.endsWith(`${path.sep}chrome.exe`)).toBe(true);
         const manifest = JSON.parse(fs.readFileSync(path.join(installed.rootDir, 'runtime.json'), 'utf8')) as Record<string, unknown>;
         expect(manifest.distribution).toBe('ungoogled-chromium');
