@@ -131,6 +131,24 @@ function suppressGitRecommendation(cwd) {
     console.warn(`[build-chromium-source] optional Git recommendation setting was not changed; continuing (${result.error?.message ?? `exit code ${result.status ?? 'unknown'}`})`);
   }
 }
+async function checkoutPinnedRevision(source, version, commit) {
+  const label = `checking out Chromium ${version} (${commit})`;
+  try {
+    await run('git', ['-c', 'core.longpaths=true', 'checkout', '--detach', commit], source, label);
+    return;
+  } catch (firstError) {
+    // A shallow Chromium fetch can leave the bootstrap tree clean while the
+    // first checkout fails on Windows path materialization. Retry forcefully
+    // only after proving that the source tree contains no local edits or
+    // untracked files; never overwrite a developer's changes silently.
+    const status = runCapture('git', ['status', '--short'], source, 'checking Chromium checkout safety after checkout failure');
+    if (status) {
+      fail(`${firstError.message}; refusing forced checkout because the source tree is not clean:\n${status}`);
+    }
+    console.warn('[build-chromium-source] clean source tree; retrying pinned checkout with --force and long-path support');
+    await run('git', ['-c', 'core.longpaths=true', 'checkout', '--detach', '--force', commit], source, `${label} (clean-tree retry)`);
+  }
+}
 function chromiumVersion(source) {
   const versionFile = path.join(source, 'chrome', 'VERSION');
   if (!fs.existsSync(versionFile)) fail(`Chromium source is missing ${versionFile}`);
@@ -157,6 +175,13 @@ async function sourceCheckout(source, version, skipSync) {
   const parentGclient = path.join(parent, '.gclient');
   console.log('[build-chromium-source] suppressing depot_tools global Git recommendation');
   suppressGitRecommendation(parent);
+  if (process.platform === 'win32' && fs.existsSync(sourceGit)) {
+    // Chromium contains paths that exceed the legacy Win32 MAX_PATH limit.
+    // Configure this checkout before switching from the bootstrap revision;
+    // otherwise Git can fail during checkout even though fetch succeeded.
+    console.log('[build-chromium-source] enabling Git long-path support for the Chromium checkout');
+    await run('git', ['config', 'core.longpaths', 'true'], source, 'configuring Git long-path support');
+  }
   const jobs = String(Math.max(2, Math.min(12, os.cpus().length)));
   // Keep the base command compatible with older depot_tools shipped on clean
   // Windows machines. Long-form options vary between depot_tools revisions.
@@ -198,7 +223,7 @@ async function sourceCheckout(source, version, skipSync) {
     await run('git', ['fetch', '--progress', '--depth=1', 'origin', `${tag}:${tag}`], source, `fetching pinned Chromium tag ${tag}`);
     const pinnedCommit = runCapture('git', ['rev-list', '-n', '1', tag], source, `resolving Chromium tag ${tag}`).trim();
     if (!/^[0-9a-f]{40}$/i.test(pinnedCommit)) fail(`Chromium tag ${tag} did not resolve to a commit`);
-    await run('git', ['checkout', '--detach', pinnedCommit], source, `checking out Chromium ${version} (${pinnedCommit})`);
+    await checkoutPinnedRevision(source, version, pinnedCommit);
   } else {
     await run('git', ['status', '--short'], source, 'checking source tree status');
   }

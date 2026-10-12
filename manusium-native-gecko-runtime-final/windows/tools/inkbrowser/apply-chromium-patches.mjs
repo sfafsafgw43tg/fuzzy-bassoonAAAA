@@ -51,16 +51,33 @@ export function gitApplyArgs(patches, check = false) {
   return ['apply', '--whitespace=nowarn', ...(check ? ['--check'] : []), ...files];
 }
 
+function windowsCommandLineArg(value) {
+  const text = String(value);
+  if (/^[A-Za-z0-9_./\\:=+-]+$/.test(text)) return text;
+  return `"${text.replaceAll('"', '\\"')}"`;
+}
+
 function runGit(source, args) {
-  const result = spawnSync('git', ['-C', source, ...args], {
+  const gitArgs = ['-C', source, ...args];
+  let file = 'git';
+  let launchArgs = gitArgs;
+  if (process.platform === 'win32') {
+    const located = spawnSync('where.exe', ['git.bat'], { encoding: 'utf8', windowsHide: true });
+    const gitBat = located.status === 0 ? located.stdout.trim().split(/\r?\n/).map((entry) => entry.trim()).find(Boolean) : '';
+    if (gitBat) {
+      file = process.env.ComSpec || 'cmd.exe';
+      launchArgs = ['/d', '/s', '/c', ['call', windowsCommandLineArg(gitBat), ...gitArgs.map(windowsCommandLineArg)].join(' ')];
+    }
+  }
+  const result = spawnSync(file, launchArgs, {
     encoding: 'utf8',
     windowsHide: true,
     shell: false,
   });
   const output = `${result.stdout ?? ''}${result.stderr ?? ''}`.trim();
   if (output) process.stdout.write(`${output}\n`);
-  if (result.error) throw new Error(`git ${args.join(' ')} failed to start: ${result.error.message}`);
-  if (result.status !== 0) throw new Error(`git ${args.join(' ')} failed with exit code ${result.status}`);
+  if (result.error) throw new Error(`${file} ${args.join(' ')} failed to start: ${result.error.message}`);
+  if (result.status !== 0) throw new Error(`${file} ${args.join(' ')} failed with exit code ${result.status}`);
   return output;
 }
 
