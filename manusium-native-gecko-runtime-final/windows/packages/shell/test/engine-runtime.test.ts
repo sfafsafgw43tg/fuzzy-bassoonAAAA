@@ -3,7 +3,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import * as crypto from 'node:crypto';
-import { discoverEngineRuntime, EngineRunnerError, ENGINE_MANIFEST_SCHEMA } from '../src/engine-runtime';
+import { discoverEngineRuntime, EngineRunnerError, ENGINE_MANIFEST_SCHEMA, WINDOWS_CHROMIUM_RUNTIME_FILES } from '../src/engine-runtime';
 
 function runtimeRoot(kind: 'chromium' | 'gecko', executable: string): { root: string; exe: string } {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'octo-engine-runtime-'));
@@ -11,6 +11,11 @@ function runtimeRoot(kind: 'chromium' | 'gecko', executable: string): { root: st
   fs.mkdirSync(versionRoot, { recursive: true });
   const exe = path.join(versionRoot, executable);
   fs.writeFileSync(exe, 'test executable');
+  for (const file of WINDOWS_CHROMIUM_RUNTIME_FILES) {
+    const target = path.join(versionRoot, ...file.split('/'));
+    fs.mkdirSync(path.dirname(target), { recursive: true });
+    fs.writeFileSync(target, `test ${file}`);
+  }
   const sha256 = crypto.createHash('sha256').update(fs.readFileSync(exe)).digest('hex');
   fs.writeFileSync(path.join(versionRoot, 'runtime.json'), JSON.stringify({
     schema: ENGINE_MANIFEST_SCHEMA,
@@ -107,6 +112,21 @@ describe('packaged engine runtime discovery', () => {
     });
     expect(found.executablePath).toBe(exe);
     expect(found.manifest.distribution).toBe('ungoogled-chromium');
+    fs.rmSync(root, { recursive: true, force: true });
+  });
+
+  it('rejects a Windows Chromium runtime when a required companion file is missing', () => {
+    const { root } = runtimeRoot('chromium', 'inkbrowser-chrome.exe');
+    const manifestPath = path.join(root, '1.0.0', 'runtime.json');
+    const manifest = JSON.parse(fs.readFileSync(manifestPath, 'utf8')) as Record<string, unknown>;
+    manifest.distribution = 'source-built';
+    manifest.modified = true;
+    manifest.platforms = ['win32-x64'];
+    fs.writeFileSync(manifestPath, JSON.stringify(manifest));
+    fs.rmSync(path.join(root, '1.0.0', 'chrome.dll'));
+    expect(() => discoverEngineRuntime('chromium', {
+      resourcesPath: '/does-not-exist', env: { OCTO_CHROMIUM_RUNTIME: root }, platform: 'win32', arch: 'x64',
+    })).toThrow(/runtime is incomplete.*chrome\.dll/i);
     fs.rmSync(root, { recursive: true, force: true });
   });
 });

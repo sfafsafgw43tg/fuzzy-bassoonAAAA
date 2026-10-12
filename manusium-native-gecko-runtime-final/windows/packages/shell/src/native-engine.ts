@@ -150,6 +150,9 @@ export async function spawnNativeEngine(kind: NativeEngineKind, executable: stri
     windowsHide: true,
     env: { ...process.env, ...options.env },
   });
+  // Chromium can emit substantial diagnostics during Windows startup. Always
+  // drain stderr so the OS pipe cannot fill and stall the browser process.
+  child.stderr?.resume();
   const earlyError = new Promise<never>((_, reject) => child.once('error', reject));
   try {
     if (options.debugPort !== undefined) await Promise.race([waitForPort(options.debugPort, 15_000, child), earlyError]);

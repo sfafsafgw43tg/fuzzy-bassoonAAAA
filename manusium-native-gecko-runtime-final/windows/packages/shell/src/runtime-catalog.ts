@@ -5,7 +5,7 @@ import * as os from 'node:os';
 import * as path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { discoverEngineRuntime, ENGINE_MANIFEST_SCHEMA, type EngineCapability, type EngineManifest } from './engine-runtime';
+import { discoverEngineRuntime, ENGINE_MANIFEST_SCHEMA, WINDOWS_CHROMIUM_RUNTIME_FILES, type EngineCapability, type EngineManifest } from './engine-runtime';
 
 const execFileAsync = promisify(execFile);
 
@@ -127,8 +127,7 @@ async function installChromiumOnce(entry: ChromiumCatalogEntry, root: string, fe
     const exeSource = path.join(sourceRoot, entry.platform.startsWith('win') ? 'chrome.exe' : 'chrome');
     if (!fs.existsSync(exeSource)) throw new Error(`Runtime executable missing for ${entry.version}`);
     if (entry.distribution === 'ungoogled-chromium') {
-      const required = ['chrome.dll', 'chrome_elf.dll', 'chrome_wer.dll', 'chrome_100_percent.pak', 'chrome_200_percent.pak', 'resources.pak', 'icudtl.dat', 'v8_context_snapshot.bin', 'libEGL.dll', 'libGLESv2.dll', 'locales/en-US.pak'];
-      for (const name of required) if (!fs.existsSync(path.join(sourceRoot, ...name.split('/')))) throw new Error(`Ungoogled-Chromium archive is missing required file: ${name}`);
+      for (const name of WINDOWS_CHROMIUM_RUNTIME_FILES) if (!fs.existsSync(path.join(sourceRoot, ...name.split('/')))) throw new Error(`Ungoogled-Chromium archive is missing required file: ${name}`);
     }
     const finalRoot = path.join(root, entry.version); const staged = `${finalRoot}.partial-${process.pid}`;
     await fsp.rm(staged, { recursive: true, force: true }); await fsp.cp(sourceRoot, staged, { recursive: true });

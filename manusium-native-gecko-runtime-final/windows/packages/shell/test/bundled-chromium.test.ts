@@ -4,7 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { listInstalled } from '../src/runtime-catalog';
-import { discoverEngineRuntime } from '../src/engine-runtime';
+import { discoverEngineRuntime, WINDOWS_CHROMIUM_RUNTIME_FILES } from '../src/engine-runtime';
 
 const roots: string[] = [];
 afterEach(() => { roots.splice(0).forEach(root => fs.rmSync(root, { recursive: true, force: true })); });
@@ -18,6 +18,11 @@ function fixture() {
     fs.mkdirSync(dir, { recursive: true });
     const exe = path.join(dir, 'inkbrowser-chrome.exe');
     fs.writeFileSync(exe, `fixture ${version}`);
+    for (const file of WINDOWS_CHROMIUM_RUNTIME_FILES) {
+      const target = path.join(dir, ...file.split('/'));
+      fs.mkdirSync(path.dirname(target), { recursive: true });
+      fs.writeFileSync(target, `fixture ${version} ${file}`);
+    }
     fs.writeFileSync(path.join(dir, 'runtime.json'), JSON.stringify({
       schema: 'octo.engine-manifest.v1', kind: 'chromium', version: manifestVersion,
       executable: 'inkbrowser-chrome.exe', protocol: 'cdp', platforms: ['win32-x64'],
@@ -32,7 +37,7 @@ describe('bundled InkBrowser versions', () => {
   it('marks both packaged versions as available and installer-managed', () => {
     const f = fixture();
     f.make('155.0.8059.39'); f.make('156.0.8078.12');
-    const entries = listInstalled(f.user, 'win32', 'x64', [f.resources]);
+    const entries = listInstalled(f.user, 'win32', 'x64', [f.resources]).filter((entry) => entry.entry.executable === 'inkbrowser-chrome.exe');
     expect(entries).toHaveLength(2);
     for (const entry of entries) {
       expect(entry.installed).toBe(true);

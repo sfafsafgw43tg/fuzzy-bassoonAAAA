@@ -5,6 +5,13 @@ import * as crypto from 'node:crypto';
 /** Version of the app-to-engine contract, independent of the engine version. */
 export const ENGINE_RUNNER_CONTRACT_VERSION = 1 as const;
 export const ENGINE_MANIFEST_SCHEMA = 'octo.engine-manifest.v1' as const;
+/** Files required for a Windows Chromium process to start from a packaged folder. */
+export const WINDOWS_CHROMIUM_RUNTIME_FILES = [
+  'chrome.dll', 'chrome_elf.dll', 'chrome_wer.dll',
+  'chrome_100_percent.pak', 'chrome_200_percent.pak',
+  'resources.pak', 'icudtl.dat', 'v8_context_snapshot.bin',
+  'libEGL.dll', 'libGLESv2.dll', 'locales/en-US.pak',
+] as const;
 
 export type EngineKind = 'chromium' | 'gecko';
 export type EngineProtocol = 'cdp' | 'juggler';
@@ -188,6 +195,10 @@ export function discoverEngineRuntime(kind: EngineKind, options: RuntimeDiscover
         : executableName(kind, platform, manifest.distribution);
       if (path.basename(executablePath) !== expectedExecutable) {
         throw new EngineRunnerError('manifest-invalid', `Unexpected ${kind} executable name: ${path.basename(executablePath)}`);
+      }
+      if (kind === 'chromium' && platform === 'win32') {
+        const missing = WINDOWS_CHROMIUM_RUNTIME_FILES.filter((file) => !fs.existsSync(path.join(runtimeRoot, ...file.split('/'))));
+        if (missing.length) throw new EngineRunnerError('runtime-missing', `Windows Chromium runtime is incomplete; missing: ${missing.join(', ')}`);
       }
       if (typeof manifest.sha256 !== 'string' || !/^[a-f0-9]{64}$/i.test(manifest.sha256)) throw new EngineRunnerError('manifest-invalid', `Missing or invalid executable SHA-256 in ${manifestPath}`);
       if (fileSha256(executablePath).toLowerCase() !== manifest.sha256.toLowerCase()) throw new EngineRunnerError('manifest-invalid', `Executable checksum mismatch: ${executablePath}`);
