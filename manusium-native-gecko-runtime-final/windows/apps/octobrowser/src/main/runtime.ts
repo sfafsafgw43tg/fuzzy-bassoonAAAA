@@ -204,7 +204,15 @@ export class ProfileRuntime {
       ? { kind: 'disabled', enabled: false }
       : resolveFingerprint(this.profile.fingerprint, geo, this.lang);
     this.mobile = null;
-    await this.controller.install(this.fp.enabled ? this.fp.userAgent : null, this.fp.enabled ? (this.fp.acceptLanguage ?? '') : '');
+    const nativeUserAgent = ses.getUserAgent();
+    const profileUserAgent = this.fp.enabled
+      ? this.fp.userAgent
+      // Keep a real --headless test process truthful. Normal GUI Electron
+      // profiles use Chromium-compatible identity without Electron tokens.
+      : process.argv.some((arg) => arg === '--headless' || arg.startsWith('--headless='))
+        ? nativeUserAgent
+        : cleanUserAgent(nativeUserAgent);
+    await this.controller.install(profileUserAgent, this.fp.enabled ? (this.fp.acceptLanguage ?? '') : '');
 
     // Bundled extensions are loaded only for profiles that explicitly enabled
     // them. Their extension storage therefore stays inside this profile's own

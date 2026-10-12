@@ -90,5 +90,8 @@
     "socks": "^2.8.7",
     "tldts": "^7.4.15",
     "yauzl": "^3.4.0"
+  },
+  "allowScripts": {
+    "esbuild@0.28.2": true
   }
 }

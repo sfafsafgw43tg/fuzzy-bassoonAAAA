@@ -250,6 +250,7 @@ export function acceptLanguages(lang: 'en' | 'pl'): string {
 export function cleanUserAgent(ua: string): string {
   if (!ua) return '';
   return ua
+    .replace(/HeadlessChrome/gi, 'Chrome')
     .replace(/\s?Electron\/[\d.]+/gi, '')
     .replace(/\s?(OctoBrowser(\.su)?|OctoDetect(\.su)?|Octo\.su|OB\.su|OD\.su|octosuite|octobrowser|octodetect)\/[\w.-]+/gi, '')
     .replace(/\s{2,}/g, ' ')

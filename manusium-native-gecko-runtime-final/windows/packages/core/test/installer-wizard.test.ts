@@ -14,6 +14,10 @@ import * as path from 'node:path';
 const root = path.resolve(__dirname, '..', '..', '..');
 const octo = fs.readFileSync(path.join(root, 'scripts', 'lib', 'octo.ps1'), 'utf8').replace(/^\uFEFF/, '');
 const ui = fs.readFileSync(path.join(root, 'scripts', 'lib', 'octo-ui.ps1'), 'utf8').replace(/^\uFEFF/, '');
+const pageShim = fs.readFileSync(path.join(root, 'apps', 'octobrowser', 'src', 'preload', 'page-shim.ts'), 'utf8');
+const browserWindow = fs.readFileSync(path.join(root, 'apps', 'octobrowser', 'src', 'main', 'window.ts'), 'utf8');
+const androidPage = fs.readFileSync(path.join(root, 'apps', 'octobrowser', 'src', 'renderer', 'launcher-virtualbox.ts'), 'utf8');
+const icons = fs.readFileSync(path.join(root, 'packages', 'shell', 'renderer', 'icons.ts'), 'utf8');
 
 /** The keys of the English or Polish message dictionary in octo.ps1. */
 function dictionaryKeys(lang: 'en' | 'pl'): string[] {
@@ -179,6 +183,25 @@ describe('the options reach the real installation', () => {
 });
 
 describe('steps and the console installer', () => {
+  it('propagates the selected WebGL policy into dedicated Worker contexts', () => {
+    expect(pageShim).toContain('const workerWebGLBootstrap');
+    expect(pageShim).toContain("importScripts(${JSON.stringify(absolute)})");
+    expect(pageShim).toContain("import ${JSON.stringify(absolute)}");
+    expect(pageShim).toContain("['webgl', 'webgl2', 'experimental-webgl', 'experimental-webgl2'].includes(kind)");
+    expect(pageShim).toContain("Object.defineProperty(G.navigator, 'gpu'");
+    expect(pageShim).toContain('const WrappedWorker = new Proxy(nativeWorker');
+    expect(pageShim).toContain('Reflect.construct(target, [blobUrl, options], newTarget)');
+    expect(pageShim).toContain("names.set(WrappedWorker, 'Worker')");
+    expect(pageShim).toContain("fp.webgl === 'noise' || fp.webglVendor || fp.webglRenderer");
+    expect(pageShim).toContain("kind === 'experimental-webgl2'");
+    expect(pageShim).toContain('const requestedViewport = fp.windowSize');
+    expect(browserWindow).toContain('deviceScaleFactor: null');
+    expect(androidPage).toContain("t('android.privateSpace.title')");
+    expect(androidPage).toContain("t('android.privateSpace.desc')");
+    expect(icons).toContain('privateSpace:');
+    expect(pageShim).toContain('Worker.evaluate() executes against that worker\'s own global scope');
+  });
+
   it('uses bundled Windows Chromium and leaves source compilation to CI', () => {
     const chromium = fs.readFileSync(path.join(root, 'tools', 'build-chromium-source.mjs'), 'utf8');
     expect(chromium).toContain("from './inkbrowser/apply-chromium-patches.mjs'");
@@ -187,8 +210,8 @@ describe('steps and the console installer', () => {
     expect(chromium).toContain('autoninja');
     expect(chromium).toContain("const parentIsGclientCheckout = fs.existsSync(parentGclient);");
     expect(chromium).toContain("run('git', ['fetch', '--progress', '--depth=1', 'origin'");
-    expect(chromium).toContain("['rev-list', '-n', '1', tag]");
     expect(chromium).toContain("['checkout', '--detach', pinnedCommit]");
+    expect(chromium).toContain("['rev-list', '-n', '1', tag]");
     expect(chromium).not.toContain("['checkout', '--detach', `refs/tags/${version}`]");
     expect(chromium).toContain('resuming Chromium source checkout (no history, parallel)');
     expect(chromium).toContain("'--no-history'");

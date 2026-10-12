@@ -392,7 +392,11 @@ export function pageShim(c: PageConfig, eventName: string): void {
       fixed(S, 'availHeight', sc.availHeight);
       fixed(S, 'colorDepth', 24);
       fixed(S, 'pixelDepth', 24);
-      const viewport = fp.windowSize ?? { width: sc.width, height: sc.height };
+      const requestedViewport = fp.windowSize ?? { width: sc.width, height: sc.height };
+      const viewport = {
+        width: Math.min(Math.max(1, requestedViewport.width), Math.max(1, sc.availWidth || sc.width)),
+        height: Math.min(Math.max(1, requestedViewport.height), Math.max(1, sc.availHeight || sc.height)),
+      };
       // Keep the browser-visible viewport aligned with the selected screen.
       // This is intentionally a JS metric overlay; it does not resize the
       // user's native window or claim that the physical monitor changed.
@@ -478,7 +482,7 @@ export function pageShim(c: PageConfig, eventName: string): void {
     if (fp.webgl === 'off') {
       const blockContext = (self: unknown, args: unknown[], orig: (...a: unknown[]) => unknown): unknown => {
         const kind = String(args[0] ?? '').toLowerCase();
-        if (kind === 'webgl' || kind === 'webgl2' || kind === 'experimental-webgl') return null;
+        if (kind === 'webgl' || kind === 'webgl2' || kind === 'experimental-webgl' || kind === 'experimental-webgl2') return null;
         return orig(...args);
       };
       method(proto('HTMLCanvasElement'), 'getContext', blockContext);
@@ -495,7 +499,7 @@ export function pageShim(c: PageConfig, eventName: string): void {
           // 0x1f00/0x1f01 are ordinary WebGL values; 0x9245/0x9246 are the
           // unmasked debug-extension values. Mask all four in noise mode so
           // a site cannot recover the real adapter through the standard path.
-          if (fp.webgl === 'noise') {
+          if (fp.webgl === 'noise' || fp.webglVendor || fp.webglRenderer) {
             if (p === 0x1f00 || p === 0x9245) return exposedVendor;
             if (p === 0x1f01 || p === 0x9246) return exposedRenderer;
           }
@@ -536,6 +540,113 @@ export function pageShim(c: PageConfig, eventName: string): void {
       };
       patchWebGL((W as Record<string, unknown>).WebGLRenderingContext);
       patchWebGL((W as Record<string, unknown>).WebGL2RenderingContext);
+    }
+
+    // A page-world preload cannot automatically run inside a dedicated worker.
+    // Worker.evaluate() executes against that worker's own global scope, where
+    // OffscreenCanvas and WebGL prototypes are otherwise still native. Wrap
+    // classic/module Worker URLs in a same-origin blob bootstrap so the same
+    // profile policy is installed before the application worker is evaluated.
+    const workerWebGLBootstrap = (config: {
+      webgl: 'off' | 'real' | 'noise';
+      webgpu: 'off' | 'real' | 'webgl-based' | 'disable';
+      vendor: string;
+      renderer: string;
+      seed: number;
+    }): void => {
+      const G = globalThis as unknown as Record<string, unknown>;
+      let state = config.seed >>> 0;
+      const hashWorker = (a: number, b = 0): number => {
+        let h = (state ^ Math.imul(a | 0, 0x9e3779b1) ^ Math.imul(b | 0, 0x85ebca77)) >>> 0;
+        h = Math.imul(h ^ (h >>> 16), 0x7feb352d);
+        h = Math.imul(h ^ (h >>> 15), 0x846ca68b);
+        return (h ^ (h >>> 16)) >>> 0;
+      };
+      const replace = (protoValue: object | undefined, name: string, impl: (self: unknown, args: unknown[], orig: (...a: unknown[]) => unknown) => unknown): void => {
+        if (!protoValue) return;
+        const descriptor = Object.getOwnPropertyDescriptor(protoValue, name);
+        if (!descriptor || typeof descriptor.value !== 'function') return;
+        const original = descriptor.value as (...a: unknown[]) => unknown;
+        const wrapped = new Proxy(original, { apply: (target, self, args) => impl(self, args as unknown[], (...next) => Reflect.apply(target, self, next)) });
+        try { Object.defineProperty(protoValue, name, { ...descriptor, value: wrapped }); } catch { /* protected prototype */ }
+      };
+      const patch = (ctor: unknown): void => {
+        const P = (ctor as { prototype?: object } | undefined)?.prototype;
+        if (!P) return;
+        replace(P, 'getParameter', (_self, args, orig) => {
+          const parameter = Number(args[0]);
+          if ((config.webgl === 'noise' || config.vendor) && (parameter === 0x1f00 || parameter === 0x9245)) return config.vendor;
+          if ((config.webgl === 'noise' || config.renderer) && (parameter === 0x1f01 || parameter === 0x9246)) return config.renderer;
+          if (parameter === 0x9245 && config.vendor) return config.vendor;
+          if (parameter === 0x9246 && config.renderer) return config.renderer;
+          return orig(...args);
+        });
+        replace(P, 'getExtension', (_self, args, orig) => {
+          const extension = orig(...args) as Record<string, unknown> | null;
+          if (String(args[0]) !== 'WEBGL_debug_renderer_info' || !extension) return extension;
+          return new Proxy(extension, { get(target, property) {
+            if (property === 'UNMASKED_VENDOR_WEBGL') return 0x9245;
+            if (property === 'UNMASKED_RENDERER_WEBGL') return 0x9246;
+            return Reflect.get(target, property);
+          } });
+        });
+        if (config.webgl === 'noise') {
+          replace(P, 'readPixels', (_self, args, orig) => {
+            const result = orig(...args);
+            for (let i = args.length - 1; i >= 0; i--) {
+              const candidate = args[i];
+              if (!candidate || !ArrayBuffer.isView(candidate) || candidate instanceof DataView) continue;
+              const view = candidate as unknown as { buffer: ArrayBuffer; byteOffset: number; byteLength: number };
+              const bytes = new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
+              for (let j = 0; j < bytes.length; j += 37) bytes[j] ^= hashWorker(j, bytes.length) & 1;
+              break;
+            }
+            return result;
+          });
+        }
+      };
+      if (config.webgl === 'off') {
+        const offscreen = (G.OffscreenCanvas as { prototype?: object } | undefined)?.prototype;
+        replace(offscreen, 'getContext', (_self, args, orig) => {
+          const kind = String(args[0] ?? '').toLowerCase();
+          return ['webgl', 'webgl2', 'experimental-webgl', 'experimental-webgl2'].includes(kind) ? null : orig(...args);
+        });
+      } else {
+        patch(G.WebGLRenderingContext);
+        patch(G.WebGL2RenderingContext);
+      }
+      if (config.webgl === 'off' || config.webgpu === 'off' || config.webgpu === 'disable') {
+        try { Object.defineProperty(G.navigator, 'gpu', { configurable: true, get: () => undefined }); } catch { /* protected property */ }
+      }
+    };
+    const nativeWorker = (W as { Worker?: unknown }).Worker;
+    if (typeof nativeWorker === 'function') {
+      const workerConfig = JSON.stringify({ webgl: fp.webgl, webgpu: fp.webgpu, vendor: fp.webglVendor || 'WebGL Vendor', renderer: fp.webglRenderer || 'WebGL Renderer', seed });
+      const bootstrapSource = workerWebGLBootstrap.toString();
+      const WrappedWorker = new Proxy(nativeWorker as new (u: string | URL, o?: WorkerOptions) => Worker, {
+        construct(target, args, newTarget) {
+          const absolute = new URL(String(args[0]), document.baseURI).href;
+          const options = args[1] as WorkerOptions | undefined;
+          const workerType = options && options.type === 'module' ? 'module' : 'classic';
+          const source = workerType === 'module'
+            ? `(${bootstrapSource})(${workerConfig});\nimport ${JSON.stringify(absolute)};`
+            : `(${bootstrapSource})(${workerConfig});\nimportScripts(${JSON.stringify(absolute)});`;
+          const blobUrl = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
+          try {
+            const worker = Reflect.construct(target, [blobUrl, options], newTarget);
+            window.setTimeout(() => URL.revokeObjectURL(blobUrl), 0);
+            return worker;
+          } catch (error) {
+            URL.revokeObjectURL(blobUrl);
+            throw error;
+          }
+        },
+      });
+      // The proxy keeps the native target's name, length, prototype and
+      // instanceof behavior. Also make the existing native-code toString
+      // compatibility layer report the expected constructor name.
+      names.set(WrappedWorker, 'Worker');
+      try { dP(window, 'Worker', { ...gOPD(window, 'Worker'), value: WrappedWorker }); } catch { /* page may have locked Worker */ }
     }
 
     const gpuProto = proto('GPUAdapterInfo');

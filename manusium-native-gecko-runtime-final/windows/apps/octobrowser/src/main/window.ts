@@ -319,7 +319,9 @@ export class BrowserWindowController {
         memory: resolved.memory,
         screen: resolved.screen,
         windowSize: resolved.windowSize,
-        deviceScaleFactor: 1,
+        // Do not force DPR to 1: the audit page must see the same display
+        // scale factor as Chromium's native compositor.
+        deviceScaleFactor: null,
         webglVendor: resolved.webglVendor,
         webglRenderer: resolved.webglRenderer,
         canvas: resolved.canvas,
