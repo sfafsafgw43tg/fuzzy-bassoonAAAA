@@ -46,7 +46,10 @@ function displayCommand(command, args, cwd) {
 }
 function quoteCmdArg(value) {
   const text = String(value);
-  if (/^[A-Za-z0-9_./:=+-]+$/.test(text)) return text;
+  // Windows paths without spaces do not need quoting. Keeping the backslashes
+  // literal is important because Node's Windows argument encoder otherwise
+  // escapes embedded quotes before cmd.exe parses the /c command line.
+  if (/^[A-Za-z0-9_./\\:=+-]+$/.test(text)) return text;
   return `"${text.replaceAll('"', '\\"')}"`;
 }
 function resolveWindowsCommand(command) {
