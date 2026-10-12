@@ -10,7 +10,7 @@
 import { api, clear } from '@octo/shell/renderer/bridge';
 import { h, t } from '@octo/shell/renderer/i18n-client';
 import { icon } from '@octo/shell/renderer/icons';
-import { S, SavedProxy, busy, closeModal, confirmDialog, input, modal, popupMenu, run, seg, select, toast, toggle } from './launcher-ui';
+import { S, SavedProxy, busy, closeModal, confirmDialog, copyText, input, modal, popupMenu, run, seg, select, toast, toggle } from './launcher-ui';
 import { androidNetworkBar, deviceSettingsDialog, type DeviceIdentity } from './launcher-android';
 import { androidCreateWizard } from './launcher-android-create';
 import { androidMediaDialog, androidStoresDialog } from './launcher-android-media';
@@ -414,28 +414,99 @@ function androidRow(machine: AndroidMachine, load: () => Promise<void>): HTMLEle
     h('div', { class: 'vm-actions' }, folder, ...(machine.running ? [screen] : []), media, settings, launch, more));
 }
 
-function androidStudioCard(): HTMLElement {
-  const card = h('div', { class: 'engine-chip android-studio-card' });
-  const head = h('div', { class: 'vm-head' },
+function studioLinuxVmCard(vmStatus: {
+  available: boolean; vboxAvailable: boolean; vmExists: boolean; vmName: string;
+  state: string; memoryMb: number; cpus: number; adbHostPort: number; vncHostPort: number;
+  webStreamHostPort: number; sshHostPort: number; error?: string;
+}, reload: () => Promise<void>): HTMLElement {
+  const card = h('div', { class: `engine-chip vbox-studio-vm-chip${vmStatus.state === 'running' ? ' on' : ''}` });
+  const head = h('div', { class: 'vm-head' });
+  const stateClass = vmStatus.state === 'running' ? 'ok' : vmStatus.vmExists ? 'muted' : 'warn';
+  const stateLabel = vmStatus.state === 'running'
+    ? t('android.studioVm.status.running')
+    : vmStatus.vmExists ? t('android.studioVm.status.poweroff') : t('android.studioVm.status.notCreated');
+
+  head.append(
     h('div', { class: 'vm-title' },
-      h('span', { class: 'engine-mark' }, icon('smartphone', 15)),
-      h('b', { text: t('android.studio.title') })),
-    h('span', { class: 'pill muted', text: t('android.studio.status') }),
+      h('span', { class: 'engine-mark' }, icon(vmStatus.state === 'running' ? 'check' : 'shield', 15)),
+      h('b', { text: t('android.studioVm.title') })),
+    h('span', { class: `pill ${stateClass}`, text: stateLabel }),
   );
-  const desc = h('p', { class: 'small muted', text: t('android.studio.desc') });
+
+  const desc = h('p', { class: 'small muted', text: t('android.studioVm.desc') });
+  const specs = h('div', {
+    class: 'small muted vm-info',
+    text: t('android.studioVm.specs', { cpus: String(vmStatus.cpus || 4), ram: String(Math.round((vmStatus.memoryMb || 8192) / 1024)) }),
+  });
+  const portInfo = h('div', {
+    class: 'small muted vm-info',
+    text: t('android.studioVm.portInfo', { adb: String(vmStatus.adbHostPort || 15555), vnc: String(vmStatus.vncHostPort || 15900), web: String(vmStatus.webStreamHostPort || 16080), ssh: String(vmStatus.sshHostPort || 10022) }),
+  });
+  const safety = h('p', { class: 'hint vm-safety', text: t('android.studioVm.safetyNote') });
+
   const actions = h('div', { class: 'vm-chip-actions' });
-  const openBtn = h('button', { type: 'button', class: 'btn small primary' }, icon('externalLink', 14), h('span', { text: t('android.studio.open') })) as HTMLButtonElement;
-  openBtn.onclick = async () => {
-    openBtn.disabled = true;
-    try {
-      const result = await run(api.invoke<{ ok: boolean; message?: string }>('mgr:android-studio-open'));
-      if (!result?.ok) toast(result?.message || t('android.studio.openFailed'), 'err');
-    } finally {
-      openBtn.disabled = false;
+
+  if (!vmStatus.vmExists) {
+    const createBtn = h('button', { type: 'button', class: 'btn small primary' }, icon('plus', 14), h('span', { text: t('android.studioVm.create') })) as HTMLButtonElement;
+    createBtn.onclick = async () => {
+      createBtn.disabled = true;
+      toast(t('android.studioVm.creating'), 'ok');
+      const res = await run(api.invoke<{ ok: boolean; message: string }>('mgr:virtualbox-studio-vm-create', {}));
+      createBtn.disabled = false;
+      if (res?.ok) {
+        toast(t('virtualbox.created', { name: vmStatus.vmName || 'Octo-Android-Studio-Linux' }), 'ok');
+        await reload();
+      } else {
+        toast(res?.message || t('virtualbox.createFailed'), 'err');
+      }
+    };
+    actions.append(createBtn);
+  } else {
+    if (vmStatus.state === 'running') {
+      const stopBtn = h('button', { type: 'button', class: 'btn small' }, icon('close', 14), h('span', { text: t('android.studioVm.stop') })) as HTMLButtonElement;
+      stopBtn.onclick = async () => {
+        stopBtn.disabled = true;
+        await run(api.invoke('mgr:virtualbox-studio-vm-stop', false));
+        stopBtn.disabled = false;
+        await reload();
+      };
+
+      const adbBtn = h('button', { type: 'button', class: 'btn small' }, icon('smartphone', 14), h('span', { text: t('android.studioVm.connectAdb') })) as HTMLButtonElement;
+      adbBtn.onclick = async () => {
+        const res = await run(api.invoke<{ ok: boolean; message: string }>('mgr:virtualbox-studio-vm-connect-adb'));
+        if (res?.ok) toast(res.message, 'ok');
+        else toast(res?.message || 'ADB connection failed', 'err');
+        await reload();
+      };
+      actions.append(stopBtn, adbBtn);
+    } else {
+      const startBtn = h('button', { type: 'button', class: 'btn small primary' }, icon('play', 14), h('span', { text: t('android.studioVm.start') })) as HTMLButtonElement;
+      startBtn.onclick = async () => {
+        startBtn.disabled = true;
+        await run(api.invoke('mgr:virtualbox-studio-vm-start', 'gui'));
+        startBtn.disabled = false;
+        toast(t('virtualbox.started'), 'ok');
+        await reload();
+      };
+      actions.append(startBtn);
+    }
+
+    const dropBtn = h('button', { type: 'button', class: 'btn small' }, icon('folder', 14), h('span', { text: t('android.studioVm.openDrop') })) as HTMLButtonElement;
+    dropBtn.onclick = () => { void run(api.invoke('mgr:virtualbox-studio-vm-drop-folder')); };
+    actions.append(dropBtn);
+  }
+
+  const scriptBtn = h('button', { type: 'button', class: 'btn small' }, icon('file', 14), h('span', { text: t('android.studioVm.viewScript') })) as HTMLButtonElement;
+  scriptBtn.onclick = async () => {
+    const res = await run(api.invoke<{ ok: boolean; script: string }>('mgr:virtualbox-studio-vm-script'));
+    if (res?.script) {
+      await copyText(res.script);
+      toast(t('android.studioVm.scriptCopied'), 'ok');
     }
   };
-  actions.append(openBtn);
-  card.append(head, desc, actions);
+  actions.append(scriptBtn);
+
+  card.append(head, desc, specs, portInfo, safety, actions);
   return card;
 }
 
@@ -486,9 +557,10 @@ export async function renderVirtualBox(v: HTMLElement): Promise<void> {
 
   const loadAndroid = async (): Promise<void> => {
     androidRefresh.classList.add('spinning');
-    const [sdkStatus, result] = await Promise.all([
+    const [sdkStatus, result, studioVm] = await Promise.all([
       run(api.invoke<AndroidStatus>('mgr:android-status')),
       run(api.invoke<AndroidResult>('mgr:android-list')),
+      run(api.invoke<Parameters<typeof studioLinuxVmCard>[0]>('mgr:virtualbox-studio-vm-status')),
     ]);
     androidRefresh.classList.remove('spinning');
     status = sdkStatus;
@@ -496,7 +568,9 @@ export async function renderVirtualBox(v: HTMLElement): Promise<void> {
 
     // ---- engine --------------------------------------------------------
     clear(engines);
-    engines.append(androidStudioCard());
+    if (studioVm) {
+      engines.append(studioLinuxVmCard(studioVm, loadAndroid));
+    }
     const installTools = avdReady ? null : h('button', { class: 'btn small' }, icon('download', 14), h('span', { text: t('android.installTools') }));
     if (installTools) {
       installTools.onclick = async () => {
