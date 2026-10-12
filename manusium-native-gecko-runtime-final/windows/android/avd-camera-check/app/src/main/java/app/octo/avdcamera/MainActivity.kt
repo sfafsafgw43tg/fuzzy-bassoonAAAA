@@ -14,9 +14,6 @@ import android.widget.Button
 import android.widget.TextView
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
-import androidx.camera.camera2.interop.Camera2CameraInfo
-import androidx.camera.core.CameraSelector
-import androidx.camera.core.Preview
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.core.app.ActivityCompat
@@ -47,6 +44,8 @@ class MainActivity : AppCompatActivity() {
     /** The camera whose preview is streaming right now. Only this one counts as active. */
     private var boundId: String? = null
     private var provider: ProcessCameraProvider? = null
+    private lateinit var streamController: CameraStreamController
+    @Volatile private var lastFrameTimestampNs = 0L
     private var permissionRequested = false
     private var recoveryAttempt = 0
     private var titleTaps = 0
@@ -120,6 +119,11 @@ class MainActivity : AppCompatActivity() {
         statusText = findViewById(R.id.statusText)
         cameraName = findViewById(R.id.cameraName)
         previewView = findViewById(R.id.previewView)
+        streamController = CameraStreamController(this, this, previewView, FrameListener { frame ->
+            // The listener receives detached YUV buffers and may hand them to
+            // a real-time processor without retaining CameraX's ImageProxy.
+            lastFrameTimestampNs = frame.timestampNs
+        })
         permissionButton = findViewById(R.id.permissionButton)
         settingsButton = findViewById(R.id.settingsButton)
         switchButton = findViewById(R.id.switchButton)
@@ -169,7 +173,7 @@ class MainActivity : AppCompatActivity() {
         cameraManager.unregisterAvailabilityCallback(availability)
         mainHandler.removeCallbacks(startWatchdog)
         mainHandler.removeCallbacks(retryRecovery)
-        provider?.unbindAll()
+        streamController.stop()
         boundId = null
         bindingId = null
         super.onStop()
@@ -220,16 +224,13 @@ class MainActivity : AppCompatActivity() {
             paintStatus()
             return
         }
-        // Binding by Camera2 id: the selector keeps exactly that one camera.
-        val selector = CameraSelector.Builder()
-            .addCameraFilter { infos -> infos.filter { Camera2CameraInfo.from(it).cameraId == id } }
-            .build()
-        val preview = Preview.Builder().build().also { it.setSurfaceProvider(previewView.surfaceProvider) }
         previewView.previewStreamState.removeObserver(streamObserver)
         previewView.previewStreamState.observe(this, streamObserver)
         streamedFrom(id)
         try {
-            currentProvider.bindToLifecycle(this, selector, preview)
+            // Bind the exact Camera2 id, including emulator endpoints such as
+            // webcam0, with both the efficient preview and raw-frame analysis.
+            streamController.bind(currentProvider, id)
             Diagnostics.log("bound $id")
             mainHandler.postDelayed(startWatchdog, PREVIEW_START_TIMEOUT_MS)
         } catch (error: Exception) {
@@ -297,7 +298,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
-        provider?.unbindAll()
+        streamController.close()
         super.onDestroy()
     }
 

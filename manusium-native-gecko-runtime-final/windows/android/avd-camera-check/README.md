@@ -12,6 +12,10 @@ It is the on-device half of the camera work described in `docs/android-avd-camer
   another app takes is shown as unavailable, and one that comes back is offered again.
 - Binds by Camera2 ID (`CameraSelector` filter on `Camera2CameraInfo.cameraId`), and only
   after the camera permission is granted.
+- Binds the selected camera to an efficient CameraX `PreviewView` surface and a
+  `KEEP_ONLY_LATEST` YUV analyzer. `CameraStreamController` exposes detached raw
+  `YUV_420_888` plane buffers through `FrameListener` for real-time processing;
+  every `ImageProxy` is closed by the controller.
 - Remembers the selected camera. It is restored only while the system still lists it;
   otherwise the first available camera is used.
 - Shows the **switch** button only with two or more usable cameras.
@@ -68,6 +72,8 @@ The first real build and device run are still required on Windows.
 ## Files
 
 - `app/src/main/java/app/octo/avdcamera/MainActivity.kt`: permission flow, binding, state, switch.
+- `app/src/main/java/app/octo/avdcamera/CameraStreamController.kt`: selected Camera2
+  ID binding, preview surface, and detached raw-frame callback.
 - `app/src/main/java/app/octo/avdcamera/CameraCatalog.kt`: camera list, failure classification, selection rules, saved selection.
 - `app/src/main/java/app/octo/avdcamera/Diagnostics.kt`: logging, the diagnostics report.
 - `app/src/main/java/app/octo/avdcamera/DiagnosticsActivity.kt`: the hidden screen.
