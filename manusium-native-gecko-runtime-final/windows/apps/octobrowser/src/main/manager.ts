@@ -858,6 +858,17 @@ export class Manager {
           restoreActiveIndex = Math.max(0, Math.min(saved?.activeIndex ?? 0, Math.max(0, restoreUrls.length - 1)));
         } catch (error) { this.ctx.logger.warn('native-chromium.session-restore-failed', { profile: p.id, error }); }
       }
+      // Match Electron semantics: configured start pages open on every launch
+      // in addition to a restored session, while avoiding duplicate tabs.
+      const startPages = (p.startPages ?? [])
+        .filter((url) => /^https?:\/\//i.test(url))
+        .filter((url) => !restoreUrls.includes(url))
+        .slice(0, 20);
+      if (!restoreUrls.length) {
+        const first = /^https?:\/\//i.test(p.homePage) ? p.homePage : startPages.shift() ?? 'about:blank';
+        restoreUrls.push(first);
+      }
+      restoreUrls.push(...startPages);
       const engine = await spawnNativeEngine('chromium', exe, {
         profileDir: profileFolder,
         url: restoreUrls[0] ?? (/^https?:\/\//i.test(p.homePage) ? p.homePage : 'about:blank'),
