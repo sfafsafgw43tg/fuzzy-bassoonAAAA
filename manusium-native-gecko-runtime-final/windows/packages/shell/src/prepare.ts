@@ -16,7 +16,7 @@ import { app } from 'electron';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { APPS, AppId, AppInfo, BootstrapState, BootstrapStore, DataLayout, isLang } from '@octo/core';
+import { APPS, AppId, AppInfo, BootstrapState, BootstrapStore, DataLayout, isLang, ProfileManager } from '@octo/core';
 import { toSafeChromiumSwitches } from './security-policy';
 
 export interface PreparedApp {
@@ -139,7 +139,6 @@ export function prepareApp(appId: AppId, distDir: string, opts: PrepareOptions =
   app.commandLine.appendSwitch('disable-background-networking');
   const disabledFeatures = ['MediaRouter', 'DialMediaRouteProvider', 'OptimizationHints', 'AutofillServerCommunication', 'Translate', 'InterestFeedContentSuggestions'];
   if (isGraphicsBlocked) disabledFeatures.push('WebGPU');
-  app.commandLine.appendSwitch('disable-features', disabledFeatures.join(','));
 
   let state: BootstrapState | null;
   const ephemeralDir = argValue('ephemeral-data-dir');
@@ -161,6 +160,31 @@ export function prepareApp(appId: AppId, distDir: string, opts: PrepareOptions =
   if (state) {
     layout = new DataLayout(state.dataDir);
     layout.ensure(appId === 'octodetect' ? ['reports'] : ['downloads']);
+    let profileGraphicsBlocked = false;
+    const profileProcess = argValue('profile-process');
+    if (profileProcess && /^[a-z0-9-]{3,64}$/.test(profileProcess)) {
+      try {
+        const profile = new ProfileManager(layout).get(profileProcess);
+        const fingerprint = profile.fingerprint;
+        profileGraphicsBlocked = fingerprint.enabled === true
+          && (fingerprint.webgl === 'off' || fingerprint.webgpu === 'off' || fingerprint.webgpu === 'disable');
+      } catch {
+        // A missing or malformed profile is rejected by the profile manager;
+        // do not let a failed policy lookup prevent the manager from starting.
+      }
+    }
+    if (profileGraphicsBlocked) {
+      // This is process-wide by design: each profile is a separate Electron
+      // process. It closes the worker/OffscreenCanvas escape route that a
+      // page-world shim cannot cover and prevents Chromium from exposing the
+      // host adapter through WebGPU or GPU diagnostics.
+      try { app.disableHardwareAcceleration(); } catch { /* before-ready only */ }
+      app.commandLine.appendSwitch('disable-gpu');
+      app.commandLine.appendSwitch('disable-gpu-compositing');
+      app.commandLine.appendSwitch('disable-webgl');
+      app.commandLine.appendSwitch('disable-3d-apis');
+      disabledFeatures.push('WebGPU');
+    }
     const engineDir = opts.engineDirFor ? opts.engineDirFor(layout) : layout.engine;
     fs.mkdirSync(engineDir, { recursive: true });
     app.setPath('userData', engineDir);
@@ -177,6 +201,7 @@ export function prepareApp(appId: AppId, distDir: string, opts: PrepareOptions =
     app.setPath('userData', firstRunTempDir);
     app.setPath('sessionData', firstRunTempDir);
   }
+  app.commandLine.appendSwitch('disable-features', [...new Set(disabledFeatures)].join(','));
 
   return {
     info,

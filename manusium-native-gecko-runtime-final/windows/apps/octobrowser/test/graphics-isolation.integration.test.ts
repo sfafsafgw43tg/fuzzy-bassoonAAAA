@@ -82,6 +82,16 @@ it('uses the profile graphics identity overlay while preserving native rendering
   expect(source).toContain("p === 0x9245");
 });
 
+it('applies process-level GPU disabling when a profile turns WebGL/WebGPU off', () => {
+  const source = readFileSync(path.resolve(__dirname, '..', '..', '..', 'packages', 'shell', 'src', 'prepare.ts'), 'utf8');
+  expect(source).toContain("fingerprint.webgl === 'off'");
+  expect(source).toContain("fingerprint.webgpu === 'off'");
+  expect(source).toContain("app.commandLine.appendSwitch('disable-gpu')");
+  expect(source).toContain("app.commandLine.appendSwitch('disable-webgl')");
+  expect(source).toContain("app.commandLine.appendSwitch('disable-3d-apis')");
+  expect(source).toContain("disabledFeatures.push('WebGPU')");
+});
+
 describe.skipIf(!enabled)('local Electron graphics isolation observation', () => {
   it('observes block/native/block across fresh processes without CDP attachment', async () => {
     const nativeBefore = await observe('native');
