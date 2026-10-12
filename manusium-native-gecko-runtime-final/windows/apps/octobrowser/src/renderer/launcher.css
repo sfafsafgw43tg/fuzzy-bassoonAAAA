@@ -669,12 +669,19 @@ button.tg:hover { border-color: var(--accent); }
 :root[data-app-theme="liquidGlass"] select,
 :root[data-app-theme="liquidGlass"] textarea { background: rgba(255,255,255,.38); border-color: rgba(255,255,255,.78); box-shadow: inset 0 1px 0 rgba(255,255,255,.7), 0 3px 10px rgba(47,86,116,.08); }
 :root[data-app-theme="liquidGlass"] .theme-card.on { background: rgba(255,255,255,.66); border-color: var(--accent); }
-::view-transition-old(root) { animation:theme-old .18s ease both; }
-::view-transition-new(root) { animation:theme-new .22s cubic-bezier(.2,.8,.2,1) both; }
-@keyframes theme-old { to { opacity:.25; transform:scale(.995); } }
-@keyframes theme-new { from { opacity:.25; transform:scale(1.006); filter:saturate(.7); } }
 :root.theme-changing .theme-card.on .theme-swatch { animation:theme-swatch-pop .24s cubic-bezier(.2,.9,.2,1); }
 @keyframes theme-swatch-pop { 45% { transform:scale(.965); filter:brightness(1.2); } }
+.theme-transition-layer { position:fixed; inset:0; z-index:2000; overflow:hidden; pointer-events:none; contain:layout paint; }
+.theme-transition-flight { position:fixed; left:var(--theme-start-x); top:var(--theme-start-y); display:block; width:var(--theme-start-w); height:var(--theme-start-h); min-height:0; gap:0; padding:0; border:0; border-radius:8px; background:transparent; text-align:left; overflow:hidden; opacity:.94; transform-origin:50% 50%; box-shadow:0 16px 34px rgb(0 0 0 / .28), 0 0 0 1px rgb(255 255 255 / .18); animation:theme-preview-flight 760ms cubic-bezier(.2,.78,.2,1) both; }
+.theme-transition-flight::after { content:""; position:absolute; z-index:-1; left:-42%; top:34%; width:184%; height:42%; border-radius:50%; background:linear-gradient(90deg, transparent, color-mix(in srgb, var(--accent) 28%, transparent), transparent); filter:blur(13px); opacity:.72; transform:rotate(-9deg); animation:theme-preview-ribbon 760ms ease-in-out both; }
+.theme-transition-flight .theme-swatch { width:100%; height:100%; border:0; border-radius:0; }
+.theme-transition-wash { position:fixed; inset:0; background:color-mix(in srgb, var(--accent) 8%, transparent); mix-blend-mode:screen; clip-path:circle(0 at var(--theme-end-x) var(--theme-end-y)); animation:theme-preview-wash 760ms cubic-bezier(.2,.75,.2,1) 170ms both; }
+.theme-transition-ripple { position:fixed; left:var(--theme-end-x); top:var(--theme-end-y); width:20px; height:20px; border:1px solid color-mix(in srgb, var(--accent) 55%, transparent); border-radius:50%; transform:translate(-50%, -50%) scale(.25); opacity:0; animation:theme-preview-ripple 760ms cubic-bezier(.2,.8,.2,1) 170ms both; }
+@keyframes theme-preview-flight { 0% { opacity:.94; transform:translate3d(0,0,0) rotate(-1deg) scale(1); } 34% { transform:translate3d(calc((var(--theme-end-x) - var(--theme-start-x)) * .28), calc((var(--theme-end-y) - var(--theme-start-y)) * .18 - 24px), 0) rotate(4deg) scale(1.08); } 68% { opacity:.86; transform:translate3d(calc((var(--theme-end-x) - var(--theme-start-x)) * .76), calc((var(--theme-end-y) - var(--theme-start-y)) * .74), 0) rotate(-3deg) scale(.66); } 100% { opacity:0; transform:translate3d(calc(var(--theme-end-x) - var(--theme-start-x)), calc(var(--theme-end-y) - var(--theme-start-y)), 0) rotate(0) scale(.22); } }
+@keyframes theme-preview-ribbon { 0%, 100% { transform:translateX(-8%) rotate(-9deg) scaleX(.72); opacity:0; } 28%, 68% { opacity:.75; } 80% { transform:translateX(10%) rotate(4deg) scaleX(1.08); opacity:.45; } }
+@keyframes theme-preview-wash { 0% { clip-path:circle(0 at var(--theme-end-x) var(--theme-end-y)); opacity:0; } 25% { opacity:.7; } 100% { clip-path:circle(145% at var(--theme-end-x) var(--theme-end-y)); opacity:0; } }
+@keyframes theme-preview-ripple { 0% { opacity:0; transform:translate(-50%, -50%) scale(.25); } 28% { opacity:.7; } 100% { opacity:0; transform:translate(-50%, -50%) scale(18); } }
+@media (prefers-reduced-motion: reduce) { .theme-transition-layer { display:none; } }
 .sidebar-panel { max-width: 720px; }
 .sidebar-prefs { display: flex; flex-direction: column; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; }
 .sidebar-pref-row { display: flex; align-items: center; gap: 8px; min-height: 46px; padding: 5px 8px; border-bottom: 1px solid var(--line); background: var(--bg2); }

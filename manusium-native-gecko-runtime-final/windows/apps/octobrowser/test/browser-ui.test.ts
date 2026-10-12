@@ -324,10 +324,15 @@ describe('browser entry UI', () => {
     expect(launcherCss).not.toContain('.loading-popout-layer');
   });
 
-  it('uses realistic theme miniatures and a short animated live transition', () => {
+  it('uses realistic theme miniatures and a click-originated live transition', () => {
     expect(launcher).toContain("class: 'theme-preview-body'");
-    expect(launcher).toContain('startViewTransition');
-    expect(launcherCss).toContain('::view-transition-new(root)');
+    expect(launcher).toContain('playThemeTransition(card, event)');
+    expect(launcher).toContain('event.clientX > 0 ? event.clientX');
+    expect(launcher).toContain('theme-transition-flight theme-card');
+    expect(launcherCss).toContain('.theme-transition-layer');
+    expect(launcherCss).toContain('@keyframes theme-preview-flight');
+    expect(launcherCss).toContain('@keyframes theme-preview-ripple');
+    expect(launcherCss).toContain('@media (prefers-reduced-motion: reduce) { .theme-transition-layer { display:none; } }');
   });
 
   it('keeps media opt-in and provides live browser selection, preview and vStudio preparation', () => {

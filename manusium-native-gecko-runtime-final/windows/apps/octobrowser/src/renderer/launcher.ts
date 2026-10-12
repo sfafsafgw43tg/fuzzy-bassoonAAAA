@@ -103,6 +103,40 @@ function playSidebarMotion(selector: string, positions: Map<string, number> | nu
   });
 }
 
+/** Animate the selected miniature into the browser chrome without delaying the theme change. */
+function playThemeTransition(card: HTMLElement, event: MouseEvent): void {
+  const swatch = card.querySelector<HTMLElement>('.theme-swatch');
+  if (!swatch) return;
+  if (matchMedia('(prefers-reduced-motion: reduce)').matches) {
+    document.body.animate([{ opacity: .82 }, { opacity: 1 }], { duration: 160, easing: 'ease-out' });
+    return;
+  }
+  const swatchRect = swatch.getBoundingClientRect();
+  const titlebar = document.querySelector<HTMLElement>('.app-titlebar')?.getBoundingClientRect();
+  const endX = titlebar ? titlebar.left + titlebar.width * .52 : innerWidth * .5;
+  const endY = titlebar ? titlebar.top + titlebar.height * .55 : 36;
+  const pointerX = event.clientX > 0 ? event.clientX : swatchRect.left + swatchRect.width / 2;
+  const pointerY = event.clientY > 0 ? event.clientY : swatchRect.top + swatchRect.height / 2;
+  const layer = document.createElement('div');
+  layer.className = 'theme-transition-layer';
+  const themeClass = [...card.classList].find((name) => name.startsWith('theme-')) ?? '';
+  const flight = swatch.cloneNode(true) as HTMLElement;
+  flight.className = `theme-transition-flight theme-card ${themeClass}`.trim();
+  const wash = document.createElement('span');
+  wash.className = 'theme-transition-wash';
+  const ripple = document.createElement('span');
+  ripple.className = 'theme-transition-ripple';
+  layer.append(flight, wash, ripple);
+  layer.style.setProperty('--theme-start-x', `${pointerX - swatchRect.width / 2}px`);
+  layer.style.setProperty('--theme-start-y', `${pointerY - swatchRect.height / 2}px`);
+  layer.style.setProperty('--theme-start-w', `${swatchRect.width}px`);
+  layer.style.setProperty('--theme-start-h', `${swatchRect.height}px`);
+  layer.style.setProperty('--theme-end-x', `${endX}px`);
+  layer.style.setProperty('--theme-end-y', `${endY}px`);
+  document.body.append(layer);
+  window.setTimeout(() => layer.remove(), 860);
+}
+
 /** Enlarged octopus mark in the top-left corner of the launcher. */
 function renderBrand(): void {
   const head = $('railHead');
@@ -726,12 +760,11 @@ function renderSettings(v: HTMLElement): void {
       const selected = s.ui.theme === id;
       const card = h('button', { type: 'button', class: `theme-card theme-${id}${selected ? ' on' : ''}`, 'data-theme': id, role: 'radio', 'aria-checked': String(selected) },
         h('span', { class: 'theme-check' }, selected ? icon('check', 14) : null), preview(), h('b', { text: name }), h('span', { text: t(desc) }));
-    card.onclick = async () => {
+    card.onclick = async (event) => {
       if (init.settings.ui.theme === id) return;
       const previous = init.settings.ui.theme;
-      const doc = document as Document & { startViewTransition?: (callback: () => void) => { finished: Promise<void> } };
-      if (doc.startViewTransition) doc.startViewTransition(() => applyLauncherTheme(id));
-      else applyLauncherTheme(id);
+      applyLauncherTheme(id);
+      playThemeTransition(card, event);
       document.documentElement.classList.add('theme-changing');
       markTheme(id);
       const saved = await saveSettings({ ui: { theme: id } });
