@@ -1885,12 +1885,12 @@ function browser(b: HTMLElement, d: Draft, draw: () => void, summary: () => void
   installRuntime.onclick = async () => {
     const version = runtimeSelect.value;
     const result = await run(api.invoke<unknown>('mgr:chromium-install', version));
-    if (result) { S.init.chromiumRuntimes = await api.invoke('mgr:chromium-catalog'); refreshRuntime(); toast(`InkBrowser ${version} installed`, 'ok'); }
+    if (result) { S.init.chromiumRuntimes = await api.invoke('mgr:chromium-catalog'); refreshRuntime(); toast(`${S.init.chromiumRuntimes.find((entry) => entry.entry.version === version)?.entry.displayName ?? 'InkBrowser'} ${version} installed`, 'ok'); }
   };
   removeRuntime.onclick = async () => {
     const version = runtimeSelect.value;
     const result = await run(api.invoke<boolean>('mgr:chromium-remove', version));
-    if (result) { S.init.chromiumRuntimes = await api.invoke('mgr:chromium-catalog'); refreshRuntime(); toast(`InkBrowser ${version} removed`, 'ok'); }
+    if (result) { S.init.chromiumRuntimes = await api.invoke('mgr:chromium-catalog'); refreshRuntime(); toast(`${S.init.chromiumRuntimes.find((entry) => entry.entry.version === version)?.entry.displayName ?? 'InkBrowser'} ${version} removed`, 'ok'); }
   };
   acc.append(accordionSection(t('fp.adv.browserSettings'), t('fp.info.advBrowserSettings'),
     h('div', { class: 'frows' },

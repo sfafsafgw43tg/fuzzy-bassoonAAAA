@@ -64,7 +64,7 @@ import { execFile } from 'node:child_process';
 import { DOLPHIN_IMPORT_FIELDS, convertDolphinProfile, dolphinProfileSummaries, parseDolphinExport, type DolphinImportOptions } from './dolphin-import';
 import { FirefoxBidi, NativeChromiumTabs, NativeEngineProcess, spawnNativeEngine } from '@octo/shell/native-engine';
 import { discoverEngineRuntime, EngineRunnerError } from '@octo/shell/engine-runtime';
-import { catalogEntry, listInstalled, installChromium, removeChromium, DEFAULT_CHROMIUM_VERSION } from '@octo/shell/runtime-catalog';
+import { catalogEntry, catalogForPlatform, listInstalled, installChromium, removeChromium, DEFAULT_CHROMIUM_VERSION } from '@octo/shell/runtime-catalog';
 import { discoverFirefoxRuntime, geckoCatalogEntry, installFirefoxRuntime, inspectFirefoxRuntime } from '@octo/shell/gecko-runtime';
 import { chromiumPrivacyArgs, prepareChromiumPrivacy, prepareFirefoxPrivacy } from '@octo/shell/engine-privacy';
 
@@ -819,6 +819,22 @@ export class Manager {
             discovered = discoverEngineRuntime('chromium', { resourcesPath, env, version: p.chromiumRuntime ?? DEFAULT_CHROMIUM_VERSION }).executablePath;
             break;
           } catch { /* try the next trusted root */ }
+        }
+        // Normal Windows users must not compile Chromium. If no explicit
+        // runtime is selected, install the pinned unmodified catalog runtime
+        // once and persist that choice for the profile. The catalog default
+        // is the source-built compatibility entry, so it is also eligible
+        // for this repair when no native build is installed.
+        if (!discovered && (!p.chromiumRuntime || p.chromiumRuntime === DEFAULT_CHROMIUM_VERSION) && process.platform === 'win32' && process.arch === 'x64') {
+          const fallback = catalogForPlatform('win32', 'x64').find((entry) => entry.distribution === 'ungoogled-chromium' && entry.support === 'supported');
+          if (fallback) {
+            const installed = installChromium(fallback, path.join(this.ctx.layout.engine, 'runtimes', 'chromium'));
+            discovered = installed.executablePath;
+            this.profiles.update(id, { chromiumRuntime: fallback.version });
+            p = this.profiles.get(id);
+            this.pushProfiles();
+            this.ctx.logger.info('profile.chromium-runtime-installed', { profile: id, version: fallback.version, executable: discovered });
+          }
         }
         if (!discovered) throw new EngineRunnerError('runtime-missing', 'No packaged Chromium runtime found');
         exe = discovered;
