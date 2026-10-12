@@ -1053,12 +1053,26 @@ export class BrowserWindowController {
         );
       }
     }
+    const inputSimulation: Electron.MenuItemConstructorOptions = {
+      label: T('ctx.inputSimulation'),
+      accelerator: 'Ctrl+Shift+U',
+      icon: iconPath(this.rt.distDir),
+      click: () => {
+        if (wc.isDestroyed()) return;
+        // Send the same keyboard sequence as the documented shortcut while
+        // keeping the action inside the focused page's native input path.
+        wc.sendInputEvent({ type: 'keyDown', keyCode: 'U', modifiers: ['control', 'shift'] });
+        wc.sendInputEvent({ type: 'keyUp', keyCode: 'U', modifiers: ['control', 'shift'] });
+      },
+    };
     if (items.length) items.push({ type: 'separator' });
     items.push(
       { label: T('ctx.back'), enabled: wc.navigationHistory.canGoBack(), click: () => wc.navigationHistory.goBack() },
       { label: T('ctx.forward'), enabled: wc.navigationHistory.canGoForward(), click: () => wc.navigationHistory.goForward() },
       { label: T('ctx.reload'), click: () => wc.reload() },
       { label: T('ctx.pip'), click: () => this.command('pip') },
+      { type: 'separator' },
+      inputSimulation,
       { type: 'separator' },
       { label: T('ctx.inspect'), click: () => wc.inspectElement(p.x, p.y) },
     );

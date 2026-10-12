@@ -707,6 +707,7 @@ export const pl: Record<string, string> = {
   'ctx.searchSelection': 'Szukaj zaznaczenia',
   'ctx.openExternal': 'Otwórz w domyślnej przeglądarce',
   'ctx.pip': 'Obraz w obrazie',
+  'ctx.inputSimulation': 'Symulacja wejścia',
   'ctx.inspect': 'Zbadaj',
 
   // ---------------------------------------------------------------- panel prywatności

@@ -633,6 +633,14 @@ describe('browser entry UI', () => {
 });
 
 describe('tab right-click dropdown', () => {
+  it('adds Octo input simulation above Inspect with the Ctrl+Shift+U accelerator', () => {
+    expect(windowController).toContain("label: T('ctx.inputSimulation')");
+    expect(windowController).toContain("accelerator: 'Ctrl+Shift+U'");
+    expect(windowController).toContain('icon: iconPath(this.rt.distDir)');
+    expect(windowController).toContain("inputSimulation,\n      { type: 'separator' },\n      { label: T('ctx.inspect')");
+    expect(windowController).toContain("type: 'keyDown', keyCode: 'U', modifiers: ['control', 'shift']");
+  });
+
   it('opens the Chromium-style dropdown at the cursor instead of the side panel', () => {
     // The tab menu is the shared #chromeMenu dropdown: it floats over the page via the same
     // popup layering, closes on outside click or Escape, and is positioned at the pointer.

@@ -708,6 +708,7 @@ export const en: Record<string, string> = {
   'ctx.searchSelection': 'Search for selection',
   'ctx.openExternal': 'Open in default browser',
   'ctx.pip': 'Picture in picture',
+  'ctx.inputSimulation': 'Input simulation',
   'ctx.inspect': 'Inspect',
 
   // ---------------------------------------------------------------- privacy panel
