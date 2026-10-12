@@ -127,6 +127,8 @@ describe('browser entry UI', () => {
     expect(launcherCss).toContain('.theme-card:hover, .theme-card:focus-visible');
     expect(launcherCss).toContain(':root[data-app-theme="winterNight"] body::before');
     expect(launcherCss).toContain('seasonal-snowfall-random 91s linear infinite alternate');
+    expect(launcherCss).toContain('opacity: .74;');
+    expect(launcherCss).toContain('var(--panel) 80%, transparent');
     expect(launcherCss).toContain('.theme-panel-summary');
   });
 
