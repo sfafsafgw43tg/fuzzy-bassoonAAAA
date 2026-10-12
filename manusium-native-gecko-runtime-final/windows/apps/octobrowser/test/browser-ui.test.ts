@@ -664,6 +664,8 @@ describe('browser entry UI', () => {
     expect(launcherProfiles).toContain("class: 'search-toggle'");
     expect(launcherProfiles).toContain("searchBox.classList.contains('collapsed')");
     expect(launcherProfiles).toContain("searchToggle.setAttribute('aria-expanded'");
+    expect(launcherProfiles).toContain('collapseSearchTimer = setTimeout(() => setSearchExpanded(false), 900)');
+    expect(launcherProfiles).toContain('if (!expanded) search.blur();');
     expect(launcherCss).toContain('.profile-search.collapsed { width: 38px;');
     expect(launcherCss).toContain('.profile-search.collapsed input { flex: 0 0 0;');
     expect(launcherCss).toContain('transition: width .22s var(--mo-ease)');

@@ -958,10 +958,17 @@ export function renderProfiles(v: HTMLElement): void {
   sorting.title = t('profiles.sort.label');
   const organization = h('div', { class: 'profile-organization' }, category, sorting);
   const search = input(S.search, { type: 'search', placeholder: t('ui.searchPh'), 'aria-label': t('ui.searchPh'), id: 'profileSearch' });
-  search.oninput = () => { S.search = search.value; drawTable(); };
+  let collapseSearchTimer: ReturnType<typeof setTimeout> | undefined;
+  search.oninput = () => {
+    S.search = search.value;
+    drawTable();
+    if (collapseSearchTimer) clearTimeout(collapseSearchTimer);
+    if (search.value.trim()) collapseSearchTimer = setTimeout(() => setSearchExpanded(false), 900);
+  };
   const searchToggle = h('button', { class: 'search-toggle', type: 'button', 'aria-label': t('ui.searchPh'), title: t('ui.searchPh') }, icon('search', 16));
   const searchBox = h('div', { class: 'search profile-search' }, searchToggle, search);
   const setSearchExpanded = (expanded: boolean): void => {
+    if (!expanded) search.blur();
     searchBox.classList.toggle('collapsed', !expanded);
     searchToggle.setAttribute('aria-expanded', String(expanded));
     if (expanded) search.focus();
