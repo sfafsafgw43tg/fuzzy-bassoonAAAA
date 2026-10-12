@@ -1656,8 +1656,16 @@ export interface EmulatorCameraReport {
  * a launch fallback, not a claim that the endpoint was verified; the post-boot
  * Camera2 check remains authoritative.
  */
-export function automaticWebcamFallback(hostCameraCount: number, report: EmulatorCameraReport, platform: NodeJS.Platform = process.platform): EmulatorWebcam[] {
-  if (platform !== 'win32' || hostCameraCount < 1 || report.webcams.length > 0) return [];
+export function automaticWebcamFallback(
+  hostCameraCount: number,
+  report: EmulatorCameraReport,
+  platform: NodeJS.Platform = process.platform,
+  explicitEndpoints: readonly string[] = [],
+): EmulatorWebcam[] {
+  if (platform !== 'win32' || report.webcams.length > 0) return [];
+  const saved = explicitEndpoints.find((value) => /^webcam\d+$/.test(value));
+  if (saved) return [{ name: saved, device: 'Saved Windows host camera endpoint', virtual: false, foreign: false }];
+  if (hostCameraCount < 1) return [];
   return [{ name: 'webcam0', device: 'Windows host camera (automatic fallback)', virtual: false, foreign: false }];
 }
 
@@ -3507,7 +3515,15 @@ export async function launchAndroidAvd(input: AndroidLaunchInput): Promise<Andro
   const emulatorRoot = rootForPackage(avdSystemPackage(avd)) || tools.root;
   const webcamReport = await emulatorWebcamsFrom(emulator, emulatorRoot);
   const hostCameraCount = (await windowsCameraNames()).length;
-  const fallback = automaticWebcamFallback(hostCameraCount, webcamReport);
+  const explicitEndpoints = [
+    input.cameraBackDevice ?? avd.cameraBackDevice ?? '',
+    input.cameraFrontDevice ?? avd.cameraFrontDevice ?? '',
+    input.cameraDevice ?? avd.cameraDevice ?? '',
+  ];
+  const explicitFallback = automaticWebcamFallback(0, webcamReport, process.platform, explicitEndpoints);
+  const fallback = explicitFallback.length
+    ? explicitFallback
+    : automaticWebcamFallback(hostCameraCount, webcamReport);
   const webcams = webcamReport.webcams.length ? webcamReport.webcams : fallback;
   const assignments = resolveActiveCameraAssignments(
     front, back,
@@ -3524,7 +3540,9 @@ export async function launchAndroidAvd(input: AndroidLaunchInput): Promise<Andro
       : 'The selected Android Emulator reported no usable host cameras. Set the AVD cameras to Webcam and cold boot it.';
     cameraWarning = [cameraWarning, reason].filter(Boolean).join(' ');
   }
-  if (fallback.length && (front === 'webcam' || back === 'webcam')) {
+  if (explicitFallback.length && (front === 'webcam' || back === 'webcam')) {
+    cameraWarning = [cameraWarning, `${explicitFallback[0].name} was preserved from the saved AVD configuration and will be verified after boot.`].filter(Boolean).join(' ');
+  } else if (fallback.length && (front === 'webcam' || back === 'webcam')) {
     cameraWarning = [cameraWarning, 'The emulator did not enumerate cameras; webcam0 was configured automatically and must be verified after the cold boot.'].filter(Boolean).join(' ');
   }
   writeConfigValues(avd.path, mediaConfig(

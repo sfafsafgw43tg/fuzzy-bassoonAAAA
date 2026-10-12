@@ -713,6 +713,8 @@ describe('wiring a live camera into a device', () => {
     const empty = { webcams: [], problem: 'reported' as const, detail: '' };
     expect(automaticWebcamFallback(58, empty, 'win32')).toMatchObject([{ name: 'webcam0' }]);
     expect(automaticWebcamFallback(0, empty, 'win32')).toEqual([]);
+    expect(automaticWebcamFallback(0, empty, 'win32', ['webcam0'])).toMatchObject([{ name: 'webcam0' }]);
+    expect(automaticWebcamFallback(0, empty, 'win32', ['not-a-webcam'])).toEqual([]);
     expect(automaticWebcamFallback(58, empty, 'linux')).toEqual([]);
     expect(automaticWebcamFallback(58, { ...empty, webcams: [{ name: 'webcam1', device: 'Camera', virtual: false }] }, 'win32')).toEqual([]);
   });
