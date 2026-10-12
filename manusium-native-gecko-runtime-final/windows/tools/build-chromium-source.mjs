@@ -15,7 +15,7 @@
 import fs from 'node:fs';
 import { applyChromiumBranding } from './lib/chromium-branding.mjs';
 import { copyChromiumPayload } from './lib/chromium-payload.mjs';
-import { applyPatchSeries } from './apply-chromium-patches.mjs';
+import { applyPatchSeries } from './inkbrowser/apply-chromium-patches.mjs';
 import path from 'node:path';
 import os from 'node:os';
 import crypto from 'node:crypto';

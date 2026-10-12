@@ -181,6 +181,8 @@ describe('the options reach the real installation', () => {
 describe('steps and the console installer', () => {
   it('uses bundled Windows Chromium and leaves source compilation to CI', () => {
     const chromium = fs.readFileSync(path.join(root, 'tools', 'build-chromium-source.mjs'), 'utf8');
+    expect(chromium).toContain("from './inkbrowser/apply-chromium-patches.mjs'");
+    expect(chromium).not.toContain("from './apply-chromium-patches.mjs'");
     expect(chromium).toContain('fetching Chromium source');
     expect(chromium).toContain('autoninja');
     expect(chromium).toContain("const parentIsGclientCheckout = fs.existsSync(parentGclient);");
