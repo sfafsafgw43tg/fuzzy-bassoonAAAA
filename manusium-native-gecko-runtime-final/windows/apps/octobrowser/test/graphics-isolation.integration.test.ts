@@ -97,11 +97,17 @@ it('covers Canvas exports and all common AudioBuffer/Analyser readback APIs', ()
 it('applies process-level GPU disabling when a profile turns WebGL/WebGPU off', () => {
   const source = readFileSync(path.resolve(__dirname, '..', '..', '..', 'packages', 'shell', 'src', 'prepare.ts'), 'utf8');
   expect(source).toContain("fingerprint.webgl === 'off'");
-  expect(source).toContain("fingerprint.webgpu === 'off'");
   expect(source).toContain("app.commandLine.appendSwitch('disable-gpu')");
   expect(source).toContain("app.commandLine.appendSwitch('disable-webgl')");
   expect(source).toContain("app.commandLine.appendSwitch('disable-3d-apis')");
   expect(source).toContain("disabledFeatures.push('WebGPU')");
+});
+
+it('does not let the app-level graphics block force Basic Render Driver for enabled WebGL profiles', () => {
+  const source = readFileSync(path.resolve(__dirname, '..', '..', '..', 'packages', 'shell', 'src', 'prepare.ts'), 'utf8');
+  expect(source).toContain("profile.fingerprint.webgl !== 'off'");
+  expect(source).toContain('isGraphicsBlocked = false');
+  expect(source).toContain("fingerprint.webgpu === 'off' || fingerprint.webgpu === 'disable'");
 });
 
 describe.skipIf(!enabled)('local Electron graphics isolation observation', () => {

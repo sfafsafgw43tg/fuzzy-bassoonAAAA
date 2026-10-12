@@ -92,6 +92,7 @@ export function prepareApp(appId: AppId, distDir: string, opts: PrepareOptions =
 
   let isVmMode = hasFlag('disable-gpu') || hasFlag('vm-mode') || hasFlag('virtualbox-mode') || process.env.OCTO_VM_MODE === '1';
   let isGraphicsBlocked = false;
+  const profileProcess = argValue('profile-process');
 
   {
     try {
@@ -103,6 +104,16 @@ export function prepareApp(appId: AppId, distDir: string, opts: PrepareOptions =
           if (fs.existsSync(setFile)) {
             const setObj = JSON.parse(fs.readFileSync(setFile, 'utf8'));
             isGraphicsBlocked = setObj?.privacyRuntime?.graphicsExposure === 'block';
+            // A profile's page shim can consistently expose its selected WebGL
+            // identity only when Chromium keeps the native GPU path. The old
+            // app-level block ran first and forced d3d11-warp-webgl, which made
+            // every enabled profile report Microsoft Basic Render Driver.
+            if (isGraphicsBlocked && profileProcess && /^[a-z0-9-]{3,64}$/.test(profileProcess)) {
+              try {
+                const profile = new ProfileManager(new DataLayout(raw.dataDir)).get(profileProcess);
+                if (profile.fingerprint?.enabled === true && profile.fingerprint.webgl !== 'off') isGraphicsBlocked = false;
+              } catch { /* profile validation below remains authoritative */ }
+            }
             if (setObj?.ui?.virtualBoxMode === true || setObj?.ui?.vmMode === true || setObj?.ui?.vmFriendlyMode === true) {
               isVmMode = true;
             }
@@ -161,13 +172,15 @@ export function prepareApp(appId: AppId, distDir: string, opts: PrepareOptions =
     layout = new DataLayout(state.dataDir);
     layout.ensure(appId === 'octodetect' ? ['reports'] : ['downloads']);
     let profileGraphicsBlocked = false;
-    const profileProcess = argValue('profile-process');
     if (profileProcess && /^[a-z0-9-]{3,64}$/.test(profileProcess)) {
       try {
         const profile = new ProfileManager(layout).get(profileProcess);
         const fingerprint = profile.fingerprint;
         profileGraphicsBlocked = fingerprint.enabled === true
-          && (fingerprint.webgl === 'off' || fingerprint.webgpu === 'off' || fingerprint.webgpu === 'disable');
+          && fingerprint.webgl === 'off';
+        if (fingerprint.enabled === true && (fingerprint.webgpu === 'off' || fingerprint.webgpu === 'disable')) {
+          disabledFeatures.push('WebGPU');
+        }
       } catch {
         // A missing or malformed profile is rejected by the profile manager;
         // do not let a failed policy lookup prevent the manager from starting.
