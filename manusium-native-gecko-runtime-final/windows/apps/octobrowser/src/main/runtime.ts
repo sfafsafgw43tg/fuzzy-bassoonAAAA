@@ -43,6 +43,17 @@ import { SHORTCUT_HELP } from '../shared/shortcuts';
 
 type Pending = { resolve: (ok: boolean) => void; timer: NodeJS.Timeout };
 
+function effectiveProfileSearchEngine(profile: Pick<Profile, 'searchEngine' | 'homePage' | 'startPages' | 'browserShell'>): SearchEngine | undefined {
+  if (profile.searchEngine && Object.prototype.hasOwnProperty.call(SEARCH_ENGINES, profile.searchEngine)) return profile.searchEngine;
+  const pages = [profile.homePage, ...(profile.startPages ?? [])].map((url) => url.trim().toLowerCase());
+  const inferred = (Object.entries(SEARCH_ENGINES) as Array<[SearchEngine, string]>).find(([, queryUrl]) => {
+    const base = queryUrl.replace(/[?&][^=]+=$/, '').replace(/=$/, '').toLowerCase();
+    return pages.some((page) => page === base || page.startsWith(base));
+  });
+  if (inferred) return inferred[0];
+  return profile.browserShell === 'chrome' || profile.browserShell === 'chromium' ? 'duckduckgo-noai' : undefined;
+}
+
 export class ProfileRuntime {
   profile: Profile;
   readonly layout: DataLayout;
@@ -479,7 +490,7 @@ export class ProfileRuntime {
     if (s === 'about:blank') return s;
     if (/^(localhost|(\d{1,3}\.){3}\d{1,3}|\[[0-9a-f:]+\])(:\d+)?(\/.*)?$/i.test(s)) return `http://${s}`;
     if (!/\s/.test(s) && /^[^/?#]+\.[a-z]{2,}(:\d+)?([/?#].*)?$/i.test(s)) return `https://${s}`;
-    const engine = this.profile.searchEngine || this.settings.load().network.searchEngine;
+    const engine = effectiveProfileSearchEngine(this.profile) || this.settings.load().network.searchEngine;
     return searchEngineQueryUrl(engine, s);
   }
 
@@ -1093,7 +1104,7 @@ export class ProfileRuntime {
           searchEngine: set.network.searchEngine, searchEngines: Object.keys(SEARCH_ENGINES), autoRefresh: set.network.autoRefresh, offline: set.offline,
         },
         profile: {
-          name: p.name, theme: p.theme, browserShell: p.browserShell, appMode: p.appMode, smartPaste: p.smartPaste, homePage: p.homePage, searchEngine: p.searchEngine || '',
+          name: p.name, theme: p.theme, browserShell: p.browserShell, appMode: p.appMode, smartPaste: p.smartPaste, homePage: p.homePage, searchEngine: effectiveProfileSearchEngine(p) || '',
           savePasswords: p.savePasswords, keepHistory: p.keepHistory, restoreSession: p.restoreSession, level: p.protection.level,
           mediaCapture: p.mediaCapture, downloads: p.downloads,
           cameraAllowed: p.sandbox.camera, microphoneAllowed: p.sandbox.microphone,
