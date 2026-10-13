@@ -92,9 +92,12 @@ function launcherChrome(theme: string): { color: string; symbolColor: string } {
  * JSON Preferences file. This is deliberately a normal browser preference:
  * it does not rewrite identity, inject scripts, or alter site behavior.
  */
+const CHROMIUM_DEFAULT_SEARCH_URL = 'https://noai.duckduckgo.com/';
+const CHROMIUM_DEFAULT_START_PAGE = CHROMIUM_DEFAULT_SEARCH_URL;
+
 function prepareChromiumSearchPreference(profileFolder: string, engine: string | undefined): void {
-  const selected = engine && Object.prototype.hasOwnProperty.call(SEARCH_ENGINES, engine) ? engine as SearchEngine : 'duckduckgo';
-  const queryUrl = SEARCH_ENGINES[selected];
+  const selected = engine && Object.prototype.hasOwnProperty.call(SEARCH_ENGINES, engine) ? engine as SearchEngine : undefined;
+  const queryUrl = selected ? SEARCH_ENGINES[selected] : CHROMIUM_DEFAULT_SEARCH_URL;
   const preferencesPath = path.join(profileFolder, 'Default', 'Preferences');
   fs.mkdirSync(path.dirname(preferencesPath), { recursive: true });
   let preferences: Record<string, unknown> = {};
@@ -110,8 +113,8 @@ function prepareChromiumSearchPreference(profileFolder: string, engine: string |
   }
   preferences.default_search_provider_data = {
     template_url_data: {
-      short_name: selected,
-      keyword: selected,
+      short_name: selected ?? 'DuckDuckGo No AI',
+      keyword: selected ?? 'duckduckgo-noai',
       // Chromium's TemplateURL format uses {searchTerms}, not %s.
       url: `${queryUrl}{searchTerms}`,
       safe_for_autoreplace: false,
@@ -127,8 +130,8 @@ function nativeChromiumNavigationTarget(input: string, engine: string | undefine
   if (/^(https?|about):/i.test(value)) return value;
   if (/^(localhost|(?:\d{1,3}\.){3}\d{1,3}|\[[0-9a-f:]+\])(?::\d+)?(?:\/.*)?$/i.test(value)) return `http://${value}`;
   if (!/\s/.test(value) && /^[^/?#]+\.[a-z]{2,}(?::\d+)?(?:[/?#].*)?$/i.test(value)) return `https://${value}`;
-  const selected = engine && Object.prototype.hasOwnProperty.call(SEARCH_ENGINES, engine) ? engine as SearchEngine : 'duckduckgo';
-  return searchEngineQueryUrl(selected, value);
+  const selected = engine && Object.prototype.hasOwnProperty.call(SEARCH_ENGINES, engine) ? engine as SearchEngine : undefined;
+  return selected ? searchEngineQueryUrl(selected, value) : `${CHROMIUM_DEFAULT_SEARCH_URL}${encodeURIComponent(value)}`;
 }
 
 assertSafeWebPreferences({ ...SAFE_WEB_PREFERENCES, webviewTag: false });
@@ -904,7 +907,9 @@ export class Manager {
       if (!exe) return { status: 'inkbrowser-missing', detail: 'bundled-runtime-missing' };
       const profileFolder = path.join(this.ctx.layout.profileEngineDir(p.id), 'inkbrowser-profile');
       prepareChromiumPrivacy(profileFolder, p.enginePrivacy.chromium);
-      prepareChromiumSearchPreference(profileFolder, p.searchEngine ?? this.ctx.settings.load().network.searchEngine);
+      // Chromium has its own ordinary-browser default. An explicit profile
+      // choice still wins; the Electron/app-wide default must not replace it.
+      prepareChromiumSearchPreference(profileFolder, p.searchEngine);
       const debugPort = await this.freePort();
       let restoreUrls: string[] = [];
       let restoreActiveIndex = 0;
@@ -922,7 +927,9 @@ export class Manager {
         .filter((url) => !restoreUrls.includes(url))
         .slice(0, 20);
       if (!restoreUrls.length) {
-        const first = /^https?:\/\//i.test(p.homePage) ? p.homePage : startPages.shift() ?? 'chrome://newtab/';
+        const first = /^https?:\/\//i.test(p.homePage) && p.homePage !== 'octo://newtab'
+          ? p.homePage
+          : startPages.shift() ?? CHROMIUM_DEFAULT_START_PAGE;
         restoreUrls.push(first);
       }
       restoreUrls.push(...startPages);
@@ -3215,7 +3222,7 @@ export class Manager {
       if (!native) throw new Error('Profile is not running in native Chromium');
       const raw = String(url ?? '').trim();
       const profile = this.profiles.get(String(id));
-      const target = nativeChromiumNavigationTarget(raw, profile.searchEngine ?? this.ctx.settings.load().network.searchEngine);
+      const target = nativeChromiumNavigationTarget(raw, profile.searchEngine);
       const active = await native.tabs.activeTab();
       await native.tabs.navigate(active.id, target);
       return native.tabs.state(active.id);
@@ -3234,7 +3241,7 @@ export class Manager {
       const native = this.nativeChromium.get(String(id));
       if (!native) throw new Error('Profile is not running in native Chromium');
       const profile = this.profiles.get(String(id));
-      return native.tabs.newTab(nativeChromiumNavigationTarget(String(url ?? 'about:blank'), profile.searchEngine ?? this.ctx.settings.load().network.searchEngine), true);
+      return native.tabs.newTab(nativeChromiumNavigationTarget(String(url ?? 'about:blank'), profile.searchEngine), true);
     });
     handle('mgr:native-tab-action', L, async (_e, id: string, tabId: string, action: 'activate' | 'close' | 'navigate', value?: string) => {
       const native = this.nativeChromium.get(String(id));
@@ -3243,7 +3250,7 @@ export class Manager {
       else if (action === 'close') await native.tabs.closeTab(String(tabId));
       else {
         const profile = this.profiles.get(String(id));
-        await native.tabs.navigate(String(tabId), nativeChromiumNavigationTarget(String(value ?? 'about:blank'), profile.searchEngine ?? this.ctx.settings.load().network.searchEngine));
+         await native.tabs.navigate(String(tabId), nativeChromiumNavigationTarget(String(value ?? 'about:blank'), profile.searchEngine));
       }
       return native.tabs.tabs();
     });

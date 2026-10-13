@@ -212,12 +212,15 @@ describe('browser entry UI', () => {
 
   it('gives native Chromium a real new-tab fallback and applies the selected search engine', () => {
     expect(manager).toContain('prepareChromiumSearchPreference(profileFolder');
+    expect(manager).toContain("const CHROMIUM_DEFAULT_SEARCH_URL = 'https://noai.duckduckgo.com/'");
+    expect(manager).toContain('const CHROMIUM_DEFAULT_START_PAGE = CHROMIUM_DEFAULT_SEARCH_URL');
     expect(manager).toContain('default_search_provider_data');
     expect(manager).toContain("url: `${queryUrl}{searchTerms}`");
+    expect(manager).toContain('encodeURIComponent(value)');
     expect(manager).toContain('nativeChromiumNavigationTarget');
-    expect(manager).toContain('return searchEngineQueryUrl(selected, value);');
+    expect(manager).toContain('selected ? searchEngineQueryUrl(selected, value)');
     expect(manager).toContain('Promise.all(restoreUrls.slice(1).map((url) => tabs.newTab(url, false)))');
-    expect(manager).toContain("startPages.shift() ?? 'chrome://newtab/'");
+    expect(manager).toContain('startPages.shift() ?? CHROMIUM_DEFAULT_START_PAGE');
   });
 
   it('shows Starting immediately while a profile launch waits for readiness', () => {
