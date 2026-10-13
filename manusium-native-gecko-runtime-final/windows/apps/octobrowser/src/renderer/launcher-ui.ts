@@ -127,6 +127,37 @@ export function inkbrowserLaunchMessage(status: string, detail = ''): string {
   const reasons = detail.split(',').filter(Boolean).map((reason) => t(`browserEngine.block.${reason}`)).join(', ');
   return t('launch.status.inkbrowser-conflict', { reasons });
 }
+
+/** Non-blocking, theme-aware feedback while a native browser profile starts. */
+export function nativeLaunchProgress(profileName: string): { phase: (label: string) => void; done: () => void } {
+  const id = 'native-launch-progress';
+  let box = document.getElementById(id);
+  if (!box) {
+    box = document.createElement('div');
+    box.id = id;
+    box.setAttribute('role', 'status');
+    box.setAttribute('aria-live', 'polite');
+    box.innerHTML = '<div class="native-launch-progress-head"><span class="native-launch-progress-title"></span><span class="native-launch-progress-spinner" aria-hidden="true"></span></div><div class="native-launch-progress-track"><span></span></div><div class="native-launch-progress-detail"></div>';
+    document.body.append(box);
+  }
+  const title = box.querySelector<HTMLElement>('.native-launch-progress-title');
+  const detail = box.querySelector<HTMLElement>('.native-launch-progress-detail');
+  const fill = box.querySelector<HTMLElement>('.native-launch-progress-track span');
+  if (title) title.textContent = `Opening ${profileName}`;
+  if (fill) fill.style.width = '18%';
+  box.classList.add('visible');
+  const phase = (label: string): void => {
+    if (detail) detail.textContent = label;
+    if (fill) fill.style.width = label.toLowerCase().includes('ready') ? '92%' : label.toLowerCase().includes('tab') ? '74%' : '42%';
+  };
+  const done = (): void => {
+    if (fill) fill.style.width = '100%';
+    window.setTimeout(() => {
+      if (document.getElementById(id) === box) box?.classList.remove('visible');
+    }, 260);
+  };
+  return { phase, done };
+}
 export type View = 'profiles' | 'proxies' | 'backup' | 'virtualbox' | 'trash' | 'security' | 'settings' | 'api' | 'logs' | 'about';
 
 /** Mutable launcher state shared by all views. */

@@ -684,7 +684,9 @@ describe('tab right-click dropdown', () => {
     expect(windowController).toContain("accelerator: 'Ctrl+Shift+U'");
     expect(windowController).toContain('icon: iconPath(this.rt.distDir)');
     expect(windowController).toContain("inputSimulation,\n      { type: 'separator' },\n      { label: T('ctx.inspect')");
-    expect(windowController).toContain("type: 'keyDown', keyCode: 'U', modifiers: ['control', 'shift']");
+    expect(windowController).toContain('wc.focus();');
+    expect(windowController).toContain("type: 'char', keyCode: 'u'");
+    expect(windowController).not.toContain("command('switch-profile')");
   });
 
   it('opens the Chromium-style dropdown at the cursor instead of the side panel', () => {

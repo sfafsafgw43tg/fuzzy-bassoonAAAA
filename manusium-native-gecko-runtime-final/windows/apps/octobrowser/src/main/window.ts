@@ -1059,10 +1059,13 @@ export class BrowserWindowController {
       icon: iconPath(this.rt.distDir),
       click: () => {
         if (wc.isDestroyed()) return;
-        // Send the same keyboard sequence as the documented shortcut while
-        // keeping the action inside the focused page's native input path.
-        wc.sendInputEvent({ type: 'keyDown', keyCode: 'U', modifiers: ['control', 'shift'] });
-        wc.sendInputEvent({ type: 'keyUp', keyCode: 'U', modifiers: ['control', 'shift'] });
+        // This is an input test, not the profile-switch command formerly
+        // bound to Ctrl+Shift+U. Emit a normal character sequence into the
+        // focused page so text controls receive native input events.
+        wc.focus();
+        wc.sendInputEvent({ type: 'keyDown', keyCode: 'U' });
+        wc.sendInputEvent({ type: 'char', keyCode: 'u' });
+        wc.sendInputEvent({ type: 'keyUp', keyCode: 'U' });
       },
     };
     if (items.length) items.push({ type: 'separator' });

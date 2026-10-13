@@ -12,7 +12,7 @@ import { mobileEmulationFor } from '@octo/core/mobile';
 import { chromiumUserAgent } from '@octo/core/user-agent';
 import { browserEngineFor } from '@octo/core/inkbrowser';
 import {
-  $, S, Profile, FpOs, Fingerprint, run, toast, errText, modal, closeModal, confirmDialog, popupMenu, MenuItem, osIcon, osLabel,
+  $, S, Profile, FpOs, Fingerprint, run, toast, errText, modal, closeModal, confirmDialog, popupMenu, MenuItem, osIcon, osLabel, nativeLaunchProgress,
   fmtDuration, worktime, proxyText, checkLine, field, input, select,
 } from './launcher-ui';
 import { inkbrowserLaunchMessage } from './launcher-ui';
@@ -172,6 +172,9 @@ function visibleProfiles(): Profile[] {
 /** START: launch directly; dialogs only when something is needed (passphrase, Tor Browser...). */
 export async function startProfile(p: Profile): Promise<void> {
   if (p.encrypted && p.sealed) { void preLaunch(p); return; }
+  const native = browserEngineFor(p.engine) === 'inkbrowser';
+  const progress = native ? nativeLaunchProgress(p.name) : undefined;
+  progress?.phase('Preparing isolated profile data…');
   const local = S.profiles.find((entry) => entry.id === p.id);
   const optimisticStart = Boolean(local && !local.running);
   if (local && optimisticStart) {
@@ -180,11 +183,17 @@ export async function startProfile(p: Profile): Promise<void> {
     local.stopping = false;
     S.render();
   }
+  const phaseTimer = native ? window.setTimeout(() => progress?.phase('Starting Chromium runtime…'), 260) : undefined;
+  const tabTimer = native ? window.setTimeout(() => progress?.phase('Restoring start pages and tabs…'), 900) : undefined;
   const r = await run(api.invoke<{ status: string; detail?: string }>('mgr:launch', p.id, {}));
+  if (phaseTimer) window.clearTimeout(phaseTimer);
+  if (tabTimer) window.clearTimeout(tabTimer);
   if (!r) {
+    progress?.done();
     if (local && optimisticStart) { local.running = false; local.ready = false; S.render(); }
     return;
   }
+  progress?.phase(r.status === 'started' || r.status === 'focused' || r.status === 'inkbrowser-launched' ? 'Chromium is ready.' : 'Finishing startup…');
   const failed = !['started', 'focused', 'wsb-launched', 'tor-launched', 'inkbrowser-launched', 'firefox-launched'].includes(r.status);
   if (failed && local && optimisticStart) { local.running = false; local.ready = false; S.render(); }
   switch (r.status) {
@@ -197,6 +206,7 @@ export async function startProfile(p: Profile): Promise<void> {
     case 'firefox-launch-failed': toast(t('launch.status.firefox-launch-failed'), 'err'); break;
     default: toast(r.status, 'err');
   }
+  progress?.done();
 }
 
 export async function stopProfile(p: Profile, force = false): Promise<void> {
