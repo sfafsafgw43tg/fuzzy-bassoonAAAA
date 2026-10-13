@@ -277,7 +277,7 @@ describe('pageShim Graphics Card Emulation', () => {
     expect(ctx.getParameter(0x8073)).toBe(4096);
   });
 
-  it('emulates WebGPU adapter info, limits, and features matching configured GPU', async () => {
+  it('preserves native WebGPU adapter info, limits, and features when enabled', async () => {
     class MockGPUAdapterInfo {}
     Object.defineProperties(MockGPUAdapterInfo.prototype, {
       vendor: { get: () => 'real-native-vendor', configurable: true },
@@ -360,35 +360,35 @@ describe('pageShim Graphics Card Emulation', () => {
     const adapter = new MockGPUAdapter();
     const adapterInfoProto = MockGPUAdapterInfo.prototype as unknown as Record<string, string>;
 
-    expect(adapterInfoProto.vendor).toBe('nvidia');
-    expect(adapterInfoProto.architecture).toBe('ampere');
-    expect(adapterInfoProto.description).toBe('NVIDIA GeForce RTX 3060');
+    expect(adapterInfoProto.vendor).toBe('real-native-vendor');
+    expect(adapterInfoProto.architecture).toBe('real-native-arch');
+    expect(adapterInfoProto.description).toBe('real-native-desc');
 
     // adapter.info getter
     const info = (adapter as unknown as { info: { vendor: string; architecture: string; description: string; isFallbackAdapter: boolean } }).info;
-    expect(info.vendor).toBe('nvidia');
-    expect(info.architecture).toBe('ampere');
-    expect(info.description).toBe('NVIDIA GeForce RTX 3060');
-    expect(info.isFallbackAdapter).toBe(false);
+    expect(info.vendor).toBe('real-native-vendor');
+    expect(info.architecture).toBe('real-native-arch');
+    expect(info.description).toBe('real-native-desc');
+    expect(info.isFallbackAdapter).toBeUndefined();
 
     // requestAdapterInfo method
     const asyncInfo = await (adapter as unknown as { requestAdapterInfo: () => Promise<{ vendor: string; architecture: string; description: string }> }).requestAdapterInfo();
-    expect(asyncInfo.vendor).toBe('nvidia');
-    expect(asyncInfo.architecture).toBe('ampere');
-    expect(asyncInfo.description).toBe('NVIDIA GeForce RTX 3060');
-    // GPUSupportedLimits
+    expect(asyncInfo.vendor).toBe('real-native-vendor');
+    expect(asyncInfo.architecture).toBe('real-native-arch');
+    expect(asyncInfo.description).toBe('real-native-desc');
+    // Native limits remain unchanged.
     const limitsProto = MockGPUSupportedLimits.prototype as unknown as Record<string, number>;
-    expect(limitsProto.maxTextureDimension2D).toBe(16384);
-    expect(limitsProto.maxBindGroups).toBe(8);
-    expect(limitsProto.maxStorageBufferBindingSize).toBe(2147483648);
+    expect(limitsProto.maxTextureDimension2D).toBe(8192);
+    expect(limitsProto.maxBindGroups).toBe(4);
+    expect(limitsProto.maxStorageBufferBindingSize).toBe(1048576);
 
-    // GPUSupportedFeatures
+    // Native feature support remains unchanged.
     const features = new MockGPUSupportedFeatures();
-    expect(features.has('texture-compression-bc')).toBe(true);
-    expect(features.has('depth-clip-control')).toBe(true);
+    expect(features.has('texture-compression-bc')).toBe(false);
+    expect(features.has('some-old-feature')).toBe(true);
   });
 
-  it('emulates WebGPU for Apple Silicon and Intel architectures correctly', async () => {
+  it('does not replace native WebGPU metadata for Apple Silicon', async () => {
     class MockGPUAdapterInfo {}
     Object.defineProperties(MockGPUAdapterInfo.prototype, {
       vendor: { get: () => 'real-native-vendor', configurable: true },
@@ -455,9 +455,9 @@ describe('pageShim Graphics Card Emulation', () => {
     pageShim(cfgApple, 'test-apple');
 
     const appleInfo = MockGPUAdapterInfo.prototype as unknown as Record<string, string>;
-    expect(appleInfo.vendor).toBe('apple');
-    expect(appleInfo.architecture).toBe('apple-m');
-    expect(appleInfo.description).toBe('ANGLE Metal Renderer: Apple M2 Pro');
+    expect(appleInfo.vendor).toBe('real-native-vendor');
+    expect(appleInfo.architecture).toBe('real-native-arch');
+    expect(appleInfo.description).toBe('real-native-desc');
   });
 
   it('hides navigator.gpu completely when webgpu is off', () => {

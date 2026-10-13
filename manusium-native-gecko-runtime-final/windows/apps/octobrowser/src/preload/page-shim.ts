@@ -629,7 +629,7 @@ export function pageShim(c: PageConfig, eventName: string): void {
         patch(G.WebGLRenderingContext);
         patch(G.WebGL2RenderingContext);
       }
-      if (config.webgl === 'off' || config.webgpu === 'off' || config.webgpu === 'disable') {
+      if (config.webgpu === 'off' || config.webgpu === 'disable') {
         try { Object.defineProperty(G.navigator, 'gpu', { configurable: true, get: () => undefined }); } catch { /* protected property */ }
       }
     };
@@ -663,32 +663,12 @@ export function pageShim(c: PageConfig, eventName: string): void {
       try { dP(window, 'Worker', { ...gOPD(window, 'Worker'), value: WrappedWorker }); } catch { /* page may have locked Worker */ }
     }
 
-    const gpuProto = proto('GPUAdapterInfo');
-    const gpuRenderer = fp.webglRenderer || '';
-    const gpuVendor = /NVIDIA/i.test(gpuRenderer) ? 'nvidia' : /Radeon|AMD/i.test(gpuRenderer) ? 'amd' : /Apple/i.test(gpuRenderer) ? 'apple' : /Intel/i.test(gpuRenderer) ? 'intel' : 'google';
-    const gpuArchitecture = /Apple\s*M\d/i.test(gpuRenderer) ? 'apple-m' : /RTX\s*30/i.test(gpuRenderer) ? 'ampere' : /RTX\s*40/i.test(gpuRenderer) ? 'ada' : /Arc/i.test(gpuRenderer) ? 'xe-hpg' : /UHD/i.test(gpuRenderer) ? 'gen12' : 'common-3';
-    const gpuDescription = gpuRenderer.replace(/^ANGLE\s*\([^,]+,\s*/i, '').replace(/\s+Direct3D.*$/i, '').replace(/,\s*Unspecified Version\)?$/i, '').replace(/\)$/i, '');
-    const adapterInfo = () => ({ vendor: gpuVendor, architecture: gpuArchitecture, device: gpuDescription, description: gpuDescription, isFallbackAdapter: false });
-    // Disabling WebGL must not leave WebGPU available as a second GPU
-    // disclosure path. WebGPU can also be disabled independently.
-    if (fp.webgl === 'off' || fp.webgpu === 'off' || fp.webgpu === 'disable') {
+    // Keep native WebGPU untouched when it is enabled. Fabricating adapter
+    // identity, limits, or feature support can break real applications and
+    // produces an internally inconsistent API. WebGPU is controlled only by
+    // its explicit profile mode.
+    if (fp.webgpu === 'off' || fp.webgpu === 'disable') {
       getter(proto('Navigator'), 'gpu', (_s, orig) => { orig(); return undefined; });
-    } else {
-      if (gpuProto) {
-        for (const [name, value] of Object.entries(adapterInfo())) fixed(gpuProto, name, value);
-      }
-      const adapter = proto('GPUAdapter');
-      if (adapter) {
-        getter(adapter, 'info', (_s, orig) => { orig(); return adapterInfo(); });
-        getter(adapter, 'isFallbackAdapter', (_s, orig) => { orig(); return false; });
-        method(adapter, 'requestAdapterInfo', (_s, _args, _orig) => Promise.resolve(adapterInfo()));
-      }
-      const limits = proto('GPUSupportedLimits');
-      if (limits) {
-        for (const [name, value] of Object.entries({ maxTextureDimension2D: 16384, maxTextureDimension1D: 16384, maxBindGroups: 8, maxStorageBufferBindingSize: 2147483648 })) fixed(limits, name, value);
-      }
-      const features = proto('GPUSupportedFeatures');
-      if (features) method(features, 'has', (_s, args, orig) => ['texture-compression-bc', 'depth-clip-control', 'timestamp-query'].includes(String(args[0])) || !!orig(...args));
     }
 
     // ---- canvas noise / blocking ----

@@ -1059,13 +1059,15 @@ export class BrowserWindowController {
       icon: iconPath(this.rt.distDir),
       click: () => {
         if (wc.isDestroyed()) return;
-        // This is an input test, not the profile-switch command formerly
-        // bound to Ctrl+Shift+U. Emit a normal character sequence into the
-        // focused page so text controls receive native input events.
-        wc.focus();
-        wc.sendInputEvent({ type: 'keyDown', keyCode: 'U' });
-        wc.sendInputEvent({ type: 'char', keyCode: 'u' });
-        wc.sendInputEvent({ type: 'keyUp', keyCode: 'U' });
+        // Read plain text in the main process and use the same isolated,
+        // framework-friendly path as Smart Paste. This keeps clipboard access
+        // out of the untrusted page while still producing real input events.
+        void clipboard.readText().then((raw) => {
+          const text = raw.replace(/\u00a0/g, ' ').replace(/\r\n?/g, '\n');
+          if (!text || wc.isDestroyed()) return;
+          try { wc.focus(); wc.send('octo:smart-paste-to-focused', text); }
+          catch { /* the tab may have closed while the clipboard was read */ }
+        }).catch(() => undefined);
       },
     };
     if (items.length) items.push({ type: 'separator' });

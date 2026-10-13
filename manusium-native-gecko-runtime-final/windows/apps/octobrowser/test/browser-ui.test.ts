@@ -684,8 +684,8 @@ describe('tab right-click dropdown', () => {
     expect(windowController).toContain("accelerator: 'Ctrl+Shift+U'");
     expect(windowController).toContain('icon: iconPath(this.rt.distDir)');
     expect(windowController).toContain("inputSimulation,\n      { type: 'separator' },\n      { label: T('ctx.inspect')");
-    expect(windowController).toContain('wc.focus();');
-    expect(windowController).toContain("type: 'char', keyCode: 'u'");
+    expect(windowController).toContain('clipboard.readText()');
+    expect(windowController).toContain("wc.send('octo:smart-paste-to-focused', text)");
     expect(windowController).not.toContain("command('switch-profile')");
   });
 
