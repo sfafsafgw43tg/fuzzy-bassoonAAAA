@@ -221,9 +221,11 @@ body.tab-dragging, body.tab-dragging .tab { cursor: grabbing; }
    trusted UI arranged in the familiar tab-strip / rounded-omnibox layout;
    it never changes the Chromium engine, a profile's isolation, or page data. */
 :root[data-chrome-look="on"] {
-  --bg: #29292f; --bg2: #1e1e24; --panel: #3d3d46; --panel2: #4a4a54; --line: #5c5c66;
-  --text: #f0f0f0; --muted: #c2c2c8; --dim: #a3a3aa; --accent: #d0d0d4; --accent2: #e0e0e3;
-  --ok: #d0d0d4; --warn: #c3c3c8; --bad: #b8b8bd;
+  /* Screenshot-matched Chromium palette: graphite titlebar, Chrome dark
+     surfaces, and a restrained blue interaction accent. */
+  --bg: #202124; --bg2: #292a2d; --panel: #292a2d; --panel2: #3c4043; --line: #3c4043;
+  --text: #e8eaed; --muted: #bdc1c6; --dim: #9aa0a6; --accent: #8ab4f8; --accent2: #aecbfa;
+  --ok: #81c995; --warn: #fdd663; --bad: #f28b82;
 }
 :root[data-chrome-look="on"][data-theme="light"] {
   --bg: #dedede; --bg2: #f3f3f3; --panel: #ececec; --panel2: #dedede; --line: #c1c1c1;
@@ -245,30 +247,34 @@ body.tab-dragging, body.tab-dragging .tab { cursor: grabbing; }
 :root[data-browser-shell="firefox"] .tab.active { background: var(--panel); }
 :root[data-browser-shell="firefox"] #toolbar { height: 42px; background: var(--panel); border-top: 0; }
 :root[data-browser-shell="firefox"] #omnibox { border-radius: 7px; background: var(--bg); }
-:root[data-chrome-look="on"] #tabstrip { height: 38px; gap: 0; padding: 0 7px; background: var(--bg); border-bottom: 0; }
+:root[data-chrome-look="on"] #tabstrip { height: 36px; gap: 0; padding: 0 6px; background: var(--bg); border-bottom: 1px solid #17181a; }
 /* The renderer-owned controls reserve their own right edge; no native overlay is used. */
 :root[data-chrome-look="on"] .drag { min-width: 28px; }
 :root[data-chrome-look="on"] #tabs { gap: 0; }
-:root[data-chrome-look="on"] .tab { height: 34px; width: 244px; max-width: 244px; flex-basis: 244px; padding: 0 10px; border-radius: 9px 9px 0 0; }
-:root[data-chrome-look="on"] .tab:hover { background: var(--panel2); }
-:root[data-chrome-look="on"] .tab.active { background: var(--panel); }
+:root[data-chrome-look="on"] .tab { height: 32px; width: 244px; max-width: 244px; flex-basis: 244px; padding: 0 12px; border-radius: 8px 8px 0 0; color: #9aa0a6; }
+:root[data-chrome-look="on"] .tab:hover { background: #303134; color: var(--text); }
+:root[data-chrome-look="on"] .tab.active { background: #35363a; color: var(--text); box-shadow: inset 0 1px 0 #5f6368; }
 :root[data-chrome-look="on"] .tab.active::after { display: none; }
-:root[data-chrome-look="on"] #newTab { margin-bottom: 1px; border-radius: 50%; }
-:root[data-chrome-look="on"] #toolbar { height: 46px; gap: 3px; padding: 0 10px 7px; background: var(--panel); border-top: 0; border-bottom: 1px solid var(--line); }
+:root[data-chrome-look="on"] #newTab { width: 28px; height: 28px; margin: 0 0 2px 2px; border-radius: 50%; color: #bdc1c6; }
+:root[data-chrome-look="on"] #newTab:hover { background: #3c4043; color: #fff; }
+:root[data-chrome-look="on"] #toolbar { height: 46px; gap: 2px; padding: 0 10px 6px; background: #303134; border-top: 0; border-bottom: 1px solid #17181a; }
 :root[data-chrome-look="on"] #toolbar .profile-badge { flex: none; max-width: 156px; margin: 0 6px 0 2px; border: 0; background: transparent; padding: 4px 8px; border-radius: 16px; }
 :root[data-chrome-look="on"] #toolbar .profile-badge:hover { background: var(--panel2); }
 :root[data-chrome-look="on"] #toolbar .profile-badge .dot, :root[data-chrome-look="on"] #toolbar .profile-badge .lvl { display: none; }
 :root[data-chrome-look="on"] #toolbar .profile-badge .name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 12px; }
-:root[data-chrome-look="on"] .icon-btn { width: 32px; height: 32px; border-radius: 50%; color: var(--muted); }
-:root[data-chrome-look="on"] #omnibox { height: 32px; border: 1px solid transparent; border-radius: 18px; background: var(--bg); padding-left: 12px; }
-:root[data-chrome-look="on"] #omnibox:focus-within { border-color: var(--accent); box-shadow: 0 1px 2px #00000055; }
+:root[data-chrome-look="on"] .icon-btn { width: 30px; height: 30px; border-radius: 50%; color: #bdc1c6; }
+:root[data-chrome-look="on"] .icon-btn:hover:not(:disabled) { background: #3c4043; color: #fff; }
+:root[data-chrome-look="on"] #omnibox { height: 32px; border: 1px solid transparent; border-radius: 18px; background: #3c4043; padding: 0 8px 0 10px; box-shadow: inset 0 1px 1px #00000022; }
+:root[data-chrome-look="on"] #omnibox:focus-within { border-color: #8ab4f8; background: #202124; box-shadow: 0 0 0 1px #8ab4f866; }
+:root[data-chrome-look="on"] #address { color: #e8eaed; }
+:root[data-chrome-look="on"] #address::selection { background: #5f6368; color: #fff; }
 :root[data-chrome-look="on"][data-theme="light"] #omnibox { border-color: var(--line); }
 /* The shell account badge duplicated the profile identity and looked like a
    sign-in control. Downloads and the combined camera/microphone control occupy
    this familiar toolbar area instead. */
 .octo-account { display: none !important; }
 :root[data-chrome-look="on"] #toolbar .profile-badge { display: none; }
-:root[data-chrome-look="on"] #status { gap: 2px; }
+:root[data-chrome-look="on"] #status { gap: 1px; }
 :root[data-chrome-look="on"] #status .status:not(#stDownloads):not(#stMedia):not(#stMenu) { display: none; }
 /* Chrome/Chromium rules above are intentionally overridden for handset
    identities: the compact mobile shell always takes precedence. */
