@@ -56,7 +56,7 @@ import { androidNetworkStatus, clearAndroidProxy, setAllAndroidNetworkOff, setAn
 import type { QuietBootResult } from './android-quiet-boot';
 import { ScreenStream, execAdb, keyArgs, nextRotation, parseRotation, parseScreenAction, pngDimensions, rotationLockArgs, rotationReadArgs, rotationSetArgs, screencapArgs, tapArgs } from './android-screen';
 import { parseSecondaryDisplay } from './android-displays';
- import { importAvdFolder, type CameraSource, androidCameraChoices, androidMediaCheck, repairAndroidMedia, emulatorWebcams, androidCameraChoicesCached, stopAndroidAvd, androidLaunchPrefs, rememberAndroidLaunch, ANDROID_LOCALES, adbPath, androidSerialFor, configureMediaCompanion, applyDeviceIdentity, grantAndroidMediaPermissions, reportAndroidProgress, setAndroidProgressSink, type AndroidProgress, acceptAndroidLicenses, androidPackageInstalled, createAndroidAvdFromSpec, quietBootAndroidAvd, installAndroidPackage, updateAvdSettings, type AvdSettingsInput, androidStudioStatusAsync, ANDROID_CATALOG_DEVICES, ANDROID_SYSTEM_IMAGES, androidDiskInfo, androidSdkCandidates, androidSystemImageInstalled, clearAndroidSdkRoot, installAndroidTools, setAndroidSdkRoot, createAndroidAvd, defaultAvdDirectory, deleteAndroidAvd, ensureMediaCompanionAsync, installAndroidSystemImage, launchAndroidAvd, listAndroidAvds, androidInstallRoot, androidInstallTarget, imageRunsHere, setAndroidInstallRoot, clearAndroidInstallRoot, availableSystemImageIds, androidToolLogPath, mediaCompanionStatusAsync, openAndroidAvdFolder, requestMediaCompanionBroadcast, waitForMediaCompanionCamera, startMediaCompanion, stopMediaCompanion, setMediaPluginEnabled, mediaPluginActive, startWebMediaCompanionAsync, applyRandomPolishAndroidLocation, type AndroidAvdCreateInput, type AndroidLaunchInput} from './android-studio';
+ import { importAvdFolder, type CameraSource, androidCameraChoices, androidMediaCheck, repairAndroidMedia, emulatorWebcams, androidCameraChoicesCached, stopAndroidAvd, androidLaunchPrefs, rememberAndroidLaunch, ANDROID_LOCALES, adbPath, androidSerialFor, configureMediaCompanion, applyDeviceIdentity, grantAndroidMediaPermissions, reportAndroidProgress, setAndroidProgressSink, type AndroidProgress, acceptAndroidLicenses, androidPackageInstalled, createAndroidAvdFromSpec, quietBootAndroidAvd, installAndroidPackage, updateAvdSettings, type AvdSettingsInput, androidStudioStatusAsync, ANDROID_CATALOG_DEVICES, ANDROID_SYSTEM_IMAGES, androidDiskInfo, androidSdkCandidates, androidSystemImageInstalled, clearAndroidSdkRoot, installAndroidTools, setAndroidSdkRoot, createAndroidAvd, defaultAvdDirectory, deleteAndroidAvd, ensureMediaCompanionAsync, installAndroidSystemImage, launchAndroidAvd, listAndroidAvds, androidInstallRoot, androidInstallTarget, imageRunsHere, setAndroidInstallRoot, clearAndroidInstallRoot, availableSystemImageIds, androidToolLogPath, mediaCompanionStatusAsync, openAndroidAvdFolder, requestMediaCompanionBroadcast, waitForMediaCompanionCamera, startMediaCompanion, stopMediaCompanion, setMediaPluginEnabled, mediaPluginActive, startWebMediaCompanionAsync, applyAndroidLocation, applyRandomPolishAndroidLocation, type AndroidAvdCreateInput, type AndroidLaunchInput} from './android-studio';
 import { ANDROID_STORES, androidStore, androidStoreStates, changeAndroidStoreState, installAndroidStores, readMediaFolder, pushMediaToDevice } from './android-stores';
 import { addCustomImage, customCataloguePath, importSystemImageArchive, importSystemImageDirectory, inspectSystemImageDirectory, readCustomCatalogue, removeCustomImage, validCustomPackage } from './android-custom';
 import { installMediaRequirement, vbCableInstalledAsync } from './media-requirements';
@@ -661,7 +661,7 @@ export class Manager {
    * device answers adb. Runs in the background: a slow boot must not hold the
    * launch call, and a failure here is reported, never fatal.
    */
-  private async installQueuedApps(name: string): Promise<void> {
+  private async installQueuedApps(name: string, proxyLocation?: { latitude: number; longitude: number; label?: string }): Promise<void> {
     const launchPrefs = androidLaunchPrefs(name);
     const queued = launchPrefs.apps ?? [];
     let serial = '';
@@ -681,8 +681,13 @@ export class Manager {
       if (!ready) await new Promise((done) => setTimeout(done, 5000));
     }
     try {
-      const city = await applyRandomPolishAndroidLocation(adbPath(), serial);
-      this.ctx.logger.info('android.location.applied', { device: name, city: city.name, latitude: city.latitude, longitude: city.longitude });
+      if (proxyLocation) {
+        await applyAndroidLocation(adbPath(), serial, proxyLocation);
+        this.ctx.logger.info('android.location.applied', { device: name, source: 'proxy', label: proxyLocation.label ?? '', latitude: proxyLocation.latitude, longitude: proxyLocation.longitude });
+      } else {
+        const city = await applyRandomPolishAndroidLocation(adbPath(), serial);
+        this.ctx.logger.info('android.location.applied', { device: name, source: 'polish-city', city: city.name, latitude: city.latitude, longitude: city.longitude });
+      }
     } catch (error) {
       this.ctx.logger.warn('android.location.notApplied', { device: name, reason: error instanceof Error ? error.message : String(error) });
     }
@@ -2588,6 +2593,7 @@ export class Manager {
     });
     handle('mgr:android-launch', L, async (_e, input: Omit<AndroidLaunchInput, 'proxy'> & { proxyId?: string; cameraDevice?: string; locale?: string }) => {
       let proxy: AndroidLaunchInput['proxy'];
+      let proxyLocation: { latitude: number; longitude: number; label?: string } | undefined;
       const proxyId = String(input?.proxyId ?? '');
       if (proxyId) {
         const saved = this.proxies.get(proxyId);
@@ -2601,6 +2607,14 @@ export class Manager {
         const resolved = saved.type === 'socks5' ? this.proxies.resolve(proxyId) : saved;
         proxy = { type: saved.type as 'http' | 'https' | 'socks5', host: saved.host, port: saved.port,
           username: 'username' in resolved ? resolved.username : '', password: 'password' in resolved ? resolved.password : '' };
+        try {
+          const check = await this.checkProxy({ ...proxy, username: proxy.username ?? '', password: proxy.password ?? '', changeIpUrl: saved.changeIpUrl });
+          if (check.ok && typeof check.latitude === 'number' && typeof check.longitude === 'number') {
+            proxyLocation = { latitude: check.latitude, longitude: check.longitude, label: check.city || check.countryCode || check.ip };
+          }
+        } catch (error) {
+          this.ctx.logger.warn('android.proxyLocation.checkFailed', { proxyId, reason: error instanceof Error ? error.message : String(error) });
+        }
       }
       const launched = await launchAndroidAvd({
         name: String(input?.name ?? ''), cameraFront: input?.cameraFront, cameraBack: input?.cameraBack,
@@ -2612,7 +2626,7 @@ export class Manager {
       // Apps chosen while the device was created are installed as soon as
       // Android is actually up - adb cannot install into a device that is
       // still booting.
-      void this.installQueuedApps(String(input?.name ?? ''));
+      void this.installQueuedApps(String(input?.name ?? ''), proxyLocation);
       // A launch that worked is the setting the user wants next time.
       rememberAndroidLaunch(String(input?.name ?? ''), {
         proxyId, cameraFront: input?.cameraFront, cameraBack: input?.cameraBack,

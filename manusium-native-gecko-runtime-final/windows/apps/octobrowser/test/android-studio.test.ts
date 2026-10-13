@@ -10,7 +10,7 @@ import {
   normalizeCameraRotation, normalizeCameraSources, normalizeNetworkSpeed, waitForMediaCompanionCamera, mediaConfig,
   androidCameraChoices,
   automaticWebcamFallback, cameraProblemLine, clampCameraLimit, emulatorCameraValues, emulatorWebcams, emulatorWebcamsFrom, parseCameraLimit, resolveActiveCameraAssignments,
-  POLISH_ANDROID_CITIES, androidGeoFixArgs, randomPolishAndroidCity,
+  POLISH_ANDROID_CITIES, androidGeoFixArgs, androidLocationFixArgs, randomPolishAndroidCity,
   runKeepingOutput,
 } from '../src/main/android-studio';
 import * as fs from 'node:fs';
@@ -29,6 +29,10 @@ describe('Android Studio local bridge', () => {
     expect(city.longitude).toBeGreaterThan(14);
     expect(city.longitude).toBeLessThan(25);
     expect(androidGeoFixArgs(city)).toEqual(['emu', 'geo', 'fix', String(city.longitude), String(city.latitude)]);
+  });
+  it('uses proxy coordinates without changing their precision or order', () => {
+    expect(androidLocationFixArgs({ latitude: 52.520008, longitude: 13.404954, label: 'Berlin' }))
+      .toEqual(['emu', 'geo', 'fix', '13.404954', '52.520008']);
   });
   it('does not pass the obsolete host-audio switch and reports the emulator log tail', () => {
     expect(androidStudioSource).not.toContain("args.push('-allow-host-audio')");

@@ -3498,6 +3498,11 @@ export interface PolishAndroidCity {
   latitude: number;
   longitude: number;
 }
+export interface AndroidLocation {
+  latitude: number;
+  longitude: number;
+  label?: string;
+}
 /** City centres used for the per-launch Android emulator location. */
 export const POLISH_ANDROID_CITIES: readonly PolishAndroidCity[] = [
   { name: 'Warsaw', latitude: 52.2297, longitude: 21.0122 },
@@ -3523,12 +3528,22 @@ export function randomPolishAndroidCity(): PolishAndroidCity {
 export function androidGeoFixArgs(city: PolishAndroidCity): string[] {
   return ['emu', 'geo', 'fix', String(city.longitude), String(city.latitude)];
 }
-/** Set a fresh Polish city centre after every successful emulator boot. */
-export async function applyRandomPolishAndroidLocation(adb: string, serial: string): Promise<PolishAndroidCity> {
+export function androidLocationFixArgs(location: AndroidLocation): string[] {
+  return ['emu', 'geo', 'fix', String(location.longitude), String(location.latitude)];
+}
+export async function applyAndroidLocation(adb: string, serial: string, location: AndroidLocation): Promise<void> {
   if (!adb) throw new Error('adb was not found, so the Android location could not be set.');
   if (!/^[A-Za-z0-9._:-]{1,64}$/.test(serial)) throw new Error('The Android emulator serial is invalid.');
+  if (!Number.isFinite(location.latitude) || location.latitude < -90 || location.latitude > 90
+    || !Number.isFinite(location.longitude) || location.longitude < -180 || location.longitude > 180) {
+    throw new Error('The proxy returned invalid location coordinates.');
+  }
+  await adbRun(adb, ['-s', serial, ...androidLocationFixArgs(location)], 15_000);
+}
+/** Set a fresh Polish city centre after every successful emulator boot. */
+export async function applyRandomPolishAndroidLocation(adb: string, serial: string): Promise<PolishAndroidCity> {
   const city = randomPolishAndroidCity();
-  await adbRun(adb, ['-s', serial, ...androidGeoFixArgs(city)], 15_000);
+  await applyAndroidLocation(adb, serial, city);
   return city;
 }
 /** Start the chosen AVD with the local media settings chosen by the user. */
