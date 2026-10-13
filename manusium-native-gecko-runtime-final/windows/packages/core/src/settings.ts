@@ -18,8 +18,10 @@ export type DohProvider = 'quad9' | 'cloudflare' | 'mullvad' | 'custom';
  * These providers are offered without built-in network suggestions; provider privacy practices may differ.
  */
 export const SEARCH_ENGINE_DEFINITIONS = {
+  'duckduckgo-noai': { queryUrl: 'https://noai.duckduckgo.com/?q=', latencyUrl: 'https://noai.duckduckgo.com' },
+  'duckduckgo-ai': { queryUrl: 'https://duckduckgo.com/?q=', latencyUrl: 'https://duckduckgo.com' },
   duckduckgo: { queryUrl: 'https://duckduckgo.com/?q=', latencyUrl: 'https://duckduckgo.com' },
-  'duckduckgo-noai': { queryUrl: 'https://html.duckduckgo.com/html/?q=', latencyUrl: 'https://html.duckduckgo.com' },
+  google: { queryUrl: 'https://www.google.com/search?q=', latencyUrl: 'https://www.google.com' },
   startpage: { queryUrl: 'https://www.startpage.com/sp/search?query=', latencyUrl: 'https://www.startpage.com' },
   brave: { queryUrl: 'https://search.brave.com/search?q=', latencyUrl: 'https://search.brave.com' },
   mojeek: { queryUrl: 'https://www.mojeek.com/search?q=', latencyUrl: 'https://www.mojeek.com' },

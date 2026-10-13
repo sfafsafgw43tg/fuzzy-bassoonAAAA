@@ -63,6 +63,18 @@ interface Draft {
 
 const ANTI_ADDONS = ['audio-mixer'];
 const GOOGLE_HOME = 'https://www.google.com/';
+const CHROMIUM_DEFAULT_START_PAGE = 'https://noai.duckduckgo.com/';
+const START_PAGE_PRESETS = [
+  { url: CHROMIUM_DEFAULT_START_PAGE, searchEngine: 'duckduckgo-noai', label: 'DuckDuckGo (no AI)', score: 98 },
+  { url: 'https://www.startpage.com/', searchEngine: 'startpage', label: 'Startpage', score: 94 },
+  { url: 'https://search.brave.com/', searchEngine: 'brave', label: 'Brave Search', score: 88 },
+  { url: 'https://www.mojeek.com/', searchEngine: 'mojeek', label: 'Mojeek', score: 86 },
+  { url: 'https://searx.be/', searchEngine: 'searx', label: 'SearX (public instance)', score: 82 },
+  { url: 'https://duckduckgo.com/', searchEngine: 'duckduckgo-ai', label: 'DuckDuckGo (AI features)', score: 76 },
+  { url: 'https://swisscows.com/', searchEngine: 'swisscows', label: 'Swisscows', score: 74 },
+  { url: 'https://www.ecosia.org/', searchEngine: 'ecosia', label: 'Ecosia', score: 70 },
+  { url: GOOGLE_HOME, searchEngine: 'google', label: 'Google', score: 52 },
+] as const;
 const savesPasswordsByDefault = (kind: Kind) => kind !== 'private' && kind !== 'temporary' && kind !== 'tor';
 
 const CHROME_VERSIONS_LIST = [
@@ -158,7 +170,7 @@ function kindDefaults(kind: Kind, addons: string[]): Pick<Draft, 'protection' | 
 function newDraft(): Draft {
   const folder = S.folder && S.folder !== '__none' ? S.folder : '';
   return {
-    name: '', kind: 'antidetect', engine: 'inkbrowser', chromiumRuntime: '155.0.8059.39', status: '', tags: [], folder, profileDirectory: '', notes: '', startPages: [], homePage: '', searchEngine: '', theme: 'dark', browserShell: 'chrome', baseChromeLook: true, ordinaryBrowser: false, appMode: false, smartPaste: true,
+    name: '', kind: 'antidetect', engine: 'inkbrowser', chromiumRuntime: '155.0.8059.39', status: '', tags: [], folder, profileDirectory: '', notes: '', startPages: [CHROMIUM_DEFAULT_START_PAGE], homePage: CHROMIUM_DEFAULT_START_PAGE, searchEngine: 'duckduckgo-noai', theme: 'dark', browserShell: 'chrome', baseChromeLook: true, ordinaryBrowser: false, appMode: false, smartPaste: true,
     dns: { mode: 'inherit', dohTemplate: '' },
     ...kindDefaults('antidetect', S.init.addons.filter((a) => a.kind !== 'external-app').map((a) => a.id)),
     vstudioWebOnLaunch: false,
@@ -363,9 +375,28 @@ function proxyInput(px: ProxyDraft): unknown {
 function section(title: string, ...children: Array<HTMLElement | null>): HTMLElement {
   return h('section', { class: 'ed-sec' }, title ? h('h3', { text: title }) : null, ...children);
 }
-
+function startPagePresetControl(d: Draft, onApplied: () => void): HTMLElement {
+  const current = START_PAGE_PRESETS.find((preset) => preset.url === d.homePage || preset.url === d.startPages[0]);
+  const scoreValue = h('span', { text: current ? `${current.score}/100` : '—' });
+  const score = h('span', { class: 'start-page-safety', title: t('profile.startPageSafetyHint') }, icon('shieldCheck', 14), scoreValue, h('span', { text: ` ${t('profile.startPageSafety')}` }));
+  const preset = select<string>(current?.url ?? '', [
+    ['', t('profile.startPagePresetChoose')],
+    ...START_PAGE_PRESETS.map((item) => [item.url, `${item.label} · ${item.score}/100`] as [string, string]),
+  ], (url) => {
+    const selected = START_PAGE_PRESETS.find((item) => item.url === url);
+    if (!selected) return;
+    d.homePage = selected.url;
+    d.searchEngine = selected.searchEngine;
+    if (!d.startPages.includes(selected.url)) d.startPages.push(selected.url);
+    scoreValue.textContent = `${selected.score}/100`;
+    onApplied();
+  });
+  return h('div', { class: 'field start-page-preset' },
+    h('span', { class: 'lbl', text: t('profile.startPagePreset') }),
+    h('div', { class: 'row nowrap' }, preset, score),
+    h('span', { class: 'hint', text: t('profile.startPageSafetyHint') }));
+}
 // ------------------------------------------------------------------ General
-
 function general(b: HTMLElement, d: Draft, creating: boolean, p: Profile | null, draw: () => void, summary: () => void): void {
   const name = input(d.name, { maxlength: '64', placeholder: creating ? t('ui.namePhAuto') : '' }, (v) => { d.name = v; summary(); });
   const status = select<string>(STATUSES.includes(d.status) ? d.status : '', STATUSES.map((s) => [s, s ? t(`status.p.${s}`) : t('ui.noStatus')] as [string, string]), (v) => { d.status = v; });
@@ -426,6 +457,15 @@ function general(b: HTMLElement, d: Draft, creating: boolean, p: Profile | null,
       d.engine = choice === 'chromium' ? 'inkbrowser' : choice;
       d.browserShell = choice === 'chromium' ? 'chrome' : choice === 'firefox' ? 'firefox' : 'octo';
       d.baseChromeLook = choice === 'chromium';
+      if (choice === 'chromium' && (!d.homePage || d.homePage === 'octo://newtab')) {
+        d.homePage = CHROMIUM_DEFAULT_START_PAGE;
+        d.searchEngine = 'duckduckgo-noai';
+        if (!d.startPages.length) d.startPages = [CHROMIUM_DEFAULT_START_PAGE];
+      } else if (choice !== 'chromium' && d.homePage === CHROMIUM_DEFAULT_START_PAGE && d.searchEngine === 'duckduckgo-noai') {
+        d.homePage = 'octo://newtab';
+        d.searchEngine = undefined;
+        if (d.startPages.length === 1 && d.startPages[0] === CHROMIUM_DEFAULT_START_PAGE) d.startPages = [];
+      }
       // Keep the complete Advanced editor visible while switching bases. The
       // manager still normalizes unsupported Electron page-shim fields before
       // native launch; only enginePrivacy is applied by native runtimes.
@@ -464,7 +504,8 @@ function general(b: HTMLElement, d: Draft, creating: boolean, p: Profile | null,
   addBtn.onclick = add;
   addUrl.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } };
   drawPages();
-  b.append(section(t('ui.startPages'), h('div', { class: 'row nowrap' }, addUrl, addBtn), pages, h('p', { class: 'hint', text: t('ui.startPagesHint') })));
+  const preset = startPagePresetControl(d, () => { drawPages(); summary(); });
+  b.append(section(t('ui.startPages'), preset, h('div', { class: 'row nowrap' }, addUrl, addBtn), pages, h('p', { class: 'hint', text: t('ui.startPagesHint') })));
 
   // Proxy
   if (d.kind === 'tor') b.append(section(t('ui.col.proxy'), h('p', { class: 'info', text: t('net.torNotHere') })));

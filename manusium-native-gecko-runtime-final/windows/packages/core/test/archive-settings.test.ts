@@ -79,7 +79,7 @@ describe('settings validation', () => {
   it('picks a privacy-respecting search engine and never an unknown one', () => {
     expect(defaultSettings().network.searchEngine).toBe('duckduckgo');
     expect(searchEngineQueryUrl('duckduckgo', 'kot łaciński')).toBe('https://duckduckgo.com/?q=kot%20%C5%82aci%C5%84ski');
-    expect(searchEngineQueryUrl('duckduckgo-noai', 'test query')).toBe('https://html.duckduckgo.com/html/?q=test%20query');
+    expect(searchEngineQueryUrl('duckduckgo-noai', 'test query')).toBe('https://noai.duckduckgo.com/?q=test%20query');
     expect(searchEngineQueryUrl('brave', 'a b')).toBe('https://search.brave.com/search?q=a%20b');
     expect(searchEngineQueryUrl('startpage', 'x')).toBe('https://www.startpage.com/sp/search?query=x');
     expect(searchEngineQueryUrl('mojeek', 'x')).toBe('https://www.mojeek.com/search?q=x');

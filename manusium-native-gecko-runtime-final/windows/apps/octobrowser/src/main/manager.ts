@@ -932,7 +932,7 @@ export class Manager {
           : startPages.shift() ?? CHROMIUM_DEFAULT_START_PAGE;
         restoreUrls.push(first);
       }
-      restoreUrls.push(...startPages);
+      restoreUrls.push(...startPages.filter((url) => !restoreUrls.includes(url)));
       const nativeAddonPaths = nativeBundledExtensionPaths(p.addons, app.getAppPath(), app.isPackaged, process.resourcesPath);
       const engine = await spawnNativeEngine('chromium', exe, {
         profileDir: profileFolder,
@@ -3241,7 +3241,11 @@ export class Manager {
       const native = this.nativeChromium.get(String(id));
       if (!native) throw new Error('Profile is not running in native Chromium');
       const profile = this.profiles.get(String(id));
-      return native.tabs.newTab(nativeChromiumNavigationTarget(String(url ?? 'about:blank'), profile.searchEngine), true);
+      const requested = String(url ?? '').trim();
+      const target = requested && requested !== 'about:blank'
+        ? nativeChromiumNavigationTarget(requested, profile.searchEngine)
+        : (profile.homePage.startsWith('http') ? profile.homePage : CHROMIUM_DEFAULT_START_PAGE);
+      return native.tabs.newTab(target, true);
     });
     handle('mgr:native-tab-action', L, async (_e, id: string, tabId: string, action: 'activate' | 'close' | 'navigate', value?: string) => {
       const native = this.nativeChromium.get(String(id));

@@ -219,8 +219,12 @@ describe('browser entry UI', () => {
     expect(manager).toContain('encodeURIComponent(value)');
     expect(manager).toContain('nativeChromiumNavigationTarget');
     expect(manager).toContain('selected ? searchEngineQueryUrl(selected, value)');
+    expect(manager).toContain("profile.homePage.startsWith('http') ? profile.homePage : CHROMIUM_DEFAULT_START_PAGE");
     expect(manager).toContain('Promise.all(restoreUrls.slice(1).map((url) => tabs.newTab(url, false)))');
     expect(manager).toContain('startPages.shift() ?? CHROMIUM_DEFAULT_START_PAGE');
+    expect(launcherEditor).toContain('const START_PAGE_PRESETS');
+    expect(launcherEditor).toContain('d.searchEngine = selected.searchEngine');
+    expect(launcherEditor).toContain("icon('shieldCheck', 14)");
   });
 
   it('shows Starting immediately while a profile launch waits for readiness', () => {
