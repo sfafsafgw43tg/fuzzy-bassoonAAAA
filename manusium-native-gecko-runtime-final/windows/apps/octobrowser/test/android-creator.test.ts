@@ -258,6 +258,11 @@ describe('vStudio Mobile inside the phones', () => {
     expect(studio).not.toContain("args.push('-allow-host-audio')");
     expect(studio).toContain("...(forPicker ? ['-webcam-list', '-verbose'] : ['-webcam-list'])];");
     expect(studio).toContain('runCameraList(tools.emulator, args, tools.root, timeout)');
+    // Virtual capture drivers may register as Media instead of Camera/Image;
+    // the Windows probe must include both class and friendly-name variants.
+    expect(studio).toContain("Get-PnpDevice -PresentOnly -Status OK");
+    expect(studio).toContain("@('Camera','Image','Media')");
+    expect(studio).toContain("camera|webcam|capture|virtual");
     // Nothing is numbered from Windows: the only webcam names come from the emulator.
     expect(studio).not.toContain('webcamsFromHostNames');
     expect(studio).not.toContain('hostCameraNames');

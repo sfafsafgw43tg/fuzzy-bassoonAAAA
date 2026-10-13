@@ -1726,12 +1726,15 @@ function windowsCameraNames(): Promise<WindowsCameraName[]> {
 
 /**
  * The USB and software cameras Windows has present, with their friendly names.
+ * Some virtual-camera drivers register as Media rather than Camera/Image, so
+ * include present Media devices and name-matched capture endpoints as well.
  * Resolves to an empty list when PowerShell cannot answer: a camera is then
  * shown by its hardware ID, never guessed.
  */
 function readWindowsCameraNames(): Promise<WindowsCameraName[]> {
   const script = "try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }; "
-    + "Get-PnpDevice -Class Camera,Image -Status OK -ErrorAction SilentlyContinue "
+    + "Get-PnpDevice -PresentOnly -Status OK -ErrorAction SilentlyContinue "
+    + "| Where-Object { $_.Class -in @('Camera','Image','Media') -or $_.FriendlyName -match '(?i)camera|webcam|capture|virtual' } "
     + "| Select-Object InstanceId, FriendlyName | ConvertTo-Json -Compress";
   return new Promise((resolve) => {
     execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script],

@@ -206,9 +206,9 @@ describe('pageShim Graphics Card Emulation', () => {
     expect(canvas.getContext('webgl')).toBeNull();
     expect(canvas.getContext('webgl2')).toBeNull();
     expect(canvas.getContext('2d')).toEqual({ kind: '2d' });
-    const navigatorProto = (window as unknown as { Navigator: { prototype: object } }).Navigator.prototype;
-    const gpuGetter = Object.getOwnPropertyDescriptor(navigatorProto, 'gpu')?.get;
-    expect(gpuGetter?.call(navigator)).toBeUndefined();
+    // WebGL and WebGPU are independent APIs: blocking WebGL must not remove
+    // an explicitly enabled native WebGPU implementation.
+    expect((navigator as unknown as { gpu?: unknown }).gpu).toBeDefined();
   });
 
   it('preserves native WebGL 2 parameters and limits without synthetic constants', () => {

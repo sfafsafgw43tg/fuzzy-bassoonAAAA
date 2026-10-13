@@ -842,10 +842,11 @@ export function resolveFingerprint(fp: FingerprintConfig, geoInput: GeoInfo | un
     webgl: on ? fp.webgl : 'real',
     webglVendor: exposedGpu?.vendor ?? null,
     webglRenderer: exposedGpu?.renderer ?? null,
-    // WebGPU can reveal the same adapter even when WebGL is disabled. Treat
-    // WebGL=off as a graphics-exposure off switch so the page shim cannot
-    // re-expose the host adapter through navigator.gpu.
-    webgpu: on ? (fp.webgl === 'off' ? 'off' : fp.webgpu) : 'real',
+    // WebGL and WebGPU are independent browser APIs. WebGL=off must not
+    // silently disable WebGPU: users may explicitly keep WebGPU enabled for
+    // legitimate rendering and development while blocking WebGL contexts.
+    // The process-level GPU policy makes the same distinction before launch.
+    webgpu: on ? fp.webgpu : 'real',
     clientRects: on ? fp.clientRects : 'real',
     cores: on && (fp.cpu.mode === 'manual' || fp.cpu.mode === 'custom') ? fp.cpu.cores : null,
     memory: on && (fp.memory.mode === 'manual' || fp.memory.mode === 'custom') ? Math.min(8, fp.memory.gb) : null,

@@ -73,12 +73,13 @@ function observe(mode: 'native' | 'block'): Promise<Observation> {
   });
 }
 
-it('uses the profile graphics identity overlay while preserving native rendering', () => {
+it('uses the WebGL profile overlay while preserving native WebGPU', () => {
   // Resolved from this file's directory: the TypeScript project targets CJS,
   // where import.meta is not available.
   const source = readFileSync(path.resolve(__dirname, '..', 'src', 'preload', 'page-shim.ts'), 'utf8');
   expect(source).toMatch(/WebGLRenderingContext|WebGL2RenderingContext/);
-  expect(source).toContain('GPUAdapterInfo');
+  expect(source).not.toContain('GPUAdapterInfo');
+  expect(source).toContain('Keep native WebGPU untouched when it is enabled');
   expect(source).toContain("p === 0x9245");
 });
 

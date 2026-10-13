@@ -178,13 +178,13 @@ describe('sanitize + resolve', () => {
     expect(Object.keys(r)).toEqual(['kind', 'enabled']);
   });
 
-  it('does not expose stored GPU metadata or WebGPU when WebGL is off', () => {
+  it('keeps WebGPU available when WebGL is independently turned off', () => {
     const configured = { ...base, webgl: 'off' as const, webgpu: 'real' as const, webglInfo: { mode: 'manual' as const, vendor: 'Host vendor', renderer: 'Host GPU' } };
     const r = resolveFingerprint(configured, undefined, 'en-US');
     if (r.kind === 'disabled') throw new Error('unexpected disabled result');
     expect(r.webglVendor).toBeNull();
     expect(r.webglRenderer).toBeNull();
-    expect(r.webgpu).toBe('off');
+    expect(r.webgpu).toBe('real');
   });
 
   it('automatically supplies a stable OS-compatible GPU identity for legacy noise profiles', () => {
