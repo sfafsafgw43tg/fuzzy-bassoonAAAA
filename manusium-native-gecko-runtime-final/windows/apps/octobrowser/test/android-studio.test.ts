@@ -10,6 +10,7 @@ import {
   normalizeCameraRotation, normalizeCameraSources, normalizeNetworkSpeed, waitForMediaCompanionCamera, mediaConfig,
   androidCameraChoices,
   automaticWebcamFallback, cameraProblemLine, clampCameraLimit, emulatorCameraValues, emulatorWebcams, emulatorWebcamsFrom, parseCameraLimit, resolveActiveCameraAssignments,
+  POLISH_ANDROID_CITIES, androidGeoFixArgs, randomPolishAndroidCity,
   runKeepingOutput,
 } from '../src/main/android-studio';
 import * as fs from 'node:fs';
@@ -19,6 +20,16 @@ import * as path from 'node:path';
 const androidStudioSource = fs.readFileSync(path.join(__dirname, '../src/main/android-studio.ts'), 'utf8');
 
 describe('Android Studio local bridge', () => {
+  it('selects a valid Polish city and sends longitude before latitude to the emulator', () => {
+    expect(POLISH_ANDROID_CITIES.length).toBeGreaterThanOrEqual(12);
+    const city = randomPolishAndroidCity();
+    expect(POLISH_ANDROID_CITIES).toContain(city);
+    expect(city.latitude).toBeGreaterThan(49);
+    expect(city.latitude).toBeLessThan(55);
+    expect(city.longitude).toBeGreaterThan(14);
+    expect(city.longitude).toBeLessThan(25);
+    expect(androidGeoFixArgs(city)).toEqual(['emu', 'geo', 'fix', String(city.longitude), String(city.latitude)]);
+  });
   it('does not pass the obsolete host-audio switch and reports the emulator log tail', () => {
     expect(androidStudioSource).not.toContain("args.push('-allow-host-audio')");
     expect(androidStudioSource).toContain('const details = text.slice(-700)');

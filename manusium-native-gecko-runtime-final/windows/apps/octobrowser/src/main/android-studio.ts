@@ -3493,7 +3493,44 @@ export interface AndroidLaunchResult {
   /** Things that were not applied for this launch, in plain words. */
   notes: string[];
 }
-
+export interface PolishAndroidCity {
+  name: string;
+  latitude: number;
+  longitude: number;
+}
+/** City centres used for the per-launch Android emulator location. */
+export const POLISH_ANDROID_CITIES: readonly PolishAndroidCity[] = [
+  { name: 'Warsaw', latitude: 52.2297, longitude: 21.0122 },
+  { name: 'Krakow', latitude: 50.0647, longitude: 19.9450 },
+  { name: 'Gdansk', latitude: 54.3520, longitude: 18.6466 },
+  { name: 'Wroclaw', latitude: 51.1079, longitude: 17.0385 },
+  { name: 'Poznan', latitude: 52.4064, longitude: 16.9252 },
+  { name: 'Lodz', latitude: 51.7592, longitude: 19.4560 },
+  { name: 'Katowice', latitude: 50.2649, longitude: 19.0238 },
+  { name: 'Lublin', latitude: 51.2465, longitude: 22.5684 },
+  { name: 'Szczecin', latitude: 53.4285, longitude: 14.5528 },
+  { name: 'Bialystok', latitude: 53.1325, longitude: 23.1688 },
+  { name: 'Rzeszow', latitude: 50.0412, longitude: 21.9991 },
+  { name: 'Torun', latitude: 53.0138, longitude: 18.5984 },
+  { name: 'Olsztyn', latitude: 53.7784, longitude: 20.4801 },
+  { name: 'Opole', latitude: 50.6751, longitude: 17.9213 },
+  { name: 'Kielce', latitude: 50.8661, longitude: 20.6286 },
+  { name: 'Zielona Gora', latitude: 51.9356, longitude: 15.5062 },
+];
+export function randomPolishAndroidCity(): PolishAndroidCity {
+  return POLISH_ANDROID_CITIES[crypto.randomInt(POLISH_ANDROID_CITIES.length)];
+}
+export function androidGeoFixArgs(city: PolishAndroidCity): string[] {
+  return ['emu', 'geo', 'fix', String(city.longitude), String(city.latitude)];
+}
+/** Set a fresh Polish city centre after every successful emulator boot. */
+export async function applyRandomPolishAndroidLocation(adb: string, serial: string): Promise<PolishAndroidCity> {
+  if (!adb) throw new Error('adb was not found, so the Android location could not be set.');
+  if (!/^[A-Za-z0-9._:-]{1,64}$/.test(serial)) throw new Error('The Android emulator serial is invalid.');
+  const city = randomPolishAndroidCity();
+  await adbRun(adb, ['-s', serial, ...androidGeoFixArgs(city)], 15_000);
+  return city;
+}
 /** Start the chosen AVD with the local media settings chosen by the user. */
 export async function launchAndroidAvd(input: AndroidLaunchInput): Promise<AndroidLaunchResult> {
   const tools = sdk();

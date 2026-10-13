@@ -56,7 +56,7 @@ import { androidNetworkStatus, clearAndroidProxy, setAllAndroidNetworkOff, setAn
 import type { QuietBootResult } from './android-quiet-boot';
 import { ScreenStream, execAdb, keyArgs, nextRotation, parseRotation, parseScreenAction, pngDimensions, rotationLockArgs, rotationReadArgs, rotationSetArgs, screencapArgs, tapArgs } from './android-screen';
 import { parseSecondaryDisplay } from './android-displays';
- import { importAvdFolder, type CameraSource, androidCameraChoices, androidMediaCheck, repairAndroidMedia, emulatorWebcams, androidCameraChoicesCached, stopAndroidAvd, androidLaunchPrefs, rememberAndroidLaunch, ANDROID_LOCALES, adbPath, androidSerialFor, configureMediaCompanion, applyDeviceIdentity, grantAndroidMediaPermissions, reportAndroidProgress, setAndroidProgressSink, type AndroidProgress, acceptAndroidLicenses, androidPackageInstalled, createAndroidAvdFromSpec, quietBootAndroidAvd, installAndroidPackage, updateAvdSettings, type AvdSettingsInput, androidStudioStatusAsync, ANDROID_CATALOG_DEVICES, ANDROID_SYSTEM_IMAGES, androidDiskInfo, androidSdkCandidates, androidSystemImageInstalled, clearAndroidSdkRoot, installAndroidTools, setAndroidSdkRoot, createAndroidAvd, defaultAvdDirectory, deleteAndroidAvd, ensureMediaCompanionAsync, installAndroidSystemImage, launchAndroidAvd, listAndroidAvds, androidInstallRoot, androidInstallTarget, imageRunsHere, setAndroidInstallRoot, clearAndroidInstallRoot, availableSystemImageIds, androidToolLogPath, mediaCompanionStatusAsync, openAndroidAvdFolder, requestMediaCompanionBroadcast, waitForMediaCompanionCamera, startMediaCompanion, stopMediaCompanion, setMediaPluginEnabled, mediaPluginActive, startWebMediaCompanionAsync, type AndroidAvdCreateInput, type AndroidLaunchInput} from './android-studio';
+ import { importAvdFolder, type CameraSource, androidCameraChoices, androidMediaCheck, repairAndroidMedia, emulatorWebcams, androidCameraChoicesCached, stopAndroidAvd, androidLaunchPrefs, rememberAndroidLaunch, ANDROID_LOCALES, adbPath, androidSerialFor, configureMediaCompanion, applyDeviceIdentity, grantAndroidMediaPermissions, reportAndroidProgress, setAndroidProgressSink, type AndroidProgress, acceptAndroidLicenses, androidPackageInstalled, createAndroidAvdFromSpec, quietBootAndroidAvd, installAndroidPackage, updateAvdSettings, type AvdSettingsInput, androidStudioStatusAsync, ANDROID_CATALOG_DEVICES, ANDROID_SYSTEM_IMAGES, androidDiskInfo, androidSdkCandidates, androidSystemImageInstalled, clearAndroidSdkRoot, installAndroidTools, setAndroidSdkRoot, createAndroidAvd, defaultAvdDirectory, deleteAndroidAvd, ensureMediaCompanionAsync, installAndroidSystemImage, launchAndroidAvd, listAndroidAvds, androidInstallRoot, androidInstallTarget, imageRunsHere, setAndroidInstallRoot, clearAndroidInstallRoot, availableSystemImageIds, androidToolLogPath, mediaCompanionStatusAsync, openAndroidAvdFolder, requestMediaCompanionBroadcast, waitForMediaCompanionCamera, startMediaCompanion, stopMediaCompanion, setMediaPluginEnabled, mediaPluginActive, startWebMediaCompanionAsync, applyRandomPolishAndroidLocation, type AndroidAvdCreateInput, type AndroidLaunchInput} from './android-studio';
 import { ANDROID_STORES, androidStore, androidStoreStates, changeAndroidStoreState, installAndroidStores, readMediaFolder, pushMediaToDevice } from './android-stores';
 import { addCustomImage, customCataloguePath, importSystemImageArchive, importSystemImageDirectory, inspectSystemImageDirectory, readCustomCatalogue, removeCustomImage, validCustomPackage } from './android-custom';
 import { installMediaRequirement, vbCableInstalledAsync } from './media-requirements';
@@ -679,6 +679,12 @@ export class Manager {
       });
       ready = booted === '1';
       if (!ready) await new Promise((done) => setTimeout(done, 5000));
+    }
+    try {
+      const city = await applyRandomPolishAndroidLocation(adbPath(), serial);
+      this.ctx.logger.info('android.location.applied', { device: name, city: city.name, latitude: city.latitude, longitude: city.longitude });
+    } catch (error) {
+      this.ctx.logger.warn('android.location.notApplied', { device: name, reason: error instanceof Error ? error.message : String(error) });
     }
     // Android never grants the Camera app its camera or microphone on its own:
     // until it does, the app shows "Permission denied". Grant them now that
