@@ -115,9 +115,18 @@ function prepareChromiumSearchPreference(profileFolder: string, engine: string |
     template_url_data: {
       short_name: selected ?? 'DuckDuckGo No AI',
       keyword: selected ?? 'duckduckgo-noai',
+      name: selected ?? 'DuckDuckGo No AI',
+      id: 1,
       // Chromium's TemplateURL format uses {searchTerms}, not %s.
       url: `${queryUrl}{searchTerms}`,
+      alternate_urls: [],
+      input_encodings: ['UTF-8'],
+      favicon_url: '',
+      originating_url: '',
+      prepopulate_id: 0,
       safe_for_autoreplace: false,
+      show_in_default_list: true,
+      usage_count: 0,
     },
     enabled: true,
   };
