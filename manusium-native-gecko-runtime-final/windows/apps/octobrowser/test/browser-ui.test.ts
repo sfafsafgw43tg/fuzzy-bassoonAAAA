@@ -689,14 +689,12 @@ describe('browser entry UI', () => {
 });
 
 describe('tab right-click dropdown', () => {
-  it('adds Octo input simulation above Inspect with the Ctrl+Shift+U accelerator', () => {
-    expect(windowController).toContain("label: T('ctx.inputSimulation')");
-    expect(windowController).toContain("accelerator: 'Ctrl+Shift+U'");
-    expect(windowController).toContain('icon: iconPath(this.rt.distDir)');
-    expect(windowController).toContain("inputSimulation,\n      { type: 'separator' },\n      { label: T('ctx.inspect')");
-    expect(windowController).toContain('clipboard.readText()');
-    expect(windowController).toContain("wc.send('octo:smart-paste-to-focused', text)");
-    expect(windowController).not.toContain("command('switch-profile')");
+  it('keeps Electron context menus free of the separate Input Simulation action', () => {
+    expect(windowController).not.toContain("label: T('ctx.inputSimulation')");
+    expect(windowController).not.toContain("accelerator: 'Ctrl+Shift+U'");
+    expect(windowController).not.toContain('inputSimulation');
+    expect(windowController).toContain("{ label: T('ctx.inspect'), click: () => wc.inspectElement(p.x, p.y) }");
+    expect(windowController).toContain("label: T('ctx.smartPaste')");
   });
 
   it('opens the Chromium-style dropdown at the cursor instead of the side panel', () => {

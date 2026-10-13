@@ -1053,31 +1053,12 @@ export class BrowserWindowController {
         );
       }
     }
-    const inputSimulation: Electron.MenuItemConstructorOptions = {
-      label: T('ctx.inputSimulation'),
-      accelerator: 'Ctrl+Shift+U',
-      icon: iconPath(this.rt.distDir),
-      click: () => {
-        if (wc.isDestroyed()) return;
-        // Read plain text in the main process and use the same isolated,
-        // framework-friendly path as Smart Paste. This keeps clipboard access
-        // out of the untrusted page while still producing real input events.
-        void clipboard.readText().then((raw) => {
-          const text = raw.replace(/\u00a0/g, ' ').replace(/\r\n?/g, '\n');
-          if (!text || wc.isDestroyed()) return;
-          try { wc.focus(); wc.send('octo:smart-paste-to-focused', text); }
-          catch { /* the tab may have closed while the clipboard was read */ }
-        }).catch(() => undefined);
-      },
-    };
     if (items.length) items.push({ type: 'separator' });
     items.push(
       { label: T('ctx.back'), enabled: wc.navigationHistory.canGoBack(), click: () => wc.navigationHistory.goBack() },
       { label: T('ctx.forward'), enabled: wc.navigationHistory.canGoForward(), click: () => wc.navigationHistory.goForward() },
       { label: T('ctx.reload'), click: () => wc.reload() },
       { label: T('ctx.pip'), click: () => this.command('pip') },
-      { type: 'separator' },
-      inputSimulation,
       { type: 'separator' },
       { label: T('ctx.inspect'), click: () => wc.inspectElement(p.x, p.y) },
     );
