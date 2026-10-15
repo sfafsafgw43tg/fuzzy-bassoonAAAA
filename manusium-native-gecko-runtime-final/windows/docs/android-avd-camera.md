@@ -54,6 +54,30 @@ picker also tries each known SDK emulator before reporting an empty list. This
 avoids the common Windows mismatch where Android Studio boots an AVD with one
 emulator version while an older default SDK is used for `-webcam-list`.
 
+### One-command Windows setup
+
+For a stopped AVD, the repository includes a deterministic setup script. It
+uses the selected emulator's own `-webcam-list` output, writes both camera
+keys, and can cold-boot the AVD with matching command-line flags:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File `
+  .\scripts\android\setup-avd-cameras.ps1 `
+  -AvdName Pixel_8 `
+  -BackCamera webcam0 `
+  -FrontCamera none `
+  -Launch
+```
+
+The script refuses an endpoint that the emulator does not enumerate and refuses
+to assign one endpoint to both lenses. Start OBS Virtual Camera, Unity
+Capture/vStudio, or another DirectShow-compatible provider before running it.
+If a saved endpoint must be preserved while the emulator is temporarily unable
+to enumerate it, use `-AllowUnlisted`; the launch result must still be verified
+with the Camera2 check app.
+
+The script is [setup-avd-cameras.ps1](../scripts/android/setup-avd-cameras.ps1).
+
 Use one host webcam for one lens only. OctoBrowser never sets both lenses to the same `webcamN`: the front lens is Off in that case, because the emulator cannot open one endpoint twice.
 
 ## 3. Keys in `config.ini`
