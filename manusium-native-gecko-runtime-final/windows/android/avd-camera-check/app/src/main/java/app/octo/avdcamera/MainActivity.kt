@@ -34,6 +34,7 @@ class MainActivity : AppCompatActivity() {
     private lateinit var settingsButton: Button
     private lateinit var switchButton: Button
     private lateinit var scannerButton: Button
+    private lateinit var diagnosticsButton: Button
     private lateinit var cameraManager: CameraManager
     private val mainHandler = Handler(Looper.getMainLooper())
 
@@ -128,6 +129,7 @@ class MainActivity : AppCompatActivity() {
         settingsButton = findViewById(R.id.settingsButton)
         switchButton = findViewById(R.id.switchButton)
         scannerButton = findViewById(R.id.scannerButton)
+        diagnosticsButton = findViewById(R.id.diagnosticsButton)
         cameraManager = getSystemService(CAMERA_SERVICE) as CameraManager
 
         titleView.setOnClickListener { onTitleTap() }
@@ -140,6 +142,7 @@ class MainActivity : AppCompatActivity() {
         }
         switchButton.setOnClickListener { selectCamera(CameraSelection.next(selectedId, cameras)) }
         scannerButton.setOnClickListener { scannerLauncher.launch(Intent(this, ScannerActivity::class.java)) }
+        diagnosticsButton.setOnClickListener { openDiagnostics() }
     }
 
     override fun onStart() {
@@ -293,8 +296,12 @@ class MainActivity : AppCompatActivity() {
         lastTapMs = now
         if (titleTaps >= 3) {
             titleTaps = 0
-            startActivity(Intent(this, DiagnosticsActivity::class.java))
+            openDiagnostics()
         }
+    }
+
+    private fun openDiagnostics() {
+        startActivity(Intent(this, DiagnosticsActivity::class.java))
     }
 
     override fun onDestroy() {

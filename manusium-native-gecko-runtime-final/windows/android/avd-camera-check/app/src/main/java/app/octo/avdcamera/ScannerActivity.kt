@@ -70,12 +70,14 @@ class ScannerActivity : AppCompatActivity() {
             )
             implementationMode = PreviewView.ImplementationMode.COMPATIBLE
             scaleType = PreviewView.ScaleType.FILL_CENTER
+            contentDescription = getString(R.string.camera_preview)
         }
         root.addView(previewView)
         statusView = TextView(this).apply {
             setTextColor(Color.WHITE)
             setBackgroundColor(0xAA000000.toInt())
             setPadding(24, 16, 24, 16)
+            accessibilityLiveRegion = android.view.View.ACCESSIBILITY_LIVE_REGION_POLITE
             text = getString(R.string.scanner_starting)
             layoutParams = FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT,

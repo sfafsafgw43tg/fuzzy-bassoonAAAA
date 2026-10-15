@@ -20,13 +20,15 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
+        android:accessibilityLiveRegion="polite"
         android:textSize="16sp" />
 
     <TextView
         android:id="@+id/cameraName"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="4dp" />
+        android:layout_marginTop="4dp"
+        android:accessibilityLiveRegion="polite" />
 
     <androidx.camera.view.PreviewView
         android:id="@+id/previewView"
@@ -35,6 +37,7 @@
         android:layout_weight="1"
         android:layout_marginTop="12dp"
         android:background="#101010"
+        android:contentDescription="@string/camera_preview"
         app:scaleType="fitCenter" />
 
     <LinearLayout
@@ -73,5 +76,12 @@
             android:layout_height="wrap_content"
             android:layout_weight="1"
             android:text="@string/open_scanner" />
+
+        <Button
+            android:id="@+id/diagnosticsButton"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:text="@string/open_diagnostics" />
     </LinearLayout>
 </LinearLayout>

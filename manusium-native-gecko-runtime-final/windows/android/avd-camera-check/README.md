@@ -33,20 +33,29 @@ It is the on-device half of the camera work described in `docs/android-avd-camer
   camera-provider processes because that requires system privileges and is unsafe.
 - Explains the permission state, with a rationale, a retry button, and a settings link
   once the permission is permanently denied.
-- Has a hidden diagnostics screen opened by three taps on the title. It is app-internal
-  (`android:exported="false"`) and shows the camera list, selection, recent events, and
-  debug-logging switch.
+- Has an accessible diagnostics button (the legacy three-tap title shortcut remains) that opens
+  an app-internal screen (`android:exported="false"`) showing the camera list, selection, recent
+  events, and debug-logging switch.
 
 ## Build
 
 Open this folder in Android Studio (Ladybug or newer, JDK 17) and run the `app` configuration on
-an AVD or a phone. The Gradle wrapper is not committed. Create it once with a local Gradle 8.7+
-install (`gradle wrapper --gradle-version 8.7`), then use the commands below:
+an AVD or a phone. A Gradle 8.7 wrapper is committed, so a separate Gradle installation is not
+required:
 
 ```text
 ./gradlew :app:assembleDebug
 ./gradlew :app:testDebugUnitTest
 ```
+
+On Windows PowerShell use:
+
+```powershell
+.\gradlew.bat :app:assembleDebug :app:testDebugUnitTest
+```
+
+The build requires JDK 17 and an Android SDK with platform API 35. The first build downloads the
+Gradle distribution and Maven dependencies.
 
 Minimum API 24. Dependencies: CameraX 1.3.4, ML Kit Barcode Scanning 17.2.0, AppCompat, core-ktx, lifecycle-livedata.
 
@@ -60,8 +69,8 @@ Minimum API 24. Dependencies: CameraX 1.3.4, ML Kit Barcode Scanning 17.2.0, App
 | CameraX preview lifecycle and cleanup | Implemented; source-verified | `MainActivity.kt`, `ScannerActivity.kt` |
 | ML Kit barcode analysis and one-shot result return | Implemented; source-verified | `ScannerActivity.kt`, `MainActivity.kt` |
 | XML resource validity | Verified in this sandbox | Python `xml.etree.ElementTree` parse |
-| Pure camera-selection unit tests | Added; not run here | Requires the Android/Gradle test toolchain |
-| Android compilation and unit tests | Not verified | No Gradle, wrapper, Android SDK, or `ANDROID_HOME` is available here |
+| Pure camera-selection unit tests | Verified in Sandbox | `testDebugUnitTest` passed |
+| Android compilation and unit tests | Verified in Sandbox | Gradle 8.7 wrapper, JDK 17, Android SDK API 35; `assembleDebug` and `testDebugUnitTest` passed |
 | ADB, emulator, physical-device, Camera HAL, webcam preview, barcode scan | Not verified | Requires a Windows host with Android SDK, ADB, and a running AVD/device |
 | Automatic Windows host-camera fallback | Implemented in the desktop launcher; device-side result not verified | When Windows reports cameras but `emulator -webcam-list` is empty, the launcher can configure `webcam0` for a stopped AVD and cold-boot it; Camera2 preview still decides whether it worked |
 | HAL/service restart, SELinux, device properties, custom ROM/AOSP | Intentionally not applied | Out of application scope and potentially destructive/root-only |

@@ -17,6 +17,8 @@
     <string name="open_settings">Open app settings</string>
     <string name="switch_camera">Switch camera</string>
     <string name="open_scanner">Scan barcode</string>
+    <string name="open_diagnostics">Open diagnostics</string>
+    <string name="camera_preview">Live camera preview</string>
     <string name="scanner_title">Barcode scanner</string>
     <string name="scanner_starting">Starting camera scanner…</string>
     <string name="scanner_permission_required">Camera permission is required to scan.</string>
