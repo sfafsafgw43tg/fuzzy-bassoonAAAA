@@ -40,6 +40,7 @@
     "test": "vitest run",
     "test:native-engines": "node tools/verify-native-engines.mjs",
     "test:native-engines:allow-missing-firefox": "node tools/verify-native-engines.mjs --allow-missing-firefox",
+    "check:native-camera": "node tools/check-native-camera.mjs",
     "test:native-packaged": "node tools/test-packaged-chromium.mjs linux-x64",
     "test:native-firefox-packaged": "node tools/test-packaged-firefox.mjs",
     "test:native-packaged:windows": "node tools/chromium-versions.mjs test",
