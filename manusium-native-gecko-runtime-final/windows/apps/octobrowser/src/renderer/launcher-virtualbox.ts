@@ -475,7 +475,10 @@ export async function renderVirtualBox(v: HTMLElement): Promise<void> {
     status = sdkStatus;
     openStudio.disabled = !Boolean(sdkStatus?.studioAppPath);
     const nativeStatus = await run(api.invoke<{ supported: boolean; available: boolean; installed: boolean; message: string }>('mgr:native-camera-status'));
-    nativeCamera.disabled = !nativeStatus?.supported || !nativeStatus.available || nativeStatus.installed;
+    // Keep the action available when the optional DLL is absent so the user
+    // receives an actionable error instead of an apparently dead button. It
+    // is disabled only on unsupported platforms or after registration.
+    nativeCamera.disabled = !nativeStatus?.supported || nativeStatus.installed;
     removeNativeCamera.disabled = !nativeStatus?.installed;
     nativeCamera.title = nativeStatus?.message || t('android.nativeCamera.install');
     const avdReady = sdkStatus?.available === true && sdkStatus.avdManagerAvailable === true;
@@ -578,10 +581,16 @@ export async function renderVirtualBox(v: HTMLElement): Promise<void> {
   };
   nativeCamera.onclick = async () => {
     nativeCamera.disabled = true;
-    const result = await run(api.invoke<{ installed: boolean; message: string }>('mgr:native-camera-install'));
-    if (result?.installed) toast(t('android.nativeCamera.installed'), 'ok', result.message);
-    else toast(t('android.nativeCamera.failed'), 'err', result?.message);
-    await loadAndroid();
+    try {
+      const result = await run(api.invoke<{ installed: boolean; message: string }>('mgr:native-camera-install'));
+      if (result?.installed) toast(t('android.nativeCamera.installed'), 'ok', result.message);
+      else toast(t('android.nativeCamera.failed'), 'err', result?.message);
+      await loadAndroid();
+    } catch (error) {
+      // If IPC itself fails, do not leave the control permanently dead.
+      nativeCamera.disabled = false;
+      toast(t('android.nativeCamera.failed'), 'err', error instanceof Error ? error.message : String(error));
+    }
   };
   removeNativeCamera.onclick = async () => {
     removeNativeCamera.disabled = true;
