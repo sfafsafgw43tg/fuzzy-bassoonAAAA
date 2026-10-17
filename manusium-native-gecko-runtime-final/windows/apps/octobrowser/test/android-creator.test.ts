@@ -101,6 +101,12 @@ const installUi = read('apps/octobrowser/src/renderer/launcher-android-install.t
 const manager = read('apps/octobrowser/src/main/manager.ts');
 
 describe('the Android page', () => {
+  it('does not render the misleading automated Android Studio Linux VM card', () => {
+    expect(page).not.toContain('studioLinuxVmCard');
+    expect(page).not.toContain('android.studioVm');
+    expect(page).not.toContain('virtualbox-studio-vm-status');
+  });
+
   it('centers the launcher brand and hides it completely in the collapsed rail', () => {
     expect(css).toContain('#railHead { position: relative;');
     expect(css).toContain('.brand { position: absolute; left: 50%;');
