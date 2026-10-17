@@ -279,14 +279,14 @@ describe('vStudio Mobile inside the phones', () => {
     expect(studio).toContain("'octobrowser.cameraBack': values.back === 'none' ? 'none' : 'webcam',");
     expect(studio).not.toContain("'hw.camera': cameraEnabled");
     expect(studio).toContain("'hw.camera.back': values.back");
-    // The guest is told the resolution its chosen cameras can actually deliver:
-    // what was measured for a host camera, a plain 640x480 for a camera nobody
-    // measured yet, and the default size when no lens has a camera. Advertising
-    // more is what made the stock Camera app ask for a stream the webcam could
-    // not produce and stop. (The crash the user reported.)
+    // The guest is told a safe resolution: an unmeasured camera gets 640x480,
+    // measured cameras are capped at HD, and no lens gets the default size.
+    // Passing a host-reported 4K capability through to the guest made the stock
+    // Camera app request an unsupported stream and stop. (The crash reported.)
     expect(studio).toContain("if (value === 'none') return undefined;");
     expect(studio).toContain('return clampCameraLimit(measured ?? UNMEASURED_CAMERA_LIMIT);');
     expect(studio).toContain('const UNMEASURED_CAMERA_LIMIT = { width: 640, height: 480 };');
+    expect(studio).toContain('const MAX_EMULATOR_CAMERA_LIMIT = { width: 1280, height: 720 };');
     expect(studio).toContain("'hw.camera.maxHorizontalPixels': String(maxHorizontal || DEFAULT_CAMERA_LIMIT.width)");
     expect(studio).toContain("'hw.camera.maxVerticalPixels': String(maxVertical || DEFAULT_CAMERA_LIMIT.height)");
     expect(studio).toContain("const args = [`@${name}`, '-camera-back', cameraValues.back, '-camera-front', cameraValues.front];");

@@ -141,7 +141,7 @@ Excluded on purpose:
 
 - **Emulated (test pattern) and Virtual Scene (3D room) as choices**: both are pictures the emulator draws, not cameras on this computer. No picker offers them, and no saved value keeps them. A lens without a host camera is Off.
 - **`ScreenResolution` and similar keys**: no key of this name was confirmed in the emulator's documentation. An unknown key does nothing, so it is not written.
-- **Forcing 1280x720 as a universal fix**: the handset's real panel size is used. A fixed size makes some devices look wrong and does nothing for camera availability.
+- **Changing the handset display to 1280x720**: the handset's real panel size is still used. The separate camera capability exposed to the guest is capped at 1280x720 so high-resolution host virtual cameras do not make Android Camera request an unsupported 4K stream.
 - **Generic "fingerprint" emulator detection**: detection is used only for messages and diagnostics, never for selection or for hiding anything from apps.
 - **ADB commands that edit secure input-method settings or clear system camera data**: these change settings the user did not ask to change and are not needed to make a camera appear. They are not in the scripts or this document.
 

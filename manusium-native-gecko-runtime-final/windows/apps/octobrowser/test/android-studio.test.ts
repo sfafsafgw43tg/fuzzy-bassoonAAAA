@@ -746,9 +746,10 @@ describe('wiring a live camera into a device', () => {
     expect(parseCameraLimit('1280x720')).toEqual({ width: 1280, height: 720 });
     expect(parseCameraLimit('1920x1080x32')).toBeUndefined();
     expect(parseCameraLimit('')).toBeUndefined();
-    // Odd sizes are rounded to even pixels and kept inside what the HAL describes.
+    // Odd sizes are rounded to even pixels and kept inside the emulator's safe HD ceiling.
     expect(clampCameraLimit({ width: 641, height: 481 })).toEqual({ width: 642, height: 482 });
-    expect(clampCameraLimit({ width: 20000, height: 10 })).toEqual({ width: 4096, height: 240 });
+    expect(clampCameraLimit({ width: 20000, height: 10 })).toEqual({ width: 1280, height: 240 });
+    expect(clampCameraLimit({ width: 3840, height: 2160 })).toEqual({ width: 1280, height: 720 });
   });
 
   it('reads a device saved with the old companion source as a live host camera', async () => {

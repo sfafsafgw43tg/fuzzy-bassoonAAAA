@@ -50,6 +50,14 @@ export type CameraSource = 'none' | 'webcam';
 /** The picture size the umbrella keys advertise when no lens is on. */
 const DEFAULT_CAMERA_LIMIT = { width: 1920, height: 1080 };
 /**
+ * The Android Emulator webcam bridge is not a general 4K Camera2 sink. A
+ * webcam can be reported by the host browser at 3840x2160 while the guest
+ * Camera HAL still cannot negotiate that size. Keep the host stream unchanged,
+ * but advertise a conservative HD ceiling to Android so stock Camera apps do
+ * not request an unsupported 4K stream and crash.
+ */
+const MAX_EMULATOR_CAMERA_LIMIT = { width: 1280, height: 720 };
+/**
  * A host camera that was never measured advertises 640x480.
  *
  * DirectShow cameras hand the emulator 640x480 by default, and the guest HAL
@@ -1895,8 +1903,8 @@ export function parseCameraLimit(value: unknown): CameraResolution | undefined {
 /** Even pixel counts inside what the emulator's camera HAL can describe. */
 export function clampCameraLimit(limit: CameraResolution): CameraResolution {
   return {
-    width: Math.max(320, Math.min(4096, Math.round(limit.width / 2) * 2)),
-    height: Math.max(240, Math.min(4096, Math.round(limit.height / 2) * 2)),
+    width: Math.max(320, Math.min(MAX_EMULATOR_CAMERA_LIMIT.width, Math.round(limit.width / 2) * 2)),
+    height: Math.max(240, Math.min(MAX_EMULATOR_CAMERA_LIMIT.height, Math.round(limit.height / 2) * 2)),
   };
 }
 
@@ -1918,10 +1926,11 @@ function cameraLimitsFor(
  * What one lens can honestly advertise to Android.
  *
  * `hw.camera.maxHorizontalPixels` and `maxVerticalPixels` are what the guest's
- * Camera2 HAL offers to apps. Claiming Full HD for a webcam that only produces
- * 720p leaves apps requesting a stream the producer cannot fill, which is one
- * of the ways a camera "crashes" instead of showing a picture. A measured host
- * camera reports what was measured; an unmeasured one reports HD.
+ * Camera2 HAL offers to apps. Claiming more than the webcam bridge can safely
+ * negotiate leaves apps requesting a stream the producer cannot fill, which is
+ * one of the ways a camera "crashes" instead of showing a picture. A measured
+ * host camera is capped at the emulator-safe HD ceiling; an unmeasured one
+ * reports 640x480.
  */
 function cameraLimitFor(value: string, measured?: CameraResolution): CameraResolution | undefined {
   if (value === 'none') return undefined;
