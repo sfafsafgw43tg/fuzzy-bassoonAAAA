@@ -490,142 +490,38 @@ describe('an engine that is installed but not detected', () => {
   });
 });
 
-/**
- * The vStudio companion itself is shipped in studio.zip. It was reworked for
- * the emulators: mobile mode, the device's own camera/microphone names, and a
- * webcam-compatible frame that Android CameraProvider can open reliably.
- */
-describe('vStudio Mobile, the app', () => {
+/** The supplied Camera Studio companion is bundled as a curated, user-started payload. */
+describe('Camera Studio bundle and Devices launch action', () => {
   const zip = fs.readFileSync(path.join(root, 'studio.zip'));
-
-  /** Read one file out of the bundle without unpacking all 23 MB. */
   const entry = studioEntry;
 
-  it('ships a bundle that still looks like a zip', () => {
-    expect(zip.length).toBeGreaterThan(1_000_000);
+  it('ships a valid normalized archive without installers or machine state', () => {
     expect(zip.subarray(0, 2).toString('latin1')).toBe('PK');
+    expect(zip.length).toBeGreaterThan(100_000);
+    const names = studioEntryNames();
+    expect(names.every((name) => name.startsWith('lvStudio arbitrage/vStudio/'))).toBe(true);
+    expect(names.some((name) => name.endsWith('/app.py'))).toBe(true);
+    expect(names.some((name) => /(?:__pycache__|\.bat$|\.cmd$|config\.json$|media\/)/i.test(name))).toBe(false);
   });
 
-  it('calls itself vStudio Mobile and knows which device it serves', () => {
+  it('contains the supplied camera application and host-device checks', () => {
     const app = entry('app.py');
-    expect(app).toContain('APP_NAME = "vStudio Mobile"');
-    expect(app).toContain('APP_SHORT = "vS Mobile"');
-    expect(app).toContain('def mobile_camera_name');
-    expect(app).toContain('def mobile_microphone_name');
-    expect(app).toContain('self.title("%s  \\u2022  %s" % (APP_NAME,');
-    // The bar that answers "what do I pick inside Android?".
-    expect(app).toContain('def _build_mobile_bar');
-    expect(app).toContain('def _mobile_match_frame');
-    expect(app).toContain('def _mobile_copy_names');
-    expect(app).toContain('"mobile": {');
-    expect(app).toContain('VD.connect_running_android');
-    expect(app).toContain('def _poll_android_connection');
-    expect(app).toContain('"1180x920" if MOBILE_ON');
     const devices = entry('virtual_devices.py');
-    expect(devices).toContain('def detect_running_android');
-    expect(devices).toContain('"emu", "avd", "hostmicon"');
-    expect(devices).toContain('"hw.camera.front"');
-    // Dashboard lists only sources that produce a frame/open a stream now.
-    expect(app).toContain('def _build_source_dashboard');
-    expect(app).toContain('def _scan_live_sources');
-    expect(app).toContain('self.video.set_live_camera');
-    expect(devices).toContain('def probe_working_cameras');
-    expect(devices).toContain('ok, frame = cap.read()');
-    expect(devices).toContain('def probe_working_microphones');
-    expect(devices).toContain('stream.start()');
-    expect(devices).toContain('"cable output" in low');
-    expect(devices).toContain('"octobrowser.deviceLabel"');
-    // Side rails, log and every settings sector can fold away; one tab owns
-    // exactly one cached scrollbar even when sound and music share it.
-    expect(app).toContain('def _toggle_settings_panel');
-    expect(app).toContain('def _toggle_library_panel');
-    expect(app).toContain('def _toggle_log_panel');
-    expect(app).toContain('_vstudio_section_header');
-    expect(app).toContain('_vstudio_scroll_box');
-    expect(app).toContain('self._settings_visible = False');
-    expect(app).toContain('"ui": {"theme": "obsidian"');
-    expect(app).toContain('THEME_IDS = ["obsidian", "midnight", "slate"');
-    expect(app).toContain('def _change_theme');
-    const settingsUi = entry('ui_v14.py');
-    expect(settingsUi).toContain('Appearance theme');
-    expect(settingsUi).toContain('main.save_config(self.CFG)');
-    const audioUi = entry('ui_v13.py');
-    expect(audioUi).toContain('self.var_monitor = ctk.BooleanVar(value=False)');
-    expect(audioUi).toContain('a["monitor_on"] = False');
-    expect(audioUi).toContain('Źródło mikrofonu: %s');
-    expect(entry('audio_engine.py')).toContain('def active_input_device_name');
-    expect(entry('audio_engine.py')).toContain('self.monitor.set_device(device)');
-    expect(entry('config.json')).toContain('"monitor_on": false');
-    expect(entry('config.example.json')).toContain('"broadcastRequest": ""');
-    expect(entry('config.example.json')).toContain('"mobile": {');
-    expect(entry('video_engine.py')).toContain('def set_live_camera');
+    expect(app).toContain('class RealmeStudioApp');
+    expect(app).toContain('def main():');
+    expect(devices).toContain('pyvirtualcam');
+    expect(devices).toContain('def list_dshow_cameras');
+    expect(devices).toContain('def detect_vcam_backends');
+    expect(entry('config.example.json')).toContain('"video"');
   });
 
-  it('publishes only after an explicit Octo command and reports real camera readiness', () => {
-    const app = entry('app.py');
-    expect(app).toContain('def _poll_octobrowser_command');
-    expect(app).toContain('"broadcastRequest"');
-    expect(app).toContain('def _write_runtime_status');
-    expect(app).toContain('"cameraActive": bool(self.video and self.video.vcam_active)');
-    expect(app).toContain('"inputCameraActive": input_active');
-    expect(studio).toContain('runtime?.inputCameraRequested === true');
-  });
-
-  it('can correct a sideways live camera in both staged vStudio plugins', () => {
-    const app = entry('app.py');
-    const video = entry('video_engine.py');
-    expect(app).toContain('def _rotate_live_input');
-    expect(app).toContain('def _mirror_live_input');
-    expect(app).toContain('"input_rotation": 0, "input_mirror": False');
-    expect(app).toContain('self.video.input_rotation = input_rotation');
-    expect(video).toContain('self.input_rotation = 0');
-    expect(video).toContain('rotation = int(getattr(self, "input_rotation", 0) or 0) % 360');
-    expect(video.indexOf('live = cv2.rotate(live')).toBeLessThan(video.indexOf('return self._fit(live, wW, wH)'));
-    // The rotation the browser plugin applies to its own input stays; the
-    // Android launch dialog no longer has a transform to set, because Android
-    // reads the camera directly.
-    expect(studio).toContain('input_rotation: input.inputRotation');
-    expect(page).not.toContain('hostCameraRotation');
-    expect(mediaUi).not.toContain('applyCameraPreviewTransform');
-    expect(page).not.toContain('startMediaCompanion');
-  });
-
-  it('uses a driver-safe Android sensor frame without an implicit quarter-turn', () => {
-    const app = entry('app.py');
-    const video = entry('video_engine.py');
-    expect(entry('phone_formats.py')).toContain('def register_custom_format');
-    expect(app).toContain('def mobile_stream_resolution');
-    expect(app).toContain('return (480, 640)');
-    expect(app).toContain('self.video.virtual_output_size = (640, 480)');
-    expect(app).toContain('self.video.virtual_output_rotation = 0');
-    expect(app).not.toContain('self.video.virtual_output_rotation = 90');
-    expect(video).toContain('canvas = np.zeros((ch, cw, 3)');
-    expect(video).toContain('canvas[y:y + nh, x:x + nw] = fitted');
-    // OpenCV frames are BGR; declare it so pyvirtualcam performs the backend's
-    // required DirectShow format conversion rather than swapping channels.
-    expect(video).toContain('kwargs["fmt"] = pixel_formats.BGR');
-  });
-
-  it('uses the dark media dashboard and restrained transform feedback in the launcher', () => {
-    expect(mediaUi).toContain("box.classList.add('media-dashboard')");
-    expect(mediaUi).toContain("class: 'media-dashboard-grid'");
-    expect(css).toContain('.modal-box.media-dashboard');
-    expect(css).toContain('.media-dashboard .media-check');
-  });
-
-  it('is configured by OctoBrowser through the section the app reads', () => {
-    expect(studio).toContain('mobile: {');
-    expect(studio).toContain('export function defaultAudioInput');
-    expect(studio).toContain('const FOREIGN_CAMERA =');
-    // No companion camera source is offered to Android any more, and a device
-    // saved with the old one still resolves to the host camera behind it.
-    expect(studio).toContain("export type CameraSource = 'none' | 'webcam';");
-    expect(studio).toContain("export function normalizeCameraSource(saved?: string): CameraSource {");
-    expect(cameraUi).toContain("export type CameraSource = 'none' | 'webcam';");
-    expect(cameraUi).not.toContain("'vstudio'");
-    expect(mediaUi).not.toContain("'vstudio'");
-    expect(page).not.toContain("'vStudio Mobile'");
-    expect(creator).not.toContain("'vStudio Mobile'");
+  it('launches the GUI interpreter without a Windows console', () => {
+    expect(studio).toContain('function pythonGuiPath');
+    expect(studio).toContain("which('pythonw')");
+    expect(studio).toContain('windowsHide: true');
+    expect(studio).toContain("spawn(python, [path.join(root, COMPANION_ENTRY)], { cwd: root, detached: false, stdio: 'ignore', windowsHide: true })");
+    expect(page).toContain("'mgr:plugin-start', 'vstudio-mobile'");
+    expect(page).toContain("t('android.cameraStudio.open')");
   });
 });
 
@@ -713,35 +609,16 @@ describe('devices, languages and the freeze', () => {
   });
 });
 
-describe('vStudio Mobile: one engine, one language, one audio tab', () => {
-  const entry = studioEntry;
-  const app = entry('app.py');
-
-  it('broadcasts through Unity Capture only', () => {
-    expect(app).toContain('VCAM_BACKEND = "unitycapture"');
-    expect(app).toContain('self.video.vcam_backend = VCAM_BACKEND');
-    // Installers do not ship inside the companion payload; the signed app-side
-    // requirement repair downloads the official driver only on explicit use.
-    expect(studioEntryNames().some((name) => /(?:^|\/)(?:scripts|INSTALUJ\.bat)/i.test(name))).toBe(false);
-    expect(read('apps/octobrowser/src/main/media-requirements.ts')).toContain('github.com/schellingb/UnityCapture/archive');
+describe('Camera Studio is explicit and accessibility-friendly', () => {
+  it('does not auto-start the camera companion', () => {
+    expect(studio).toContain('Start the companion. Explicit: it only runs when a user asked for it.');
+    expect(manager).toContain("handle('mgr:plugin-start'");
   });
 
-  it('starts in English, can switch to Polish, and starts empty', () => {
-    expect(app).toContain('"ui": {"theme": "obsidian", "language": "en"');
-    expect(app).toContain('def tr(text)');
-    expect(app).toContain('def _translate_ctk_widgets');
-    expect(app).toContain('LANG.startswith("pl")');
-    // No sample media is loaded any more; a per-device folder still is.
-    expect(app).toContain('folder = str(MOBILE.get("media_folder")');
-    expect(app).not.toContain('media_dir = os.path.join(APP_DIR, "media")');
-    expect(studioEntryNames().some((name) => name.includes('/media/'))).toBe(false);
-  });
-
-  it('has one sound tab and no 3D face generator', () => {
-    const tabs = app.slice(app.indexOf('tab_names = ['), app.indexOf('self._build_v14_ui'));
-    expect(tabs).toContain('sound_tab');
-    expect(tabs).not.toContain('Generator 3D Twarzy');
-    expect(tabs).toContain('self._tab_music(merged)');
+  it('has localized, visible button labels', () => {
+    expect(DICTS.en['android.cameraStudio.open']).toBe('Open Camera Studio');
+    expect(DICTS.pl['android.cameraStudio.open']).toBe('Otwórz Camera Studio');
+    expect(page).toContain("class: 'btn small'");
   });
 });
 
@@ -910,12 +787,12 @@ describe('the staged companion is kept current', () => {
     expect(manager).toContain('status: await mediaCompanionStatusAsync(id)');
   });
 
-  it('binds vStudio Mobile to the exact selected DirectShow camera name', () => {
+  it('detects the supplied Unity Capture backend and reports missing drivers clearly', () => {
     const devices = studioEntry('virtual_devices.py');
-    const video = studioEntry('video_engine.py');
-    expect(devices).toContain('class NamedDirectShowCapture');
-    expect(devices).toContain('graph.add_video_input_device(index)');
-    expect(video).toContain('VD.open_camera_exact(idx, str(name))');
+    expect(devices).toContain('def list_dshow_cameras');
+    expect(devices).toContain('def check_unity_capture_installed');
+    expect(devices).toContain('def devices_status_report');
+    expect(devices).toContain('install dependencies from requirements.txt');
   });
 
 });

@@ -439,6 +439,7 @@ export async function renderVirtualBox(v: HTMLElement): Promise<void> {
   const androidRefresh = h('button', { class: 'btn small' }, icon('refreshCircle', 14), h('span', { text: t('net.refresh') }));
   const androidImport = h('button', { class: 'btn small' }, icon('folder', 14), h('span', { text: t('android.findExisting') }));
   const androidCreate = h('button', { class: 'btn primary' }, icon('plus', 15), h('span', { text: t('android.create') }));
+  const cameraStudio = h('button', { class: 'btn small', title: t('android.cameraStudio.open') }, icon('camera', 14), h('span', { text: t('android.cameraStudio.open') })) as HTMLButtonElement;
   const engines = h('div', { class: 'engine-row' });
   const installHost = h('div', {});
   const setupHost = h('div', {});
@@ -452,7 +453,7 @@ export async function renderVirtualBox(v: HTMLElement): Promise<void> {
     h('section', { class: 'vm-section android-section' },
       h('div', { class: 'vm-section-head' },
         h('div', {}, h('h2', { text: t('android.sectionTitle') }), h('p', { class: 'hint', text: t('android.desc') })),
-        h('div', { class: 'row' }, androidCreate, androidImport, androidRefresh)),
+        h('div', { class: 'row' }, cameraStudio, androidCreate, androidImport, androidRefresh)),
       engines, installHost, setupHost, netHost, androidList));
 
   let status: AndroidStatus | undefined;
@@ -552,5 +553,15 @@ export async function renderVirtualBox(v: HTMLElement): Promise<void> {
   };
   androidRefresh.onclick = () => void loadAndroid();
   androidCreate.onclick = () => openCreator();
+  cameraStudio.onclick = async () => {
+    cameraStudio.disabled = true;
+    try {
+      const result = await run(api.invoke<{ started: boolean; message: string }>('mgr:plugin-start', 'vstudio-mobile'));
+      if (result?.started) toast(t('android.cameraStudio.started'), 'ok', result.message);
+      else toast(t('android.cameraStudio.failed'), 'err', result?.message);
+    } finally {
+      cameraStudio.disabled = false;
+    }
+  };
   await loadAndroid();
 }

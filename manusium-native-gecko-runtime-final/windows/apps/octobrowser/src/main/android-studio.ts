@@ -2284,6 +2284,19 @@ function pythonPath(): string {
   return found.find((item) => !isBatch(item)) ?? found[0] ?? '';
 }
 
+/** Prefer the GUI interpreter so Camera Studio never opens a console window. */
+function pythonGuiPath(): string {
+  if (process.platform !== 'win32') return pythonPath();
+  const gui = which('pythonw');
+  if (gui) return gui;
+  const python = pythonPath();
+  if (/python\.exe$/i.test(python)) {
+    const sibling = path.join(path.dirname(python), 'pythonw.exe');
+    if (fs.existsSync(sibling)) return sibling;
+  }
+  return python;
+}
+
 /**
  * A virtual camera the companion can broadcast through. vStudio Mobile uses
  * Unity Capture, so that is checked first; an OBS installation still counts,
@@ -2971,12 +2984,12 @@ export function startMediaCompanion(plugin: MediaPluginId = MOBILE): { started: 
   terminateOrphanedMediaCompanion(plugin);
   const root = mediaCompanionRoot(plugin);
   if (!stagedPayload(root).installed) throw new Error(`${name} is not installed`);
-  const python = pythonPath();
+  const python = pythonGuiPath();
   if (!python) throw new Error(`Python 3 is required to run ${name}`);
   // A status file belongs to one concrete process/request. Removing a stale
   // predecessor prevents a fast relaunch from being mistaken for readiness.
   try { fs.rmSync(mediaRuntimeFile(plugin), { force: true }); } catch { /* status is advisory */ }
-  const child = spawn(python, [path.join(root, COMPANION_ENTRY)], { cwd: root, detached: false, stdio: 'ignore', windowsHide: false });
+  const child = spawn(python, [path.join(root, COMPANION_ENTRY)], { cwd: root, detached: false, stdio: 'ignore', windowsHide: true });
   child.once('error', () => { if (companionChildren.get(plugin) === child) companionChildren.delete(plugin); });
   child.once('exit', () => { if (companionChildren.get(plugin) === child) companionChildren.delete(plugin); });
   companionChildren.set(plugin, child);
@@ -3031,10 +3044,10 @@ export function startWebMediaCompanionAsync(input: {
     await ensureMediaCompanionAsync(plugin);
     const file = await configureWebMediaCompanionAsync(input);
     if (runningChild(plugin)) return { started: false, message: `${MEDIA_PLUGINS[plugin].name} is already running.`, path: file };
-    const python = pythonPath();
+    const python = pythonGuiPath();
     if (!python) throw new Error(`Python 3 is required to run ${MEDIA_PLUGINS[plugin].name}`);
     const root = mediaCompanionRoot(plugin);
-    const child = spawn(python, [path.join(root, COMPANION_ENTRY)], { cwd: root, detached: false, stdio: 'ignore', windowsHide: false });
+    const child = spawn(python, [path.join(root, COMPANION_ENTRY)], { cwd: root, detached: false, stdio: 'ignore', windowsHide: true });
     child.once('error', () => { if (companionChildren.get(plugin) === child) companionChildren.delete(plugin); });
     child.once('exit', () => { if (companionChildren.get(plugin) === child) companionChildren.delete(plugin); });
     companionChildren.set(plugin, child);
