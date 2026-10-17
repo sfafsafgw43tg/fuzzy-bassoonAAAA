@@ -32,6 +32,8 @@ The UI uses native labelled selects and status text. Camera testing remains opt-
 
 The Android Emulator source and hardware-property documentation confirm that valid camera values include `emulated`, `webcam<N>`, and `none`: [hardware-properties.ini](https://android.googlesource.com/platform/external/qemu/+/b5b78438ae9ff3b90aafdab0f4f25585affc22fb/android/avd/hardware-properties.ini) and [Android Emulator camera support](https://developer.android.com/studio/run/emulator-use-camera).
 
+The current command-line documentation also requires the AVD name when using `-webcam-list`. Octo now probes host cameras with `@<AVD name> -webcam-list` for launch, media-check, repair, and device-update operations. The global picker keeps its legacy no-AVD form for older SDK tools, while a selected device always uses the named form: [Android Emulator command-line options](https://developer.android.com/studio/run/emulator-commandline).
+
 ## Operational limitation
 
 No software change can guarantee that an arbitrary third-party Windows virtual-camera driver works in every emulator build. The driver must enumerate in `emulator -webcam-list`, return frames in a supported format, and not be held by another process. The new Virtual scene option is the deterministic path for camera-based Android testing when those host conditions are not met.

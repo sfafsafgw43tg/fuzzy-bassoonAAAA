@@ -1653,9 +1653,10 @@ export async function emulatorWebcamsFrom(
   emulator: string,
   sdkRoot: string,
   timeout = CAMERA_LAUNCH_LIMIT_MS,
+  avdName = '',
 ): Promise<EmulatorCameraReport> {
   if (!emulator || !sdkRoot) return { webcams: [], problem: 'none', detail: '' };
-  return emulatorCameraReport({ emulator, root: sdkRoot }, timeout, false);
+  return emulatorCameraReport({ emulator, root: sdkRoot }, timeout, false, avdName);
 }
 
 /** Launches and the media check read the list with this limit. */
@@ -1808,8 +1809,12 @@ function namedWebcams(webcams: EmulatorWebcam[], windows: WindowsCameraName[]): 
  * `-verbose`, so the emulator also prints why a camera was left out; the launch
  * does not need that and asks plainly.
  */
-async function emulatorCameraReport(tools: { emulator: string; root: string }, timeout: number, forPicker: boolean): Promise<EmulatorCameraReport> {
-  const args = [...await emulatorTelemetryArgs(tools.emulator, tools.root), ...(forPicker ? ['-webcam-list', '-verbose'] : ['-webcam-list'])];
+async function emulatorCameraReport(tools: { emulator: string; root: string }, timeout: number, forPicker: boolean, avdName = ''): Promise<EmulatorCameraReport> {
+  // Current emulator builds require an AVD name for -webcam-list. Older
+  // builds accepted the flag without one, so retain the empty-name fallback
+  // for the global picker and SDKs that still support the legacy form.
+  const target = avdName.trim() ? [`@${avdName.trim()}`] : [];
+  const args = [...target, ...await emulatorTelemetryArgs(tools.emulator, tools.root), ...(forPicker ? ['-webcam-list', '-verbose'] : ['-webcam-list'])];
   const run = await runCameraList(tools.emulator, args, tools.root, timeout);
   const parsed = parseWebcamList(run.text);
   if (parsed.length) {
@@ -2806,7 +2811,12 @@ export async function androidMediaCheck(name: string): Promise<MediaCheck> {
   const clean = assertName(name);
   const avd = (await listAndroidAvds()).find((item) => item.name === clean);
   if (!avd) throw new Error('Android virtual device not found');
-  const webcams = await emulatorWebcams();
+  const sdk = optionalSdk();
+  const imagePackage = avdSystemPackage(avd);
+  const emulator = sdk ? await emulatorForPackage(imagePackage) || sdk.emulator : '';
+  const webcams = emulator
+    ? (await emulatorWebcamsFrom(emulator, rootForPackage(imagePackage) || sdk?.root || '', CAMERA_LAUNCH_LIMIT_MS, clean)).webcams
+    : [];
   const selected = avd.cameraDevice || '';
   const defaultInput = defaultAudioInput();
   // What the two lenses are set to, read the way the emulator reads it.
@@ -2865,7 +2875,12 @@ export async function repairAndroidMedia(name: string, input: { cameraDevice?: s
   if (!avd) throw new Error('Android virtual device not found');
   if (avd.running) throw new Error('Stop the Android device before repairing its camera and microphone');
   const changed: string[] = [];
-  const webcams = await emulatorWebcams();
+  const sdk = optionalSdk();
+  const imagePackage = avdSystemPackage(avd);
+  const emulator = sdk ? await emulatorForPackage(imagePackage) || sdk.emulator : '';
+  const webcams = emulator
+    ? (await emulatorWebcamsFrom(emulator, rootForPackage(imagePackage) || sdk?.root || '', CAMERA_LAUNCH_LIMIT_MS, clean)).webcams
+    : [];
   const hostCameraCount = (await windowsCameraNames()).length;
   const fallback = automaticWebcamFallback(hostCameraCount, { webcams, problem: 'reported', detail: '' });
   const usableWebcams = webcams.length ? webcams : fallback;
@@ -3642,7 +3657,7 @@ export async function launchAndroidAvd(input: AndroidLaunchInput): Promise<Andro
   // Explicit webcam endpoints survive failed discovery. An unlisted endpoint
   // is reported as unverified, and Off remains off. No synthetic image is used.
   const emulatorRoot = rootForPackage(avdSystemPackage(avd)) || tools.root;
-  const webcamReport = await emulatorWebcamsFrom(emulator, emulatorRoot);
+  const webcamReport = await emulatorWebcamsFrom(emulator, emulatorRoot, CAMERA_LAUNCH_LIMIT_MS, name);
   const hostCameraCount = (await windowsCameraNames()).length;
   const explicitEndpoints = [
     input.cameraBackDevice ?? avd.cameraBackDevice ?? '',
@@ -4730,7 +4745,12 @@ export async function createAndroidAvdFromSpec(input: SpecCreateInput): Promise<
   const previousSdCardMb = Number.parseInt(configValue(avdPath, 'sdcard.size'), 10) || 0;
   const safeDataGb = creating ? input.dataGb : Math.max(input.dataGb, previousDataGb);
   const safeSdCardMb = creating ? input.sdCardMb : Math.max(input.sdCardMb, previousSdCardMb);
-  const webcams = await emulatorWebcams();
+  const cameraTools = optionalSdk();
+  const imagePackage = input.systemPackage;
+  const emulator = cameraTools ? await emulatorForPackage(imagePackage) || cameraTools.emulator : '';
+  const webcams = emulator
+    ? (await emulatorWebcamsFrom(emulator, rootForPackage(imagePackage) || cameraTools?.root || '', CAMERA_LAUNCH_LIMIT_MS, name)).webcams
+    : [];
   const resolvedCameras = resolveActiveCameraAssignments(
     input.cameraFront, input.cameraBack, input.cameraFrontDevice ?? '', input.cameraBackDevice ?? '', webcams,
     [], input.cameraDevice ?? '',
