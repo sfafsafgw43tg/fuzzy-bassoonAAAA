@@ -440,6 +440,13 @@ export async function renderVirtualBox(v: HTMLElement): Promise<void> {
   const androidImport = h('button', { class: 'btn small' }, icon('folder', 14), h('span', { text: t('android.findExisting') }));
   const androidCreate = h('button', { class: 'btn primary' }, icon('plus', 15), h('span', { text: t('android.create') }));
   const cameraStudio = h('button', { class: 'btn small', title: t('android.cameraStudio.open') }, icon('camera', 14), h('span', { text: t('android.cameraStudio.open') })) as HTMLButtonElement;
+  const openStudio = h('button', { class: 'btn small' }, icon('externalLink', 14), h('span', { text: t('android.openStudio') })) as HTMLButtonElement;
+  openStudio.onclick = async () => {
+    openStudio.disabled = true;
+    const result = await run(api.invoke<{ opened: boolean; message: string }>('mgr:android-open-studio'));
+    openStudio.disabled = false;
+    toast(result?.opened ? t('android.studioOpened') : t('android.studioUnavailable'), result?.opened ? 'ok' : 'err', result?.message);
+  };
   const engines = h('div', { class: 'engine-row' });
   const installHost = h('div', {});
   const setupHost = h('div', {});
@@ -450,7 +457,7 @@ export async function renderVirtualBox(v: HTMLElement): Promise<void> {
     h('section', { class: 'vm-section android-section' },
       h('div', { class: 'vm-section-head' },
         h('div', {}, h('h2', { text: t('android.sectionTitle') }), h('p', { class: 'hint', text: t('android.desc') })),
-        h('div', { class: 'row' }, cameraStudio, androidCreate, androidImport, androidRefresh)),
+        h('div', { class: 'row' }, openStudio, cameraStudio, androidCreate, androidImport, androidRefresh)),
       engines, installHost, setupHost, netHost, virtualBrowserHost, androidList));
 
   let status: AndroidStatus | undefined;
@@ -464,6 +471,7 @@ export async function renderVirtualBox(v: HTMLElement): Promise<void> {
     ]);
     androidRefresh.classList.remove('spinning');
     status = sdkStatus;
+    openStudio.disabled = !Boolean(sdkStatus?.studioAppPath);
     const avdReady = sdkStatus?.available === true && sdkStatus.avdManagerAvailable === true;
 
     // ---- engine --------------------------------------------------------

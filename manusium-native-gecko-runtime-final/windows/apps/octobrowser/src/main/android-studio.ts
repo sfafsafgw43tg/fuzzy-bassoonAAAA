@@ -439,11 +439,37 @@ export function clearAndroidSdkRoot(): boolean {
   try { fs.rmSync(overrideFile(), { force: true }); return true; } catch { return false; }
 }
 
-/** Where Android Studio itself is installed, when we can see it. Display only. */
+/** Where Android Studio itself is installed, when we can see it. */
 function studioApp(): string {
-  const candidates = [path.join(process.env['ProgramFiles'] || 'C:\\Program Files', 'Android', 'Android Studio', 'bin', 'studio64.exe'),
-    process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'Programs', 'Android Studio', 'bin', 'studio64.exe') : ''];
+  const roots = [
+    process.env['ProgramFiles'] ? path.join(process.env['ProgramFiles'], 'Android', 'Android Studio') : '',
+    process.env['ProgramFiles(x86)'] ? path.join(process.env['ProgramFiles(x86)'], 'Android', 'Android Studio') : '',
+    process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'Programs', 'Android Studio') : '',
+  ];
+  const candidates = roots.flatMap((root) => [
+    path.join(root, 'bin', 'studio64.exe'),
+    path.join(root, 'bin', 'studio.exe'),
+    path.join(root, 'bin', 'studio.sh'),
+  ]);
   return candidates.filter(Boolean).find((candidate) => fs.existsSync(candidate)) ?? '';
+}
+
+/** Open the installed Android Studio GUI without claiming to install it. */
+export function openAndroidStudio(): Promise<{ opened: boolean; message: string }> {
+  const executable = studioApp();
+  if (!executable) return Promise.resolve({ opened: false, message: 'Android Studio was not found. Install it or choose an Android SDK in Settings first.' });
+  return new Promise((resolve) => {
+    try {
+      const child = spawn(executable, [], { detached: true, stdio: 'ignore', windowsHide: false });
+      let settled = false;
+      const finish = (result: { opened: boolean; message: string }) => { if (!settled) { settled = true; resolve(result); } };
+      child.once('error', (error) => finish({ opened: false, message: `Android Studio could not be started: ${error.message}` }));
+      child.once('spawn', () => { child.unref(); finish({ opened: true, message: 'Android Studio is starting.' }); });
+      setTimeout(() => finish({ opened: true, message: 'Android Studio launch was requested.' }), 1500);
+    } catch (error) {
+      resolve({ opened: false, message: `Android Studio could not be started: ${error instanceof Error ? error.message : String(error)}` });
+    }
+  });
 }
 
 function locate(sdkRoot: string, tool: 'avdmanager' | 'sdkmanager' | 'emulator' | 'adb'): string {

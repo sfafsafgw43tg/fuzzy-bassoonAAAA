@@ -418,6 +418,16 @@ describe('devices that do not start, and devices that will not stop', () => {
     expect(page).toContain("{ icon: 'close', label: t('android.forceStop'), danger: true, fn: () => void stopDevice(true) }");
   });
 
+  it('opens the installed Android Studio GUI from Devices', () => {
+    expect(studio).toContain('export function openAndroidStudio');
+    expect(studio).toContain('studio64.exe');
+    expect(manager).toContain("handle('mgr:android-open-studio'");
+    expect(page).toContain("t('android.openStudio')");
+    expect(page).toContain("api.invoke<{ opened: boolean; message: string }>('mgr:android-open-studio')");
+    expect(DICTS.en['android.openStudio']).toBeTruthy();
+    expect(DICTS.pl['android.openStudio']).toBeTruthy();
+  });
+
   it('marks the leftover of an interrupted creation instead of offering to launch it', () => {
     expect(studio).toContain('function avdIncomplete');
     expect(studio).toContain('incomplete: avdIncomplete(item.path),');
