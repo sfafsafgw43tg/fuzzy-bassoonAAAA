@@ -17,6 +17,8 @@ describe('branded local Windows setup', () => {
     expect(prebuilt).toContain("manifest.distribution !== 'source-built'");
     expect(prebuilt).toContain("manifest.executable !== 'inkbrowser-chrome.exe'");
     expect(prebuilt).toContain("sha256(executable).toLowerCase() !== expected");
+    expect(prebuilt).toContain('maxRetries: 8, retryDelay: 250');
+    expect(prebuilt).toContain('Close Octo.su, OctoDetect.su');
     expect(installer).toContain('Invoke-NpmResult @(');
     expect(installer).toContain("HTTP 404|release not found|no release");
     expect(installer).toContain("T 'nativeRuntimeNotPublished'");
@@ -38,6 +40,11 @@ describe('branded local Windows setup', () => {
     expect(ready).toContain('resources\\app\\package.json');
     expect(ready).toContain('resources\\app\\dist\\main.js');
     expect(ready).toContain("Test-NativeRuntimeReady 'chromium' 'win32-x64'");
+  });
+  it('detects packaged and development processes before replacing output folders', () => {
+    expect(installer).toContain('Get-CimInstance Win32_Process');
+    expect(installer).toContain('$app.DevDir');
+    expect(installer).toContain('[StringComparison]::OrdinalIgnoreCase');
   });
   it('starts the packaged GUI executable in Windows source installs', () => {
     const open = fn('Invoke-Open');

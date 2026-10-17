@@ -77,7 +77,14 @@ function copyFile(source, destination) {
   fs.copyFileSync(source, destination);
 }
 function resetDir(dir) {
-  fs.rmSync(dir, { recursive: true, force: true });
+  try {
+    fs.rmSync(dir, { recursive: true, force: true, maxRetries: 8, retryDelay: 250 });
+  } catch (error) {
+    const detail = error?.code === 'EPERM' || error?.code === 'EBUSY'
+      ? 'Close Octo.su, OctoDetect.su, and any development Electron window, then run setup again.'
+      : error?.message;
+    throw new Error(`Cannot replace prepared Windows app directory "${dir}". ${detail}`);
+  }
   fs.mkdirSync(dir, { recursive: true });
 }
 

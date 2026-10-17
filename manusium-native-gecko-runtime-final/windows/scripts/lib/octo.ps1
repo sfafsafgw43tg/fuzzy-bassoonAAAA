@@ -649,7 +649,27 @@ function Confirm-Word([string]$question, [string[]]$words) {
 function Get-AppExe([string]$appId) { return (Join-Path (Join-Path $InstallRoot $Apps[$appId].Folder) $Apps[$appId].Exe) }
 
 function Test-AppRunning([string]$appId) {
-  return [bool](Get-Process -Name $Apps[$appId].Process -ErrorAction SilentlyContinue)
+  $app = $Apps[$appId]
+  if (Get-Process -Name $app.Process -ErrorAction SilentlyContinue) { return $true }
+  # Development launches are hosted by electron.exe, and child processes can
+  # keep the prepared output directory open after the branded parent exits.
+  # Match only processes belonging to this checkout, never every Electron
+  # process on the machine.
+  try {
+    $root = [IO.Path]::GetFullPath($InstallRoot).TrimEnd('\')
+    $appDir = Join-Path $root $app.Folder
+    $devDir = Join-Path $root $app.DevDir
+    foreach ($process in @(Get-CimInstance Win32_Process -ErrorAction SilentlyContinue)) {
+      $exePath = [string]$process.ExecutablePath
+      $commandLine = [string]$process.CommandLine
+      if (($exePath -and $exePath.StartsWith($appDir, [StringComparison]::OrdinalIgnoreCase)) -or
+          ($commandLine -and ($commandLine.IndexOf($appDir, [StringComparison]::OrdinalIgnoreCase) -ge 0 -or
+                              $commandLine.IndexOf($devDir, [StringComparison]::OrdinalIgnoreCase) -ge 0))) {
+        return $true
+      }
+    }
+  } catch { }
+  return $false
 }
 
 function Assert-NotRunning([string[]]$appIds) {
