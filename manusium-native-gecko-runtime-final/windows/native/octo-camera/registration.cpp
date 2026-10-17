@@ -2,6 +2,7 @@
 #include "octo_camera_guids.h"
 #include <mfvirtualcamera.h>
 #include <mfapi.h>
+#include <mferror.h>
 #include <shlwapi.h>
 #include <filesystem>
 
@@ -31,7 +32,7 @@ HRESULT InstallCurrentUser(const std::wstring& sourceDll) {
   IMFVirtualCamera* camera = nullptr;
   hr = MFCreateVirtualCamera(MFVirtualCameraType_SoftwareCameraSource, MFVirtualCameraLifetime_System, MFVirtualCameraAccess_CurrentUser,
     kFriendlyName, kSourceClsid, nullptr, 0, &camera);
-  if (SUCCEEDED(hr)) hr = camera->Start();
+  if (SUCCEEDED(hr)) hr = camera->Start(nullptr);
   if (camera) { camera->Shutdown(); camera->Release(); }
   MFShutdown();
   return hr;

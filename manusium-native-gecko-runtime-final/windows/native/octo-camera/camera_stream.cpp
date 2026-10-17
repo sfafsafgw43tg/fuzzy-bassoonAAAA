@@ -3,8 +3,10 @@
 #include <mfapi.h>
 #include <mferror.h>
 #include <propvarutil.h>
+#include <Windows.h>
 
 namespace octo::camera {
+static LONGLONG Clock100ns() { return static_cast<LONGLONG>(GetTickCount64()) * 10000; }
 VirtualCameraStream::VirtualCameraStream(VirtualCameraSource* source, IMFStreamDescriptor* descriptor) : source_(source), descriptor_(descriptor) {}
 VirtualCameraStream::~VirtualCameraStream() = default;
 HRESULT VirtualCameraStream::Initialize() { return MFCreateEventQueue(&events_); }
@@ -41,9 +43,9 @@ HRESULT VirtualCameraStream::RequestSample(IUnknown* token) {
   Microsoft::WRL::ComPtr<IMFSample> sample;
   if (FAILED(hr = MFCreateSample(&sample))) return hr;
   sample->AddBuffer(buffer.Get());
-  const LONGLONG timestamp = frame.timestamp100ns > 0 ? frame.timestamp100ns : MFGetSystemTime();
+  const LONGLONG timestamp = frame.timestamp100ns > 0 ? frame.timestamp100ns : Clock100ns();
   sample->SetSampleTime(timestamp);
   sample->SetSampleDuration(333333);
-  return events_->QueueEventParamUnk(MEStreamSample, GUID_NULL, S_OK, sample.Get());
+  return events_->QueueEventParamUnk(MEMediaSample, GUID_NULL, S_OK, sample.Get());
 }
 } // namespace octo::camera

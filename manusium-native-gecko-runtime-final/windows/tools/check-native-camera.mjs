@@ -23,7 +23,7 @@ const assertions = [
   [source.includes('MFCreateEventQueue'), 'source uses an event queue'],
   [registration.includes('MFVirtualCameraAccess_CurrentUser'), 'registration defaults to current-user scope'],
   [registration.includes('MFVirtualCameraType_SoftwareCameraSource'), 'registration uses software-camera source type'],
-  [registration.includes('camera->Start()'), 'registration starts the camera'],
+  [/camera->Start\(nullptr\)/.test(registration), 'registration starts the camera'],
   [registration.includes('camera->Remove()'), 'uninstall removes the camera'],
   [protocol.includes('kFeedMagic'), 'feed protocol is versioned and validated'],
   [protocol.includes('IsSupportedSize'), 'feed protocol has a resolution allow-list'],

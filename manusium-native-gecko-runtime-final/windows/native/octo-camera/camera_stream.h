@@ -25,7 +25,7 @@ class VirtualCameraStream final : public IMFMediaStream {
   HRESULT Initialize();
 
  private:
-  ~VirtualCameraStream() override;
+  ~VirtualCameraStream();
   std::atomic<ULONG> refs_{1};
   VirtualCameraSource* source_;
   Microsoft::WRL::ComPtr<IMFStreamDescriptor> descriptor_;

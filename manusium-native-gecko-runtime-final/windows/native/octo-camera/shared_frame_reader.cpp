@@ -7,6 +7,10 @@
 
 namespace octo::camera {
 
+static LONGLONG Clock100ns() {
+  return static_cast<LONGLONG>(GetTickCount64()) * 10000;
+}
+
 SharedFrameReader::~SharedFrameReader() {
   if (view_) UnmapViewOfFile(view_);
   if (mapping_) CloseHandle(static_cast<HANDLE>(mapping_));
@@ -18,7 +22,7 @@ static void MakeBlack(Frame& frame, std::uint32_t width, std::uint32_t height) {
   frame.stride = width;
   frame.bytes.assign(static_cast<std::size_t>(width) * height * 3 / 2, 0);
   std::fill(frame.bytes.begin() + static_cast<std::size_t>(width) * height, frame.bytes.end(), 128);
-  frame.timestamp100ns = MFGetSystemTime();
+  frame.timestamp100ns = Clock100ns();
 }
 
 bool SharedFrameReader::ReadLatest(Frame& frame, std::uint32_t width, std::uint32_t height) {
@@ -44,7 +48,7 @@ bool SharedFrameReader::ReadLatest(Frame& frame, std::uint32_t width, std::uint3
   frame.width = before.width;
   frame.height = before.height;
   frame.stride = before.stride;
-  frame.timestamp100ns = before.timestamp100ns > 0 ? before.timestamp100ns : MFGetSystemTime();
+  frame.timestamp100ns = before.timestamp100ns > 0 ? before.timestamp100ns : Clock100ns();
   frame.bytes.resize(before.frameBytes);
   std::memcpy(frame.bytes.data(), static_cast<const std::uint8_t*>(view_) + kHeaderBytes, before.frameBytes);
   MemoryBarrier();
