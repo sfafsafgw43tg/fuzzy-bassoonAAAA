@@ -812,6 +812,21 @@ describe('the staged companion is kept current', () => {
     expect(devices).toContain('install dependencies from requirements.txt');
   });
 
+  it('ships a USB-webcam-safe Realme preset and starts it before the AVD', () => {
+    const formats = studioEntry('phone_formats.py');
+    const app = studioEntry('app.py');
+    const preset = studioEntry('realme12pro-ustawienia.json');
+    expect(formats).toContain('"webcam_safe"');
+    expect(formats).toContain('"width": 1280, "height": 720');
+    expect(app).toContain('"format_id": "webcam_safe"');
+    expect(app).toContain('"backend": "unitycapture"');
+    expect(preset).toContain('"format_id": "webcam_safe"');
+    expect(preset).toContain('"fps": 30');
+    expect(preset).toContain('"backend": "unitycapture"');
+    expect(manager).toContain("if (companion.enabled && !companion.running)");
+    expect(manager.indexOf("await waitForMediaCompanionCamera('vstudio-mobile', request)")).toBeLessThan(manager.indexOf('const launched = await launchAndroidAvd'));
+  });
+
 });
 
 describe('portable handset files', () => {

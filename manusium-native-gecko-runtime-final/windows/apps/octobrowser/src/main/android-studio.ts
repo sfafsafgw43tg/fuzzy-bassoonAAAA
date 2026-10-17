@@ -527,7 +527,9 @@ const MANIFEST = 'octo-android-studio-addon.json';
  * which is exactly what happened: the app kept running last month's files
  * because the manifest simply existed.
  */
-const PAYLOAD_VERSION = 15;
+// Increment when the bundled Studio preset or camera contract changes. This
+// forces an existing installation to receive the safe 1280x720 webcam preset.
+const PAYLOAD_VERSION = 16;
 /**
  * This keeps the current companion program and its required resources, while
  * explicitly excluding stale bytecode, test data, generated audio/log files,
@@ -547,6 +549,29 @@ function includeStudioEntry(relative: string): boolean {
     && !lower.startsWith('scripts/')
     && !['.bat', '.cmd', '.ps1', '.sh', '.exe', '.msi'].some((extension) => lower.endsWith(extension))
     && !['config.json', 'instalacja_log.txt'].includes(lower);
+}
+
+/**
+ * The first Realme Studio archive used a 1080x2412 portrait stream. Android's
+ * Emulator camera bridge treats that as an unsupported host webcam on many
+ * Windows builds and the camera app repeatedly stops. Keep user media and
+ * other preferences, but migrate the camera output to the standard USB-webcam
+ * contract whenever an existing mobile companion is refreshed.
+ */
+function migrateMobileStudioConfig(raw: string): string {
+  try {
+    const parsed = JSON.parse(raw) as Record<string, unknown>;
+    const currentVideo = parsed.video && typeof parsed.video === 'object' ? parsed.video as Record<string, unknown> : {};
+    const currentNames = parsed.device_names && typeof parsed.device_names === 'object' ? parsed.device_names as Record<string, unknown> : {};
+    const migrated = {
+      ...parsed,
+      device_names: { ...currentNames, camera: 'Unity Capture virtual camera' },
+      video: { ...currentVideo, format_id: 'webcam_safe', fps: 30, backend: 'unitycapture', orientation: 'landscape' },
+    };
+    return `${JSON.stringify(migrated, null, 2)}\n`;
+  } catch {
+    return raw;
+  }
 }
 
 interface ZipEntry { name: string; method: number; compressedSize: number; uncompressedSize: number; localOffset: number; encrypted: boolean }
@@ -2508,7 +2533,10 @@ export function ensureMediaCompanion(plugin: MediaPluginId = MOBILE, force = fal
   if (fs.existsSync(root)) fs.rmSync(root, { recursive: true, force: true });
   const result = extractMediaCompanion(root, plugin);
   if (config) {
-    try { fs.writeFileSync(path.join(result.path, 'config.json'), config, { mode: 0o600 }); } catch { /* it will be rewritten */ }
+    try {
+      const value = plugin === MOBILE ? migrateMobileStudioConfig(config) : config;
+      fs.writeFileSync(path.join(result.path, 'config.json'), value, { mode: 0o600 });
+    } catch { /* it will be rewritten */ }
   }
   return { ...result, message: staged.installed ? `${MEDIA_PLUGINS[plugin].name} updated.` : result.message };
 }
@@ -3198,7 +3226,10 @@ export async function ensureMediaCompanionAsync(plugin: MediaPluginId = MOBILE, 
     };
     await fs.promises.writeFile(path.join(stagedAddon, MANIFEST), JSON.stringify(manifest, null, 2) + '\n', { mode: 0o600 });
     await fs.promises.rename(stagedAddon, destination);
-    if (config) await fs.promises.writeFile(path.join(destination, 'config.json'), config, { mode: 0o600 });
+    if (config) {
+      const value = plugin === MOBILE ? migrateMobileStudioConfig(config) : config;
+      await fs.promises.writeFile(path.join(destination, 'config.json'), value, { mode: 0o600 });
+    }
   } finally {
     await fs.promises.rm(staging, { recursive: true, force: true });
   }

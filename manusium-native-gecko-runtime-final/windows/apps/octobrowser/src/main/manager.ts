@@ -2660,18 +2660,16 @@ export class Manager {
           this.ctx.logger.warn('android.proxyLocation.checkFailed', { proxyId, reason: error instanceof Error ? error.message : String(error) });
         }
       }
-      // If the selected emulator endpoint is Octo's own vStudio Mobile camera,
-      // publish its producer before probing/starting the AVD. Starting the
-      // emulator first leaves CameraProvider attached to an empty DirectShow
-      // endpoint and is the source of the recurring "Camera keeps stopping"
-      // failure. Third-party cameras (OBS, DroidCam, etc.) are never started
-      // or controlled here.
+      // Publish the bundled Realme Studio producer before probing/starting the
+      // AVD. The archive exposes a normal DirectShow device through Unity
+      // Capture; starting the emulator first can leave CameraProvider attached
+      // to an empty webcam0 and cause "Camera keeps stopping". This remains
+      // opt-in: it runs only when vStudio Mobile is enabled and a host-camera
+      // endpoint was selected.
       const selectedHostEndpoints = [String(input?.cameraFrontDevice ?? ''), String(input?.cameraBackDevice ?? '')].filter(Boolean);
       if (selectedHostEndpoints.length) {
-        const listed = await emulatorWebcams();
-        const usesOctoCamera = listed.some((camera) => selectedHostEndpoints.includes(camera.name) && /vstudio|v-studio/i.test(camera.device));
         const companion = await mediaCompanionStatusAsync('vstudio-mobile');
-        if (usesOctoCamera && companion.enabled && !companion.running) {
+        if (companion.enabled && !companion.running) {
           await ensureMediaCompanionAsync('vstudio-mobile');
           const request = requestMediaCompanionBroadcast('vstudio-mobile', true);
           startMediaCompanion('vstudio-mobile');
