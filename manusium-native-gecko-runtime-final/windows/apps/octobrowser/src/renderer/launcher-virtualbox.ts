@@ -450,13 +450,16 @@ export async function renderVirtualBox(v: HTMLElement): Promise<void> {
   const netHost = h('div', {});
   const virtualBrowserHost = h('div', {});
   const genymotionHost = h('div', {});
+  const studioHost = h('section', { class: 'vm-section backend-section android-studio-section', 'aria-labelledby': 'android-studio-title' },
+    h('div', { class: 'vm-section-head' }, h('div', {}, h('h2', { id: 'android-studio-title', text: t('android.backend.avd') }), h('p', { class: 'hint', text: t('android.backendAvd', { sdk: 'local SDK', studio: 'local tools' }) }))),
+    androidList);
 
   v.append(h('div', { class: 'toolbar' }, h('h1', { text: t('android.title') })),
     h('section', { class: 'vm-section android-section' },
       h('div', { class: 'vm-section-head' },
         h('div', {}, h('h2', { text: t('android.sectionTitle') }), h('p', { class: 'hint', text: t('android.desc') })),
         h('div', { class: 'row' }, cameraStudio, androidCreate, androidImport, androidRefresh)),
-      engines, installHost, setupHost, netHost, virtualBrowserHost, genymotionHost, androidList));
+      engines, installHost, setupHost, netHost, virtualBrowserHost, studioHost, genymotionHost));
 
   let status: AndroidStatus | undefined;
   let catalog: unknown;
@@ -667,11 +670,24 @@ function genymotionPanel(devices: GenymotionDevice[], reload: () => Promise<void
   create.onclick = () => {
     modal(t('android.genymotion.createTitle'), (box) => {
       const name = input('', { placeholder: t('android.genymotion.namePh'), maxlength: '80', autocomplete: 'off' });
+      const width = input('', { type: 'number', min: '240', max: '4096', placeholder: '1080' });
+      const height = input('', { type: 'number', min: '240', max: '8192', placeholder: '1920' });
+      const density = input('', { type: 'number', min: '120', max: '640', placeholder: '420' });
+      const ramMb = input('', { type: 'number', min: '512', max: '65536', placeholder: '4096' });
+      const cores = input('', { type: 'number', min: '1', max: '16', placeholder: '4' });
+      const rootAccess = h('input', { type: 'checkbox' }) as HTMLInputElement;
       const profileSlot = h('div', {}, h('p', { class: 'hint', text: t('android.genymotion.loadingProfiles') }));
       const imageSlot = h('div', {});
       const note = h('p', { class: 'hint', role: 'status', 'aria-live': 'polite' });
       const submit = h('button', { class: 'btn primary', type: 'button', disabled: true }, icon('plus', 14), h('span', { text: t('android.genymotion.create') })) as HTMLButtonElement;
-      box.append(h('p', { class: 'muted', text: t('android.genymotion.createNote') }), h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.genymotion.name') }), name), profileSlot, imageSlot, note, h('div', { class: 'row end' }, submit));
+      box.append(h('p', { class: 'muted', text: t('android.genymotion.createNote') }), h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.genymotion.name') }), name), profileSlot, imageSlot,
+        h('div', { class: 'grid2' },
+          h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.genymotion.width') }), width),
+          h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.genymotion.height') }), height),
+          h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.genymotion.density') }), density),
+          h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.genymotion.ram') }), ramMb),
+          h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.genymotion.cores') }), cores)),
+        h('label', { class: 'check' }, rootAccess, h('span', { text: t('android.genymotion.root') })), note, h('div', { class: 'row end' }, submit));
       void (async () => {
         const profiles = await run(api.invoke<GenymotionProfiles>('mgr:genymotion-profiles'));
         if (!profiles?.hardwareProfiles.length || !profiles.osImages.length) {
@@ -690,7 +706,12 @@ function genymotionPanel(devices: GenymotionDevice[], reload: () => Promise<void
         submit.disabled = false;
         submit.onclick = async () => {
           submit.disabled = true;
-          const result = await run(api.invoke<{ ok: boolean; message: string }>('mgr:genymotion-create', { name: name.value.trim(), hardwareProfile: profile.value, osImage: image.value }));
+          const numberOrUndefined = (control: HTMLInputElement): number | undefined => control.value.trim() ? Number(control.value) : undefined;
+          const result = await run(api.invoke<{ ok: boolean; message: string }>('mgr:genymotion-create', {
+            name: name.value.trim(), hardwareProfile: profile.value, osImage: image.value,
+            width: numberOrUndefined(width), height: numberOrUndefined(height), density: numberOrUndefined(density),
+            ramMb: numberOrUndefined(ramMb), cores: numberOrUndefined(cores), rootAccess: rootAccess.checked,
+          }));
           note.textContent = result?.message || t('android.genymotion.failed');
           if (result?.ok) { toast(t('android.genymotion.created'), 'ok'); await reload(); closeModal(); }
           else submit.disabled = false;
