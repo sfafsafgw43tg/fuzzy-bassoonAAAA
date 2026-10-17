@@ -633,15 +633,14 @@ describe('wiring a live camera into a device', () => {
     " Camera 'webcam1' is connected to device 'OBS Virtual Camera' on channel 0 using pixel format 'RGB24'",
   ].join('\n');
 
-  it('preserves explicit Off while migrating retired synthetic camera sources', () => {
-    // The emulator's own test pattern and 3D room are not cameras on this
-    // computer, so no saved value can keep them. Older values read as a host
-    // camera, and the endpoint a lens holds is what says whether it has one.
+  it('preserves explicit Off and the emulator software camera across saves', () => {
+    // The software camera is a real Android Emulator camera mode and does not
+    // depend on a Windows webcam or the host-camera test panel.
     expect(normalizeCameraSources('webcam', 'webcam')).toEqual({ front: 'webcam', back: 'webcam' });
-    expect(normalizeCameraSources('webcam', 'emulated')).toEqual({ front: 'webcam', back: 'webcam' });
-    expect(normalizeCameraSources('emulated', 'webcam')).toEqual({ front: 'webcam', back: 'webcam' });
-    expect(normalizeCameraSources('none', 'virtualscene')).toEqual({ front: 'none', back: 'webcam' });
-    expect(normalizeCameraSources('emulated', 'emulated')).toEqual({ front: 'webcam', back: 'webcam' });
+    expect(normalizeCameraSources('webcam', 'emulated')).toEqual({ front: 'webcam', back: 'emulated' });
+    expect(normalizeCameraSources('emulated', 'webcam')).toEqual({ front: 'emulated', back: 'webcam' });
+    expect(normalizeCameraSources('none', 'virtualscene')).toEqual({ front: 'none', back: 'emulated' });
+    expect(normalizeCameraSources('emulated', 'emulated')).toEqual({ front: 'emulated', back: 'emulated' });
     expect(normalizeCameraSources('vstudio', 'vstudio')).toEqual({ front: 'webcam', back: 'webcam' });
     expect(normalizeCameraSources('nonsense', 'webcam99x')).toEqual({ front: 'webcam', back: 'webcam' });
     expect(normalizeCameraSources(undefined, undefined)).toEqual({ front: 'webcam', back: 'webcam' });
@@ -650,7 +649,7 @@ describe('wiring a live camera into a device', () => {
       cameraFront: 'webcam', cameraBack: 'webcam',
     });
     expect(normalizeAndroidLaunchPrefs({ cameraFront: 'emulated', cameraBack: 'virtualscene' } as never)).toMatchObject({
-      cameraFront: 'webcam', cameraBack: 'webcam',
+      cameraFront: 'emulated', cameraBack: 'emulated',
     });
     expect(normalizeAndroidLaunchPrefs({ cameraFront: 'none', cameraBack: 'none' } as never)).toMatchObject({
       cameraFront: 'none', cameraBack: 'none',
@@ -674,8 +673,22 @@ describe('wiring a live camera into a device', () => {
     // connected is decided by resolveActiveCameraAssignments, below.
     expect(emulatorCameraValues('webcam', 'webcam', 'webcam7', '')).toEqual({ front: 'webcam7', back: 'none' });
     expect(emulatorCameraValues('webcam', 'webcam', 'not-a-webcam', '')).toEqual({ front: 'none', back: 'none' });
-    // A source that is not a host camera never reaches the command line.
-    expect(emulatorCameraValues('emulated', 'virtualscene', 'webcam1', 'webcam2')).toEqual({ front: 'none', back: 'none' });
+    // The software camera is passed to the emulator as emulated, independent
+    // of any host endpoint strings.
+    expect(emulatorCameraValues('emulated', 'virtualscene', 'webcam1', 'webcam2')).toEqual({ front: 'emulated', back: 'emulated' });
+  });
+
+  it('writes the software camera independently of host webcams and caps its advertised size', () => {
+    expect(mediaConfig('emulated', 'emulated', false, 'webcam1', 'webcam2')).toMatchObject({
+      'hw.camera.front': 'emulated',
+      'hw.camera.back': 'emulated',
+      'hw.camera.maxHorizontalPixels': '1280',
+      'hw.camera.maxVerticalPixels': '720',
+      'octobrowser.cameraFront': 'emulated',
+      'octobrowser.cameraBack': 'emulated',
+      'octobrowser.cameraFrontDevice': '',
+      'octobrowser.cameraBackDevice': '',
+    });
   });
 
   it('never puts a picture that is not a camera on a lens, and says why a lens is off', () => {

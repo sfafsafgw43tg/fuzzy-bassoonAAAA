@@ -45,7 +45,7 @@ export type { AndroidDeviceProfile, AndroidHardwareChoice, AndroidSystemImage, A
  * configured manually even when enumeration fails; that is not proof of capture.
  * The emulator's test pattern/virtual scene is never substituted for a camera.
  */
-export type CameraSource = 'none' | 'webcam';
+export type CameraSource = 'none' | 'webcam' | 'emulated';
 
 /** The picture size the umbrella keys advertise when no lens is on. */
 const DEFAULT_CAMERA_LIMIT = { width: 1920, height: 1080 };
@@ -1543,15 +1543,18 @@ export function writeConfigValues(avdPath: string, values: Record<string, string
  * and on the command line.
  */
 function cameraValue(source: CameraSource | string, webcam = ''): string {
-  // A lens is either one enumerated host endpoint or off. An unknown or stale
-  // index switches the lens off; it never turns into webcam0 or into a picture
-  // that is not a camera.
+  // The software camera is implemented by the emulator itself and does not
+  // depend on Windows/DirectShow enumeration. Host endpoints still require an
+  // explicitly validated webcamN name; stale endpoints never become webcam0.
+  if (source === 'emulated' || source === 'virtualscene') return 'emulated';
   return source === 'webcam' && WEBCAM.test(webcam) ? webcam : 'none';
 }
 
 /** Explicit Off survives saves, scans and subsequent launches. */
 export function normalizeCameraSource(saved?: string): CameraSource {
-  return saved === 'none' ? 'none' : 'webcam';
+  if (saved === 'none') return 'none';
+  if (saved === 'emulated' || saved === 'virtualscene') return 'emulated';
+  return 'webcam';
 }
 
 /** Normalize legacy sources without overriding an explicit Off choice. */
@@ -1902,6 +1905,22 @@ export function resolveActiveCameraAssignments(
   _preferred: string[] = [],
   legacyDevice = '',
 ): ActiveCameraAssignments {
+  const normalizedFront = normalizeCameraSource(String(front));
+  const normalizedBack = normalizeCameraSource(String(back));
+  if (normalizedFront === 'emulated' || normalizedBack === 'emulated') {
+    const webcamSelection = resolveAvdCameraSelection(
+      { front: normalizedFront === 'emulated' ? 'none' : normalizedFront, back: normalizedBack === 'emulated' ? 'none' : normalizedBack },
+      { front: normalizedFront === 'emulated' ? '' : frontDevice, back: normalizedBack === 'emulated' ? '' : (backDevice || (WEBCAM.test(legacyDevice) ? legacyDevice : '')) },
+      webcams.map(item => ({ id: item.name, name: item.device })),
+    );
+    return {
+      front: normalizedFront === 'emulated' ? 'emulated' : (webcamSelection.front ? 'webcam' : 'none'),
+      back: normalizedBack === 'emulated' ? 'emulated' : (webcamSelection.back ? 'webcam' : 'none'),
+      frontDevice: normalizedFront === 'emulated' ? '' : webcamSelection.front,
+      backDevice: normalizedBack === 'emulated' ? '' : webcamSelection.back,
+      warning: webcamSelection.unlisted.length ? `Not enumerated by the Android Emulator: ${webcamSelection.unlisted.join(', ')}. Explicit configuration is preserved but capture is not verified.` : '',
+    };
+  }
   const selected = resolveAvdCameraSelection(
     { front, back },
     { front: frontDevice, back: backDevice || (WEBCAM.test(legacyDevice) ? legacyDevice : '') },
@@ -1962,6 +1981,7 @@ function cameraLimitsFor(
  */
 function cameraLimitFor(value: string, measured?: CameraResolution): CameraResolution | undefined {
   if (value === 'none') return undefined;
+  if (value === 'emulated') return MAX_EMULATOR_CAMERA_LIMIT;
   return clampCameraLimit(measured ?? UNMEASURED_CAMERA_LIMIT);
 }
 
@@ -1980,10 +2000,12 @@ export function mediaConfig(
 ): Record<string, string> {
   const values = emulatorCameraValues(front, back, frontWebcam, backWebcam);
   const cameraEnabled = values.front !== 'none' || values.back !== 'none';
-  const actualFrontDevice = values.front !== 'none' ? values.front : '';
-  const actualBackDevice = values.back !== 'none' ? values.back : '';
+  const actualFrontDevice = values.front.startsWith('webcam') ? values.front : '';
+  const actualBackDevice = values.back.startsWith('webcam') ? values.back : '';
   const frontLimit = cameraLimitFor(values.front, limits.front);
   const backLimit = cameraLimitFor(values.back, limits.back);
+  const frontLimitText = frontLimit ? `${frontLimit.width}x${frontLimit.height}` : '';
+  const backLimitText = backLimit ? `${backLimit.width}x${backLimit.height}` : '';
   // One pair of keys describes the whole device, and Android offers that number
   // to every app that opens either camera. Promising more than the weakest live
   // lens can deliver is how an app requested a stream that never arrived, so the
@@ -1998,14 +2020,15 @@ export function mediaConfig(
     'hw.camera.maxVerticalPixels': String(maxVertical || DEFAULT_CAMERA_LIMIT.height),
     'hw.audioInput': microphoneEnabled ? 'yes' : 'no',
     'hw.audioOutput': 'yes',
-    // A lens that is off is recorded as off; a lens with a camera as a host webcam.
-    'octobrowser.cameraFront': values.front === 'none' ? 'none' : 'webcam',
-    'octobrowser.cameraBack': values.back === 'none' ? 'none' : 'webcam',
+    // Preserve the source kind so reopening settings does not reinterpret the
+    // stable software camera as a host webcam.
+    'octobrowser.cameraFront': values.front === 'none' ? 'none' : values.front === 'emulated' ? 'emulated' : 'webcam',
+    'octobrowser.cameraBack': values.back === 'none' ? 'none' : values.back === 'emulated' ? 'emulated' : 'webcam',
     'octobrowser.cameraFrontDevice': actualFrontDevice,
     'octobrowser.cameraBackDevice': actualBackDevice,
     'octobrowser.cameraDevice': actualBackDevice || actualFrontDevice,
-    'octobrowser.cameraFrontLimit': limits.front ? `${limits.front.width}x${limits.front.height}` : '',
-    'octobrowser.cameraBackLimit': limits.back ? `${limits.back.width}x${limits.back.height}` : '',
+    'octobrowser.cameraFrontLimit': frontLimitText,
+    'octobrowser.cameraBackLimit': backLimitText,
   };
 }
 
@@ -2877,7 +2900,7 @@ export async function repairAndroidMedia(name: string, input: { cameraDevice?: s
  */
 export function mediaPermissionsFor(input: { cameraFront: CameraSource; cameraBack: CameraSource; microphoneEnabled: boolean }): string[] {
   const permissions: string[] = [];
-  if (input.cameraFront === 'webcam' || input.cameraBack === 'webcam') permissions.push('android.permission.CAMERA');
+  if (input.cameraFront !== 'none' || input.cameraBack !== 'none') permissions.push('android.permission.CAMERA');
   if (input.microphoneEnabled) permissions.push('android.permission.RECORD_AUDIO');
   return permissions;
 }
@@ -3899,8 +3922,8 @@ export function normalizeAndroidLaunchPrefs(value: Partial<AndroidLaunchPrefs> =
     ...merged,
     cameraFront: cameras.front,
     cameraBack: cameras.back,
-    cameraFrontDevice: WEBCAM.test(String(merged.cameraFrontDevice ?? '')) ? String(merged.cameraFrontDevice) : '',
-    cameraBackDevice: WEBCAM.test(String(merged.cameraBackDevice ?? '')) ? String(merged.cameraBackDevice) : '',
+    cameraFrontDevice: cameras.front === 'webcam' && WEBCAM.test(String(merged.cameraFrontDevice ?? '')) ? String(merged.cameraFrontDevice) : '',
+    cameraBackDevice: cameras.back === 'webcam' && WEBCAM.test(String(merged.cameraBackDevice ?? '')) ? String(merged.cameraBackDevice) : '',
     cameraDevice: WEBCAM.test(String(merged.cameraDevice ?? '')) ? String(merged.cameraDevice) : '',
     apps: Array.isArray(merged.apps) ? [...merged.apps] : [],
     appFiles: merged.appFiles && typeof merged.appFiles === 'object' ? { ...merged.appFiles } : {},
@@ -3927,14 +3950,16 @@ export function androidLaunchPrefs(name: string): AndroidLaunchPrefs {
 export function rememberAndroidLaunch(name: string, prefs: Partial<AndroidLaunchPrefs>): AndroidLaunchPrefs {
   const clean = assertName(name);
   const all = readAllLaunchPrefs();
+  const rememberedFront = normalizeCameraSource(String(prefs.cameraFront ?? all[clean]?.cameraFront ?? DEFAULT_LAUNCH_PREFS.cameraFront));
+  const rememberedBack = normalizeCameraSource(String(prefs.cameraBack ?? all[clean]?.cameraBack ?? DEFAULT_LAUNCH_PREFS.cameraBack));
   const next: AndroidLaunchPrefs = {
     ...DEFAULT_LAUNCH_PREFS,
     ...all[clean],
     ...prefs,
     locale: LOCALE_TAG.test(String(prefs.locale ?? all[clean]?.locale ?? '')) ? String(prefs.locale ?? all[clean]?.locale ?? '') : '',
-    cameraFrontDevice: WEBCAM.test(String(prefs.cameraFrontDevice ?? all[clean]?.cameraFrontDevice ?? ''))
+    cameraFrontDevice: rememberedFront === 'webcam' && WEBCAM.test(String(prefs.cameraFrontDevice ?? all[clean]?.cameraFrontDevice ?? ''))
       ? String(prefs.cameraFrontDevice ?? all[clean]?.cameraFrontDevice) : '',
-    cameraBackDevice: WEBCAM.test(String(prefs.cameraBackDevice ?? all[clean]?.cameraBackDevice ?? ''))
+    cameraBackDevice: rememberedBack === 'webcam' && WEBCAM.test(String(prefs.cameraBackDevice ?? all[clean]?.cameraBackDevice ?? ''))
       ? String(prefs.cameraBackDevice ?? all[clean]?.cameraBackDevice) : '',
     cameraDevice: WEBCAM.test(String(prefs.cameraDevice ?? all[clean]?.cameraDevice ?? ''))
       ? String(prefs.cameraDevice ?? all[clean]?.cameraDevice) : '',

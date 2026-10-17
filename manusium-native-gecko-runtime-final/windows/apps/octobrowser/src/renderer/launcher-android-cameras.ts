@@ -13,7 +13,7 @@ import { CameraTestManager } from './camera-test-manager';
 const cameraTests = new CameraTestManager();
 
 /** A lens is fed from a host camera (`webcam`), or it is off (`none`). */
-export type CameraSource = 'none' | 'webcam';
+export type CameraSource = 'none' | 'webcam' | 'emulated';
 export type CameraFacing = 'front' | 'back';
 export interface CameraResolution { width: number; height: number }
 
@@ -241,10 +241,10 @@ export function checkHostCamera(camera: EmulatorCamera): Promise<CameraCheck> {
 
 export function cameraPicker(options: CameraPickerOptions): CameraPicker {
   const selection: CameraSelection = {
-    front: options.initial.front === 'none' ? 'none' : 'webcam',
-    back: options.initial.back === 'none' ? 'none' : 'webcam',
-    frontDevice: options.initial.front === 'none' ? '' : options.initial.frontDevice ?? '',
-    backDevice: options.initial.back === 'none' ? '' : options.initial.backDevice ?? '',
+    front: options.initial.front === 'none' ? 'none' : options.initial.front === 'emulated' ? 'emulated' : 'webcam',
+    back: options.initial.back === 'none' ? 'none' : options.initial.back === 'emulated' ? 'emulated' : 'webcam',
+    frontDevice: options.initial.front === 'none' || options.initial.front === 'emulated' ? '' : options.initial.frontDevice ?? '',
+    backDevice: options.initial.back === 'none' || options.initial.back === 'emulated' ? '' : options.initial.backDevice ?? '',
     frontLimit: options.initial.frontLimit,
     backLimit: options.initial.backLimit,
   };
@@ -332,7 +332,8 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
   }
 
   function deviceOf(facing: CameraFacing): string {
-    return facing === 'front' ? selection.frontDevice : selection.backDevice;
+    const source = facing === 'front' ? selection.front : selection.back;
+    return source === 'emulated' ? 'emulated' : facing === 'front' ? selection.frontDevice : selection.backDevice;
   }
 
   function setDevice(facing: CameraFacing, device: string): void {
@@ -340,24 +341,31 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
     else { selection.back = sourceOf(device); selection.backDevice = device; }
   }
 
+  function setSource(facing: CameraFacing, source: CameraSource, device = ''): void {
+    if (facing === 'front') { selection.front = source; selection.frontDevice = source === 'webcam' ? device : ''; }
+    else { selection.back = source; selection.backDevice = source === 'webcam' ? device : ''; }
+  }
+
   /** Discovery must not erase an explicit endpoint or reactivate Off. */
   function assign(): void {
-    const result = resolveAvdCameraSelection(selection,
+    const result = resolveAvdCameraSelection({ front: selection.front, back: selection.back },
       { front: selection.frontDevice, back: selection.backDevice },
       listed.map(camera => ({ id: camera.name, name: camera.device })));
-    setDevice('front', result.front); setDevice('back', result.back);
+    if (selection.front !== 'emulated') setDevice('front', result.front);
+    if (selection.back !== 'emulated') setDevice('back', result.back);
   }
 
   function choose(facing: CameraFacing, id: string): void {
+    if (id === 'emulated') { setSource(facing, 'emulated'); paintLenses(); paintStatus(); emit(); return; }
     if (id && !/^webcam\d+$/.test(id)) return;
-    setDevice(facing, id);
+    setSource(facing, id ? 'webcam' : 'none', id);
     paintLenses(); paintStatus(); emit();
   }
 
   function lensField(facing: CameraFacing): HTMLElement {
     const key = facing === 'front' ? 'android.cameraFront' : 'android.cameraBack';
     const ids = [...new Set(['webcam0', ...listed.map(camera => camera.name), deviceOf(facing)].filter(id => /^webcam\d+$/.test(id)))];
-    const options: Array<[string, string]> = [['', t('android.camera.off')], ...ids.map((id): [string, string] => {
+    const options: Array<[string, string]> = [['', t('android.camera.off')], ['emulated', t('android.camera.virtualScene')], ...ids.map((id): [string, string] => {
       const camera = listed.find(item => item.name === id);
       return [id, camera ? `${id} — ${displayName(camera)}` : t('android.camera.manualEndpoint', { endpoint: id })];
     })];

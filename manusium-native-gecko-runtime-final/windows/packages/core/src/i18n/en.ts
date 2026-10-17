@@ -1508,6 +1508,7 @@ export const en: Record<string, string> = {
   'android.cameraBack': 'Back camera',
   'android.cameraFront': 'Front camera',
   'android.camera.webcam': 'Host webcam',
+  'android.camera.virtualScene': 'Virtual scene (software camera)',
   'android.camera.virtualDevice': 'Virtual',
   'android.camera.manager': "Webcam manager",
   'android.camera.hostTesting': "Test cameras in Octo (off = Android only)",
