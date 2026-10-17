@@ -68,12 +68,6 @@ import { catalogEntry, catalogForPlatform, listInstalled, installChromium, remov
 import { discoverFirefoxRuntime, geckoCatalogEntry, installFirefoxRuntime, inspectFirefoxRuntime } from '@octo/shell/gecko-runtime';
 import { chromiumPrivacyArgs, prepareChromiumPrivacy, prepareFirefoxPrivacy } from '@octo/shell/engine-privacy';
 import { nativeBundledExtensionPaths } from './extensions';
-import {
-  genymotionStatus, genymotionCameraInfo, openGenymotionMediaFolder, openGenymotion, listGenymotionDevices, genymotionProfiles,
-  createGenymotionDevice, startGenymotionDevice, stopGenymotionDevice,
-  deleteGenymotionDevice, resetGenymotionDevice,
-} from './genymotion';
-import type { GenymotionCreateInput } from './genymotion';
 
 let importedHandsetsLoaded = false;
 
@@ -2598,22 +2592,6 @@ export class Manager {
       devices: ANDROID_CATALOG_DEVICES,
       systems: ANDROID_SYSTEM_IMAGES.map((item) => ({ ...item, installed: androidSystemImageInstalled(item.id), runsHere: imageRunsHere(item.abi) })),
     }));
-    handle('mgr:genymotion-status', L, () => genymotionStatus());
-    handle('mgr:genymotion-camera-info', L, async () => genymotionCameraInfo());
-    handle('mgr:genymotion-media-folder', L, () => openGenymotionMediaFolder());
-    handle('mgr:genymotion-open', L, async () => openGenymotion());
-    handle('mgr:genymotion-download', L, async () => {
-      const url = 'https://www.genymotion.com/product-desktop/download/';
-      await shell.openExternal(url);
-      return { opened: true, message: `Opened the official Genymotion Desktop download page: ${url}` };
-    });
-    handle('mgr:genymotion-list', L, async () => listGenymotionDevices());
-    handle('mgr:genymotion-profiles', L, async () => genymotionProfiles());
-    handle('mgr:genymotion-create', L, async (_e, input) => createGenymotionDevice(input as GenymotionCreateInput));
-    handle('mgr:genymotion-start', L, async (_e, name: string, coldBoot?: boolean) => startGenymotionDevice(String(name ?? ''), coldBoot === true));
-    handle('mgr:genymotion-stop', L, async (_e, name: string) => stopGenymotionDevice(String(name ?? '')));
-    handle('mgr:genymotion-delete', L, async (_e, name: string) => deleteGenymotionDevice(String(name ?? '')));
-    handle('mgr:genymotion-reset', L, async (_e, name: string) => resetGenymotionDevice(String(name ?? '')));
     handle('mgr:android-list', L, async () => {
       try { return { available: true, machines: await listAndroidAvds() }; }
       catch { return { available: false, machines: [] }; }
