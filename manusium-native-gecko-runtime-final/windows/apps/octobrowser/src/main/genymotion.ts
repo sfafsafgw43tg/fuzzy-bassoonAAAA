@@ -21,7 +21,16 @@ export interface GenymotionStatus {
   gmtoolExecutable: string;
   shellExecutable: string;
   authenticated: 'unknown';
-  camera: { hostUvc: boolean; mediaInjection: 'edition-dependent'; virtualCamera: false };
+  camera: { hostUvc: boolean; mediaInjection: 'edition-dependent'; virtualCamera: 'experimental-3.10+'; fixedResolution: '1280x720' };
+  message: string;
+}
+
+export interface GenymotionCameraInfo {
+  available: boolean;
+  version: string;
+  obsVirtualCamera: 'supported-experimentally' | 'upgrade-required' | 'unknown';
+  fixedResolution: '1280x720';
+  mediaFolder: string;
   message: string;
 }
 
@@ -114,19 +123,52 @@ function parseTextDevices(raw: string): GenymotionDevice[] {
 
 export function genymotionStatus(): GenymotionStatus {
   if (process.platform !== 'win32') {
-    return { available: false, executable: '', gmtoolExecutable: '', shellExecutable: '', authenticated: 'unknown', camera: { hostUvc: true, mediaInjection: 'edition-dependent', virtualCamera: false }, message: 'Genymotion Desktop integration is currently supported on Windows only.' };
+    return { available: false, executable: '', gmtoolExecutable: '', shellExecutable: '', authenticated: 'unknown', camera: { hostUvc: true, mediaInjection: 'edition-dependent', virtualCamera: 'experimental-3.10+', fixedResolution: '1280x720' }, message: 'Genymotion Desktop integration is currently supported on Windows only.' };
   }
   const executable = locate('genymotion.exe');
   const gmtoolExecutable = locate('gmtool.exe');
   const shellExecutable = locate('genymotion-shell.exe');
   if (!executable && !gmtoolExecutable) {
-    return { available: false, executable: '', gmtoolExecutable: '', shellExecutable: '', authenticated: 'unknown', camera: { hostUvc: true, mediaInjection: 'edition-dependent', virtualCamera: false }, message: 'Genymotion Desktop is not installed.' };
+    return { available: false, executable: '', gmtoolExecutable: '', shellExecutable: '', authenticated: 'unknown', camera: { hostUvc: true, mediaInjection: 'edition-dependent', virtualCamera: 'experimental-3.10+', fixedResolution: '1280x720' }, message: 'Genymotion Desktop is not installed.' };
   }
   return {
     available: Boolean(executable && gmtoolExecutable), executable, gmtoolExecutable, shellExecutable,
-    authenticated: 'unknown', camera: { hostUvc: true, mediaInjection: 'edition-dependent', virtualCamera: false },
+    authenticated: 'unknown', camera: { hostUvc: true, mediaInjection: 'edition-dependent', virtualCamera: 'experimental-3.10+', fixedResolution: '1280x720' },
     message: 'Genymotion handles its own account activation and licensing. Octo never stores or bypasses credentials. Windows virtual cameras are not guaranteed; use a physical UVC webcam or Genymotion media injection.',
   };
+}
+
+function versionNumber(value: string): number {
+  const match = value.match(/(?:version\s*[: ]\s*)?(\d+)(?:\.(\d+))?/i);
+  return match ? Number(`${match[1]}.${match[2] ?? '0'}`) : 0;
+}
+
+export async function genymotionCameraInfo(): Promise<GenymotionCameraInfo> {
+  const status = genymotionStatus();
+  const mediaFolder = process.platform === 'win32'
+    ? path.join(process.env.LOCALAPPDATA || path.join(process.env.USERPROFILE || '', 'AppData', 'Local'), 'Genymobile', 'Genymotion', 'media')
+    : '';
+  if (!status.available) return { available: false, version: '', obsVirtualCamera: 'unknown', fixedResolution: '1280x720', mediaFolder, message: status.message };
+  const result = await command(['version']);
+  const version = result.stdout.trim() || result.stderr.trim();
+  const obsVirtualCamera = versionNumber(version) >= 3.10 ? 'supported-experimentally' : version ? 'upgrade-required' : 'unknown';
+  return {
+    available: true, version, obsVirtualCamera, fixedResolution: '1280x720', mediaFolder,
+    message: obsVirtualCamera === 'supported-experimentally'
+      ? 'OBS Virtual Camera is experimental in Genymotion Desktop 3.10+. Configure OBS output to 1280×720, start OBS Virtual Camera, then map it to Front or Back in Genymotion Media Injection.'
+      : 'Genymotion camera input is controlled by the Media Injection widget. The camera API is fixed at 1280×720; update Genymotion to 3.10+ for experimental OBS Virtual Camera support.',
+  };
+}
+
+export function openGenymotionMediaFolder(): { opened: boolean; message: string } {
+  const folder = process.platform === 'win32'
+    ? path.join(process.env.LOCALAPPDATA || path.join(process.env.USERPROFILE || '', 'AppData', 'Local'), 'Genymobile', 'Genymotion', 'media')
+    : '';
+  if (!folder) return { opened: false, message: 'The Genymotion media folder is only available on Windows.' };
+  fs.mkdirSync(folder, { recursive: true });
+  const child = spawn('explorer.exe', [folder], { detached: true, stdio: 'ignore', windowsHide: true });
+  child.unref();
+  return { opened: true, message: 'Opened the Genymotion media folder.' };
 }
 
 export async function listGenymotionDevices(): Promise<GenymotionDevice[]> {

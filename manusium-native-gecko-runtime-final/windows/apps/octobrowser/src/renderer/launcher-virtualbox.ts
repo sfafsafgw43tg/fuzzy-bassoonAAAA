@@ -28,6 +28,7 @@ interface AndroidResult { available: boolean; machines: AndroidMachine[] }
 interface GenymotionStatus { available: boolean; executable: string; gmtoolExecutable: string; shellExecutable: string; authenticated: 'unknown'; camera: { hostUvc: boolean; mediaInjection: 'edition-dependent'; virtualCamera: false }; message: string }
 interface GenymotionDevice { id: string; name: string; status: 'running' | 'off' | 'unknown'; ip: string; adbSerial: string; androidVersion: string; model: string }
 interface GenymotionProfiles { hardwareProfiles: string[]; osImages: string[] }
+interface GenymotionCameraInfo { available: boolean; version: string; obsVirtualCamera: 'supported-experimentally' | 'upgrade-required' | 'unknown'; fixedResolution: '1280x720'; mediaFolder: string; message: string }
 interface AndroidLaunchPrefs {
   proxyId: string; cameraFront: CameraSource; cameraBack: CameraSource;
   cameraFrontDevice: string; cameraBackDevice: string; cameraDevice: string;
@@ -618,7 +619,18 @@ function genymotionPanel(devices: GenymotionDevice[], reload: () => Promise<void
   const list = h('div', { class: 'vm-list' });
   const refresh = h('button', { class: 'btn small', type: 'button', 'aria-label': t('android.genymotion.refresh') }, icon('refreshCircle', 14), h('span', { text: t('android.genymotion.refresh') })) as HTMLButtonElement;
   const create = h('button', { class: 'btn small primary', type: 'button' }, icon('plus', 14), h('span', { text: t('android.genymotion.create') })) as HTMLButtonElement;
+  const cameraButton = h('button', { class: 'btn small', type: 'button', disabled: true }, icon('camera', 13), h('span', { text: t('android.genymotion.cameraFolder') })) as HTMLButtonElement;
   const status = h('p', { class: 'hint', role: 'status', 'aria-live': 'polite', text: t('android.genymotion.note') });
+  void run(api.invoke<GenymotionCameraInfo>('mgr:genymotion-camera-info')).then((info) => {
+    if (!info) return;
+    status.textContent = info.message;
+    cameraButton.disabled = !info.mediaFolder;
+    cameraButton.title = info.version ? `${info.version} · ${info.fixedResolution}` : info.message;
+    cameraButton.onclick = async () => {
+      const opened = await run(api.invoke<{ opened: boolean; message: string }>('mgr:genymotion-media-folder'));
+      toast(opened?.message || t('android.genymotion.cameraFolderFailed'), opened?.opened ? 'ok' : 'err');
+    };
+  });
   const paint = (): void => {
     list.replaceChildren();
     if (!devices.length) {
@@ -680,5 +692,5 @@ function genymotionPanel(devices: GenymotionDevice[], reload: () => Promise<void
   };
   paint();
   return h('section', { class: 'vm-section android-genymotion', 'aria-labelledby': 'genymotion-title' },
-    h('div', { class: 'vm-section-head' }, h('div', {}, h('h2', { id: 'genymotion-title' }, t('android.backend.genymotion'), h('span', { class: 'pill beta', text: t('android.genymotion.beta') })), status), h('div', { class: 'row' }, create, refresh)), list);
+    h('div', { class: 'vm-section-head' }, h('div', {}, h('h2', { id: 'genymotion-title' }, t('android.backend.genymotion'), h('span', { class: 'pill beta', text: t('android.genymotion.beta') })), status), h('div', { class: 'row' }, cameraButton, create, refresh)), list);
 }

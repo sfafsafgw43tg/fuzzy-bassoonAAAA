@@ -69,7 +69,7 @@ import { discoverFirefoxRuntime, geckoCatalogEntry, installFirefoxRuntime, inspe
 import { chromiumPrivacyArgs, prepareChromiumPrivacy, prepareFirefoxPrivacy } from '@octo/shell/engine-privacy';
 import { nativeBundledExtensionPaths } from './extensions';
 import {
-  genymotionStatus, openGenymotion, listGenymotionDevices, genymotionProfiles,
+  genymotionStatus, genymotionCameraInfo, openGenymotionMediaFolder, openGenymotion, listGenymotionDevices, genymotionProfiles,
   createGenymotionDevice, startGenymotionDevice, stopGenymotionDevice,
   deleteGenymotionDevice, resetGenymotionDevice,
 } from './genymotion';
@@ -2595,6 +2595,8 @@ export class Manager {
       systems: ANDROID_SYSTEM_IMAGES.map((item) => ({ ...item, installed: androidSystemImageInstalled(item.id), runsHere: imageRunsHere(item.abi) })),
     }));
     handle('mgr:genymotion-status', L, () => genymotionStatus());
+    handle('mgr:genymotion-camera-info', L, async () => genymotionCameraInfo());
+    handle('mgr:genymotion-media-folder', L, () => openGenymotionMediaFolder());
     handle('mgr:genymotion-open', L, () => openGenymotion());
     handle('mgr:genymotion-list', L, async () => listGenymotionDevices());
     handle('mgr:genymotion-profiles', L, async () => genymotionProfiles());

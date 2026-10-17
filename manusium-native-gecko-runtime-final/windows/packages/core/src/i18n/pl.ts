@@ -1302,6 +1302,8 @@ export const pl: Record<string, string> = {
   'android.genymotion.done': 'Operacja Genymotion zakończona',
   'android.genymotion.failed': 'Operacja Genymotion nie powiodła się',
   'android.genymotion.created': 'Utworzono urządzenie Genymotion',
+  'android.genymotion.cameraFolder': 'Otwórz folder multimediów',
+  'android.genymotion.cameraFolderFailed': 'Nie można otworzyć folderu multimediów Genymotion',
   'android.compare': 'Porównaj',
   'android.compareClear': 'Wyczyść wybór',
   'android.compareLimit': 'Możesz porównać maksymalnie {n} telefony naraz.',

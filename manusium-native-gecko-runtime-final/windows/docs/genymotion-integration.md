@@ -14,7 +14,9 @@ Octo now treats Genymotion Desktop as an optional, local secondary Android backe
 
 ## Camera behavior
 
-Genymotion's supported host-camera and media-injection features remain controlled by Genymotion Desktop. Octo reports this honestly in the UI. A physical UVC webcam or Genymotion media injection may work depending on the installed edition and host configuration. Windows virtual-camera drivers, including OBS virtual camera, are not guaranteed by Genymotion Desktop and are not falsely presented as supported.
+Genymotion's supported host-camera and media-injection features remain controlled by Genymotion Desktop. Octo reports this honestly in the UI. A physical UVC webcam or Genymotion media injection may work depending on the installed edition and host configuration. Genymotion Desktop 3.10+ adds experimental OBS Virtual Camera support on Windows. It must be configured in OBS at 1280×720, started, and then mapped to the front or back camera in Genymotion's Media Injection widget. Octo does not claim that every virtual-camera driver is supported.
+
+The Devices page now reports the installed Genymotion version, the fixed 1280×720 camera limit, and whether the version is new enough for the experimental OBS path. It also opens Genymotion's media folder so image and video inputs can be prepared without guessing the path. Genymotion's Media Injection widget is still required for selecting the active front/back source; the official GMTool interface does not currently expose that mapping.
 
 The stable Android Studio AVD `Virtual scene` option remains the recommended software-camera path when a deterministic camera is needed without a host camera endpoint.
 
