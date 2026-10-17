@@ -3502,10 +3502,18 @@ export async function createAndroidAvd(input: AndroidAvdCreateInput): Promise<{ 
   const webcams = imageEmulator
     ? (await emulatorWebcamsFrom(imageEmulator, rootForPackage(target.packageName) || tools.root, CAMERA_LAUNCH_LIMIT_MS, name)).webcams
     : [];
+  const requestedFront = normalizeCameraSource(input.cameraFront ?? 'none');
+  const requestedBack = normalizeCameraSource(input.cameraBack ?? 'webcam');
+  if ((requestedFront === 'webcam' || requestedBack === 'webcam') && !webcams.length) {
+    throw new Error('The Android Emulator did not verify a host camera while creating this device. Refresh the camera list and select a listed webcam endpoint before creating it.');
+  }
   const resolvedCameras = resolveActiveCameraAssignments(
-    input.cameraFront ?? 'webcam', input.cameraBack ?? 'webcam', input.cameraFrontDevice ?? '', input.cameraBackDevice ?? '', webcams,
+    requestedFront, requestedBack, input.cameraFrontDevice ?? '', input.cameraBackDevice ?? '', webcams,
     [], input.cameraDevice ?? '',
   );
+  if (resolvedCameras.frontDevice && resolvedCameras.frontDevice === resolvedCameras.backDevice) {
+    throw new Error(`The same host camera (${resolvedCameras.frontDevice}) cannot be assigned to both Android lenses. Set the front lens to Off or select a second endpoint.`);
+  }
   writeConfigValues(avdPath, {
     ...mediaConfig(resolvedCameras.front, resolvedCameras.back, input.microphoneEnabled,
       resolvedCameras.frontDevice, resolvedCameras.backDevice, cameraLimitsFor(avdPath, input.cameraLimits)),
@@ -3657,20 +3665,19 @@ export async function launchAndroidAvd(input: AndroidLaunchInput): Promise<Andro
   let cameraWarning = '';
   const launchNotes: string[] = [];
   // Explicit webcam endpoints survive failed discovery. An unlisted endpoint
-  // is reported as unverified, and Off remains off. No synthetic image is used.
+  // is rejected before launch: starting with an unverified endpoint is a common
+  // cause of CameraProvider/stock Camera crashes. No synthetic image is used.
   const emulatorRoot = rootForPackage(avdSystemPackage(avd)) || tools.root;
   const webcamReport = await emulatorWebcamsFrom(emulator, emulatorRoot, CAMERA_LAUNCH_LIMIT_MS, name);
-  const hostCameraCount = (await windowsCameraNames()).length;
-  const explicitEndpoints = [
-    input.cameraBackDevice ?? avd.cameraBackDevice ?? '',
-    input.cameraFrontDevice ?? avd.cameraFrontDevice ?? '',
-    input.cameraDevice ?? avd.cameraDevice ?? '',
-  ];
-  const explicitFallback = automaticWebcamFallback(0, webcamReport, process.platform, explicitEndpoints);
-  const fallback = explicitFallback.length
-    ? explicitFallback
-    : automaticWebcamFallback(hostCameraCount, webcamReport);
-  const webcams = webcamReport.webcams.length ? webcamReport.webcams : fallback;
+  const needsHostCamera = front === 'webcam' || back === 'webcam';
+  if (needsHostCamera && !webcamReport.webcams.length) {
+    throw new Error([
+      `The Android Emulator did not verify a host camera for ${name}.`,
+      'Close other camera apps, refresh the camera list, enable the camera in the AVD, and cold-boot again.',
+      webcamReport.detail || 'Run emulator.exe @AVD_NAME -webcam-list and select an endpoint that is listed.',
+    ].join(' '));
+  }
+  const webcams = webcamReport.webcams;
   const assignments = resolveActiveCameraAssignments(
     front, back,
     input.cameraFrontDevice ?? avd.cameraFrontDevice ?? '',
@@ -3680,16 +3687,16 @@ export async function launchAndroidAvd(input: AndroidLaunchInput): Promise<Andro
     input.cameraDevice ?? avd.cameraDevice ?? '',
   );
   if (assignments.warning) launchNotes.push(assignments.warning);
-  if (!webcams.length && (front === 'webcam' || back === 'webcam')) {
-    const reason = webcamReport.detail || webcamReport.problem === 'timeout'
-      ? 'The selected Android Emulator could not enumerate a host camera. Close camera-using apps, allow desktop camera access in Windows Privacy settings, then refresh.'
-      : 'The selected Android Emulator reported no usable host cameras. Set the AVD cameras to Webcam and cold boot it.';
-    cameraWarning = [cameraWarning, reason].filter(Boolean).join(' ');
-  }
-  if (explicitFallback.length && (front === 'webcam' || back === 'webcam')) {
-    launchNotes.push(`${explicitFallback[0].name} was preserved from the saved AVD configuration and will be verified after boot.`);
-  } else if (fallback.length && (front === 'webcam' || back === 'webcam')) {
-    launchNotes.push('The emulator did not enumerate cameras; webcam0 was configured automatically and must be verified after the cold boot.');
+  if (needsHostCamera) {
+    const available = new Set(webcams.map((item) => item.name));
+    const selectedEndpoints = [assignments.frontDevice, assignments.backDevice].filter(Boolean);
+    const missing = selectedEndpoints.filter((endpoint) => !available.has(endpoint));
+    if (missing.length) {
+      throw new Error(`The selected host camera endpoint is not verified by the Android Emulator: ${[...new Set(missing)].join(', ')}. Refresh the camera list before launching.`);
+    }
+    if (assignments.frontDevice && assignments.frontDevice === assignments.backDevice) {
+      throw new Error(`The same host camera (${assignments.frontDevice}) cannot be opened for both Android lenses. Set one lens to Off or select a second endpoint.`);
+    }
   }
   writeConfigValues(avd.path, mediaConfig(
     assignments.front, assignments.back, input.microphoneEnabled,
@@ -4917,6 +4924,13 @@ export async function updateAvdSettings(name: string, input: AvdSettingsInput): 
       [],
       input.cameraDevice ?? avd.cameraDevice,
     );
+    const needsHostCamera = selected.front === 'webcam' || selected.back === 'webcam';
+    if (needsHostCamera && !webcams.length) {
+      throw new Error('The Android Emulator did not verify a host camera. Refresh the camera list before saving these settings.');
+    }
+    if (assignments.frontDevice && assignments.frontDevice === assignments.backDevice) {
+      throw new Error(`The same host camera (${assignments.frontDevice}) cannot be assigned to both Android lenses. Set one lens to Off or select a second endpoint.`);
+    }
     Object.assign(values, mediaConfig(assignments.front, assignments.back, microphone,
       assignments.frontDevice, assignments.backDevice, cameraLimitsFor(avd.path, input.cameraLimits)));
     savedMedia = {

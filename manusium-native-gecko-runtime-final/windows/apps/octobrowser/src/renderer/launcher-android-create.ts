@@ -256,7 +256,11 @@ export function androidCreateWizard(context: CreatorContext): void {
     dpi: first?.sizing.dpi ?? 420,
     gpuMode: 'auto', bootMode: 'quick',
     snapshots: true, camera: false, microphone: true,
-    cameraFront: 'webcam', cameraBack: 'webcam', cameraFrontDevice: 'webcam0', cameraBackDevice: 'webcam0',
+    // A single host endpoint must not be opened by both Android lenses: some
+    // CameraProvider builds crash when the same DirectShow stream is shared.
+    // The back camera is the safe default; the front lens can be enabled after
+    // the emulator verifies a second endpoint.
+    cameraFront: 'none', cameraBack: 'webcam', cameraFrontDevice: '', cameraBackDevice: '',
     cameraDevice: '',
     locale: '',
     customPackage: '',

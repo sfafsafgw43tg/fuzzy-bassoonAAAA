@@ -317,10 +317,12 @@ describe('vStudio Mobile inside the phones', () => {
     expect(studio).toContain('void startAndroidCameraDiagnostics(name)');
     expect(studio).toContain("'CameraProvider:V'");
     expect(studio).toContain("'AndroidRuntime:E'");
-    // A preserved or unverified camera is still a launch; informational notes
-    // must not be shown as though the camera was disabled.
+    // An unverified host camera must fail before launch instead of crashing the
+    // guest CameraProvider; software-camera mode remains an explicit fallback.
     expect(studio).toContain('return { cameraWarning, notes: launchNotes };');
-    expect(studio).toContain('launchNotes.push(`${explicitFallback[0].name} was preserved');
+    expect(studio).toContain('if (needsHostCamera && !webcamReport.webcams.length)');
+    expect(studio).toContain('The Android Emulator did not verify a host camera');
+    expect(studio).toContain('The same host camera (');
     expect(studio).toContain('if (assignments.warning) launchNotes.push(assignments.warning);');
     expect(page).toContain("t('android.camera.disabledForLaunch')");
   });
