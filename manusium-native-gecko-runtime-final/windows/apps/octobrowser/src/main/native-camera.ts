@@ -7,6 +7,7 @@ const execFileAsync = promisify(execFile);
 const CONTROL = 'octo-cameractl.exe';
 const SOURCE = 'octo-camera-source.dll';
 const MISSING_COMPONENT = 'The native camera component is not included in this build. Close Octo.su, rerun setup on Windows, and ensure Visual Studio C++ desktop tools, Windows SDK 10.0.22621+, and CMake are installed.';
+const MISSING_WINDOWS_API = 'Windows virtual camera support is unavailable. Install Windows 11 version 22H2 or newer from Settings > Windows Update (build 22000 or newer is required); there is no separate API package to install. Windows 10 needs a separate DirectShow backend.';
 
 export interface NativeCameraStatus {
   supported: boolean;
@@ -45,6 +46,7 @@ async function runControl(args: string[]): Promise<{ stdout: string; stderr: str
     const failure = error as NodeJS.ErrnoException & { stderr?: string; stdout?: string; code?: string | number };
     const details = [failure.stderr?.trim(), failure.stdout?.trim()].filter(Boolean).join(' ');
     const exitCode = failure.code === undefined ? '' : ` (exit ${failure.code})`;
+    if (/0x8007007f|MFCreateVirtualCamera|ERROR_PROC_NOT_FOUND/i.test(details)) throw new Error(MISSING_WINDOWS_API);
     throw new Error(`Octo Camera control failed${exitCode}${details ? `: ${details}` : '.'}`);
   }
 }

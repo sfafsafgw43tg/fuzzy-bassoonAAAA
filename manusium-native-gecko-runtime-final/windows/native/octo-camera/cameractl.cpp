@@ -25,7 +25,7 @@ int wmain(int argc, wchar_t** argv) {
   if (!success) {
     std::wcerr << L"Octo Camera failed: 0x" << std::hex << static_cast<unsigned long>(hr) << L"\n";
     if (hr == HRESULT_FROM_WIN32(ERROR_PROC_NOT_FOUND)) {
-      std::wcerr << L"This Windows build does not expose MFCreateVirtualCamera; Windows 11 build 22000 or newer is required.\n";
+      std::wcerr << L"Install Windows 11 version 22H2 or newer from Settings > Windows Update; build 22000 or newer is required. There is no separate API package. Windows 10 needs a DirectShow backend.\n";
     }
   }
   else std::wcout << L"ok\n";
