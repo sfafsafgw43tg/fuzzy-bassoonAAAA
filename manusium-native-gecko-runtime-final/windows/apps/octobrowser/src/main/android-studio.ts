@@ -4542,6 +4542,14 @@ export async function stopAndroidAvd(name: string, force = false): Promise<{ sto
   return { stopped: true, how: 'force' };
 }
 
+/** Stop only emulator processes started by this Octo process. */
+export async function stopOwnedAndroidProcesses(): Promise<void> {
+  const names = [...runningEmulators.keys()];
+  await Promise.all(names.map(async (name) => {
+    try { await stopAndroidAvd(name, true); } catch { /* app shutdown must continue */ }
+  }));
+}
+
 /** Kill the emulator process that serves this AVD, by its command line. */
 async function killEmulatorProcess(name: string): Promise<boolean> {
   try {

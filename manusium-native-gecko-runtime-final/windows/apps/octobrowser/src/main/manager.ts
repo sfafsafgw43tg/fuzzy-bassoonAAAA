@@ -56,7 +56,7 @@ import { androidNetworkStatus, clearAndroidProxy, setAllAndroidNetworkOff, setAn
 import type { QuietBootResult } from './android-quiet-boot';
 import { ScreenStream, execAdb, keyArgs, nextRotation, parseRotation, parseScreenAction, pngDimensions, rotationLockArgs, rotationReadArgs, rotationSetArgs, screencapArgs, tapArgs } from './android-screen';
 import { parseSecondaryDisplay } from './android-displays';
- import { importAvdFolder, type CameraSource, androidCameraChoices, androidMediaCheck, repairAndroidMedia, emulatorWebcams, androidCameraChoicesCached, stopAndroidAvd, androidLaunchPrefs, rememberAndroidLaunch, ANDROID_LOCALES, adbPath, androidSerialFor, openAndroidBrowser, configureMediaCompanion, applyDeviceIdentity, grantAndroidMediaPermissions, reportAndroidProgress, setAndroidProgressSink, type AndroidProgress, acceptAndroidLicenses, androidPackageInstalled, createAndroidAvdFromSpec, quietBootAndroidAvd, installAndroidPackage, updateAvdSettings, type AvdSettingsInput, androidStudioStatusAsync, ANDROID_CATALOG_DEVICES, ANDROID_SYSTEM_IMAGES, androidDiskInfo, androidSdkCandidates, androidSystemImageInstalled, clearAndroidSdkRoot, installAndroidTools, setAndroidSdkRoot, createAndroidAvd, defaultAvdDirectory, deleteAndroidAvd, ensureMediaCompanionAsync, installAndroidSystemImage, launchAndroidAvd, listAndroidAvds, androidInstallRoot, androidInstallTarget, imageRunsHere, setAndroidInstallRoot, clearAndroidInstallRoot, availableSystemImageIds, androidToolLogPath, mediaCompanionStatusAsync, openAndroidAvdFolder, requestMediaCompanionBroadcast, waitForMediaCompanionCamera, startMediaCompanion, stopMediaCompanion, setMediaPluginEnabled, mediaPluginActive, startWebMediaCompanionAsync, applyAndroidLocation, applyRandomPolishAndroidLocation, type AndroidAvdCreateInput, type AndroidLaunchInput} from './android-studio';
+ import { importAvdFolder, type CameraSource, androidCameraChoices, androidMediaCheck, repairAndroidMedia, emulatorWebcams, androidCameraChoicesCached, stopAndroidAvd, stopOwnedAndroidProcesses, androidLaunchPrefs, rememberAndroidLaunch, ANDROID_LOCALES, adbPath, androidSerialFor, openAndroidBrowser, configureMediaCompanion, applyDeviceIdentity, grantAndroidMediaPermissions, reportAndroidProgress, setAndroidProgressSink, type AndroidProgress, acceptAndroidLicenses, androidPackageInstalled, createAndroidAvdFromSpec, quietBootAndroidAvd, installAndroidPackage, updateAvdSettings, type AvdSettingsInput, androidStudioStatusAsync, ANDROID_CATALOG_DEVICES, ANDROID_SYSTEM_IMAGES, androidDiskInfo, androidSdkCandidates, androidSystemImageInstalled, clearAndroidSdkRoot, installAndroidTools, setAndroidSdkRoot, createAndroidAvd, defaultAvdDirectory, deleteAndroidAvd, ensureMediaCompanionAsync, installAndroidSystemImage, launchAndroidAvd, listAndroidAvds, androidInstallRoot, androidInstallTarget, imageRunsHere, setAndroidInstallRoot, clearAndroidInstallRoot, availableSystemImageIds, androidToolLogPath, mediaCompanionStatusAsync, openAndroidAvdFolder, requestMediaCompanionBroadcast, waitForMediaCompanionCamera, startMediaCompanion, stopMediaCompanion, setMediaPluginEnabled, mediaPluginActive, startWebMediaCompanionAsync, applyAndroidLocation, applyRandomPolishAndroidLocation, type AndroidAvdCreateInput, type AndroidLaunchInput} from './android-studio';
 import { ANDROID_STORES, androidStore, androidStoreStates, changeAndroidStoreState, installAndroidStores, readMediaFolder, pushMediaToDevice } from './android-stores';
 import { addCustomImage, customCataloguePath, importSystemImageArchive, importSystemImageDirectory, inspectSystemImageDirectory, readCustomCatalogue, removeCustomImage, validCustomPackage } from './android-custom';
 import { installMediaRequirement, vbCableInstalledAsync } from './media-requirements';
@@ -592,10 +592,14 @@ export class Manager {
     this.tray?.destroy();
     this.tray = null;
     this.launcher?.hide();
+    const ownedBackgroundCleanup = stopOwnedAndroidProcesses().finally(() => {
+      stopMediaCompanion('vstudio-mobile');
+      stopMediaCompanion('vstudio-web');
+    });
     for (const child of this.children.values()) child.channel.send({ t: 'quit', reason: 'app-quit' });
     for (const firefox of this.nativeFirefox.values()) void firefox.bidi.close().finally(() => firefox.engine.stop(100));
     for (const chromium of this.nativeChromium.values()) void chromium.tabs.close().finally(() => chromium.engine.stop(100));
-    if (!this.children.size && !this.nativeFirefox.size && !this.nativeChromium.size) { app.quit(); return; }
+    if (!this.children.size && !this.nativeFirefox.size && !this.nativeChromium.size) { void ownedBackgroundCleanup.finally(() => app.quit()); return; }
     // Profile shutdown saves session data and has its own hard deadline. This
     // deadline only prevents a broken child from leaving the manager behind.
     setTimeout(() => app.quit(), 9_000).unref();
