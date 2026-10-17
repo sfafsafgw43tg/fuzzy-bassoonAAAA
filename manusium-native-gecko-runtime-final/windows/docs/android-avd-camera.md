@@ -78,6 +78,28 @@ with the Camera2 check app.
 
 The script is [setup-avd-cameras.ps1](../scripts/android/setup-avd-cameras.ps1).
 
+### End-to-end acceptance test
+
+To build the diagnostic app, cold-boot the selected AVD, install the app, grant
+camera permission, and require the rendered UI to report an active CameraX
+preview, run this command from the `windows` directory:
+
+```powershell
+powershell -ExecutionPolicy Bypass -File `
+  .\scripts\android\validate-avd-camera.ps1 `
+  -AvdName Pixel_8 `
+  -BackCamera webcam0 `
+  -FrontCamera none
+```
+
+The validator locates `ANDROID_HOME`/`ANDROID_SDK_ROOT`, the default per-user
+SDK, or an explicit `-SdkRoot`. It fails early when the current Windows account
+cannot access the SDK, when `adb.exe` or `emulator.exe` is missing, or when the
+selected endpoint is not listed by the emulator. It stops the emulator after a
+successful or failed run unless `-KeepEmulator` is supplied. Full ADB, UI dump,
+Camera2, and logcat diagnostics are saved to `android-tools.log` when the
+preview check fails.
+
 Use one host webcam for one lens only. OctoBrowser never sets both lenses to the same `webcamN`: the front lens is Off in that case, because the emulator cannot open one endpoint twice.
 
 ## 3. Keys in `config.ini`
@@ -152,12 +174,12 @@ does this AVD (or phone) expose the cameras I configured, and can I preview
 them? It needs no OctoBrowser code.
 
 Build it with Android Studio (Ladybug or newer) by opening the folder, then Run.
-Command line: `gradlew :app:assembleDebug` (requires the Gradle wrapper, which
-Android Studio creates on first open). The build has not been run in the
-environment where this repository was prepared; treat the first build as the
-test.
+Command line: `gradlew :app:assembleDebug` or use the end-to-end validator above.
+The repository includes the Gradle 8.7 wrapper and the build has been verified
+with `assembleDebug` and `testDebugUnitTest`.
 
-Diagnostics: three quick taps on the app title. The diagnostics activity is intentionally
+Diagnostics: use the visible **Open diagnostics** button; the legacy three-tap
+title shortcut remains. The diagnostics activity is intentionally
 `android:exported="false"`, so it is not an externally launchable ADB endpoint.
 
 ## 7. ADB commands
