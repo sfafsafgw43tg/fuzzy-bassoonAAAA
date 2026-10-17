@@ -17,6 +17,7 @@ describe('branded local Windows setup', () => {
     expect(prebuilt).toContain("manifest.distribution !== 'source-built'");
     expect(prebuilt).toContain("manifest.executable !== 'inkbrowser-chrome.exe'");
     expect(prebuilt).toContain("sha256(executable).toLowerCase() !== expected");
+    expect(prebuilt).toContain("'native-camera'");
     expect(prebuilt).toContain('maxRetries: 8, retryDelay: 250');
     expect(prebuilt).toContain('Close Octo.su, OctoDetect.su');
     expect(installer).toContain('Invoke-NpmResult @(');
@@ -25,7 +26,7 @@ describe('branded local Windows setup', () => {
     expect(installer).toContain("$env:OCTO_REQUIRE_NATIVE_CHROMIUM = if ($nativeAvailable) { '1' } else { '0' }");
     expect(packaging).toContain("runNode('verify-packaged-chromium.mjs'");
     const buildStep = installer.slice(installer.indexOf("@{ Key = 'stepBuild'"), installer.indexOf("@{ Key = 'stepShortcut'"));
-    const stages = ["Invoke-Npm @('run', 'icons')", "Invoke-Npm @('run', 'build')", "OCTO_REQUIRE_NATIVE_CHROMIUM", "prebuilt-inkbrowser' } else { 'prebuilt-electron"];
+    const stages = ["Invoke-Npm @('run', 'icons')", "Invoke-Npm @('run', 'build')", "Invoke-NpmResult @('run', 'build:native-camera')", "OCTO_REQUIRE_NATIVE_CHROMIUM", "prebuilt-inkbrowser' } else { 'prebuilt-electron"];
     const offsets = stages.map(stage => buildStep.indexOf(stage));
     expect(offsets.every(offset => offset >= 0)).toBe(true);
     expect(offsets).toEqual([...offsets].sort((a, b) => a - b));

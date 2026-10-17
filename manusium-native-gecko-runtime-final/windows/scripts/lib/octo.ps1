@@ -2440,6 +2440,14 @@ function Get-SetupSteps {
         }
         Invoke-Npm @('run', 'icons')
         Invoke-Npm @('run', 'build')
+        # The Windows virtual camera is optional for the Electron app, but when
+        # CMake/MSVC are available build it before preparing the local bundles.
+        # A missing native toolchain must not prevent the browser from working.
+        $cameraBuild = Invoke-NpmResult @('run', 'build:native-camera')
+        if ($cameraBuild.code -ne 0) {
+          Warn 'Windows virtual camera was not compiled. Install Visual Studio C++ desktop tools, Windows SDK 10.0.22621+, and CMake, then rerun setup.'
+          foreach ($line in @(([string]$cameraBuild.text) -split "`r?`n" | Select-Object -Last 12)) { Write-Log 'warn' $line }
+        }
         # Strictly verify a downloaded runtime. When no release exists, package
         # Electron only and record that native Chromium is unavailable.
         $env:OCTO_REQUIRE_NATIVE_CHROMIUM = if ($nativeAvailable) { '1' } else { '0' }

@@ -118,7 +118,7 @@ for (const app of apps) {
   copyTree(sourceDist, path.join(appResources, 'dist'));
 
   // Keep resource paths compatible with process.resourcesPath in the app.
-  for (const name of ['engines', 'addons', 'filters', 'licenses']) {
+  for (const name of ['engines', 'addons', 'filters', 'licenses', 'native-camera']) {
     const source = path.join(root, 'resources', name);
     if (fs.existsSync(source)) copyTree(source, path.join(outputResources, name));
   }
