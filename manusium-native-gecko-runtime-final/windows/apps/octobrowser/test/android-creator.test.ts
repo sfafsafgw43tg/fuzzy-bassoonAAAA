@@ -428,6 +428,12 @@ describe('devices that do not start, and devices that will not stop', () => {
     expect(DICTS.pl['android.openStudio']).toBeTruthy();
   });
 
+  it('repairs stale hardware-qemu camera values before host-camera boot', () => {
+    expect(studio).toContain('if (inspectHardwareCache(avd.path).length) repairHardwareCache(avd.path);');
+    expect(studio.indexOf('writeConfigValues(avd.path, mediaConfig(')).toBeLessThan(studio.indexOf('repairHardwareCache(avd.path);'));
+    expect(studio.indexOf('repairHardwareCache(avd.path);')).toBeLessThan(studio.indexOf('const cameraValues = emulatorCameraValues('));
+  });
+
   it('marks the leftover of an interrupted creation instead of offering to launch it', () => {
     expect(studio).toContain('function avdIncomplete');
     expect(studio).toContain('incomplete: avdIncomplete(item.path),');

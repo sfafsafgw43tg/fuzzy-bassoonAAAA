@@ -3741,6 +3741,11 @@ export async function launchAndroidAvd(input: AndroidLaunchInput): Promise<Andro
     assignments.frontDevice, assignments.backDevice,
     cameraLimitsFor(avd.path, input.cameraLimits),
   ));
+  // The emulator may reuse hardware-qemu.ini even when config.ini was fixed.
+  // A stale webcamN or an old two-lens assignment can crash CameraProvider
+  // before an Android app gets a chance to request a stream. Reconcile the
+  // cache after writing the final camera values and before spawning the guest.
+  if (inspectHardwareCache(avd.path).length) repairHardwareCache(avd.path);
   const cameraValues = emulatorCameraValues(
     assignments.front, assignments.back, assignments.frontDevice, assignments.backDevice,
   );
