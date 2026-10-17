@@ -18,6 +18,10 @@ npmRebuild: false
 nodeGypRebuild: false
 buildDependenciesFromSource: false
 extraResources:
+  # Compiled on Windows by tools/build-native-camera.mjs. The Devices tab
+  # invokes the control utility only after the user explicitly chooses it.
+  - from: ../../resources/native-camera
+    to: native-camera
   # Optional, local-only vStudio media companion used by the Android AVD flow.
   # It is copied into an AVD only on explicit user action; no bundled script runs.
   - from: ../../studio.zip

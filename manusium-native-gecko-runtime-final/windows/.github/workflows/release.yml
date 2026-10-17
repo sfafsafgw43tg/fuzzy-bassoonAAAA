@@ -72,6 +72,8 @@ jobs:
       - run: npm run typecheck
       - run: npm test
       - run: npm run i18n:check
+      - run: npm run check:native-camera
+      - run: npm run build:native-camera
 
       - name: Bootstrap depot_tools for the CI-only Chromium build
         shell: pwsh

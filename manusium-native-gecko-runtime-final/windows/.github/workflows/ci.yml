@@ -51,6 +51,11 @@ jobs:
       - name: Build
         run: npm run build
 
+      - name: Build native Windows virtual camera
+        run: |
+          npm run check:native-camera
+          npm run build:native-camera
+
       # E2E and Pester failures do not stop the job immediately: packaging, fuse
       # check and installer tests still run so one CI round reports everything.
       # The final "Fail on test failures" step turns the job red afterwards.

@@ -68,6 +68,7 @@ import { catalogEntry, catalogForPlatform, listInstalled, installChromium, remov
 import { discoverFirefoxRuntime, geckoCatalogEntry, installFirefoxRuntime, inspectFirefoxRuntime } from '@octo/shell/gecko-runtime';
 import { chromiumPrivacyArgs, prepareChromiumPrivacy, prepareFirefoxPrivacy } from '@octo/shell/engine-privacy';
 import { nativeBundledExtensionPaths } from './extensions';
+import { installNativeCamera, nativeCameraStatus, uninstallNativeCamera } from './native-camera';
 
 let importedHandsetsLoaded = false;
 
@@ -3056,6 +3057,9 @@ export class Manager {
       if (!this.ctx.settings.load().androidVirtualBrowserBeta) return { opened: false, reason: 'The Virtual Android Browser beta is switched off in Settings.' };
       return openAndroidBrowser(String(name ?? ''));
     });
+    handle('mgr:native-camera-status', L, () => nativeCameraStatus());
+    handle('mgr:native-camera-install', L, () => installNativeCamera());
+    handle('mgr:native-camera-uninstall', L, () => uninstallNativeCamera());
     handle('mgr:plugin-update', L, async (_e, plugin: string) => {
       const id = plugin === 'vstudio-web' ? 'vstudio-web' : 'vstudio-mobile';
       try { await ensureMediaCompanionAsync(id, true); return { ok: true, message: `${MEDIA_PLUGINS[id].name} updated.` }; }

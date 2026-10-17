@@ -440,6 +440,8 @@ export async function renderVirtualBox(v: HTMLElement): Promise<void> {
   const androidImport = h('button', { class: 'btn small' }, icon('folder', 14), h('span', { text: t('android.findExisting') }));
   const androidCreate = h('button', { class: 'btn primary' }, icon('plus', 15), h('span', { text: t('android.create') }));
   const cameraStudio = h('button', { class: 'btn small', title: t('android.cameraStudio.open') }, icon('camera', 14), h('span', { text: t('android.cameraStudio.open') })) as HTMLButtonElement;
+  const nativeCamera = h('button', { class: 'btn small', title: t('android.nativeCamera.install') }, icon('camera', 14), h('span', { text: t('android.nativeCamera.install') })) as HTMLButtonElement;
+  const removeNativeCamera = h('button', { class: 'btn small', title: t('android.nativeCamera.remove') }, icon('close', 14), h('span', { text: t('android.nativeCamera.remove') })) as HTMLButtonElement;
   const openStudio = h('button', { class: 'btn small' }, icon('externalLink', 14), h('span', { text: t('android.openStudio') })) as HTMLButtonElement;
   openStudio.onclick = async () => {
     openStudio.disabled = true;
@@ -457,7 +459,7 @@ export async function renderVirtualBox(v: HTMLElement): Promise<void> {
     h('section', { class: 'vm-section android-section' },
       h('div', { class: 'vm-section-head' },
         h('div', {}, h('h2', { text: t('android.sectionTitle') }), h('p', { class: 'hint', text: t('android.desc') })),
-        h('div', { class: 'row' }, openStudio, cameraStudio, androidCreate, androidImport, androidRefresh)),
+        h('div', { class: 'row' }, openStudio, cameraStudio, nativeCamera, removeNativeCamera, androidCreate, androidImport, androidRefresh)),
       engines, installHost, setupHost, netHost, virtualBrowserHost, androidList));
 
   let status: AndroidStatus | undefined;
@@ -472,6 +474,10 @@ export async function renderVirtualBox(v: HTMLElement): Promise<void> {
     androidRefresh.classList.remove('spinning');
     status = sdkStatus;
     openStudio.disabled = !Boolean(sdkStatus?.studioAppPath);
+    const nativeStatus = await run(api.invoke<{ supported: boolean; available: boolean; installed: boolean; message: string }>('mgr:native-camera-status'));
+    nativeCamera.disabled = !nativeStatus?.supported || !nativeStatus.available || nativeStatus.installed;
+    removeNativeCamera.disabled = !nativeStatus?.installed;
+    nativeCamera.title = nativeStatus?.message || t('android.nativeCamera.install');
     const avdReady = sdkStatus?.available === true && sdkStatus.avdManagerAvailable === true;
 
     // ---- engine --------------------------------------------------------
@@ -569,6 +575,20 @@ export async function renderVirtualBox(v: HTMLElement): Promise<void> {
     } finally {
       cameraStudio.disabled = false;
     }
+  };
+  nativeCamera.onclick = async () => {
+    nativeCamera.disabled = true;
+    const result = await run(api.invoke<{ installed: boolean; message: string }>('mgr:native-camera-install'));
+    if (result?.installed) toast(t('android.nativeCamera.installed'), 'ok', result.message);
+    else toast(t('android.nativeCamera.failed'), 'err', result?.message);
+    await loadAndroid();
+  };
+  removeNativeCamera.onclick = async () => {
+    removeNativeCamera.disabled = true;
+    const result = await run(api.invoke<{ installed: boolean; message: string }>('mgr:native-camera-uninstall'));
+    if (!result?.installed) toast(t('android.nativeCamera.removed'), 'ok', result?.message);
+    else toast(t('android.nativeCamera.failed'), 'err', result?.message);
+    await loadAndroid();
   };
   await loadAndroid();
 }
