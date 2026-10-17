@@ -2825,21 +2825,23 @@ export async function androidMediaCheck(name: string): Promise<MediaCheck> {
   const liveIds = new Set(webcams.map((item) => item.name));
   const advertised = `${configValue(avd.path, 'hw.camera.maxHorizontalPixels')}x${configValue(avd.path, 'hw.camera.maxVerticalPixels')}`;
   const wired = [values.front, values.back].filter((value) => value !== 'none');
+  const hostWired = wired.filter((value) => value.startsWith('webcam'));
   const items: MediaCheckItem[] = [
     {
       key: 'android.media.check.webcam',
-      ok: webcams.length > 0,
+      ok: hostWired.length === 0 || webcams.length > 0,
       detail: webcams.map((item) => `${item.name} · ${item.device}`).join('\n'),
     },
-    // Every lens that has a camera must name an endpoint the emulator really offers.
-    { key: 'android.media.check.wired', ok: wired.every((value) => liveIds.has(value)), detail: wired.join(' · ') },
+    // Only host endpoints must be present in the emulator's live webcam list;
+    // emulated/virtual-scene cameras are provided by the emulator itself.
+    { key: 'android.media.check.wired', ok: hostWired.every((value) => liveIds.has(value)), detail: wired.join(' · ') },
     { key: 'android.media.check.mic', ok: !!defaultInput || process.platform !== 'win32', detail: defaultInput },
     { key: 'android.media.check.audio', ok: avd.microphoneEnabled, detail: '' },
     // One host endpoint opened for both lenses is the crash the emulator cannot
-    // recover from; the resolved pair is what will really be launched.
+    // recover from; software cameras do not use a host endpoint.
     {
       key: 'android.media.check.slots',
-      ok: !(values.front !== 'none' && values.front === values.back),
+      ok: !(hostWired.length === 2 && values.front === values.back),
       detail: `front=${values.front} back=${values.back}`,
     },
     // What the guest HAL advertises has to be something a lens can deliver.
@@ -3498,7 +3500,7 @@ export async function createAndroidAvd(input: AndroidAvdCreateInput): Promise<{ 
   }
   const imageEmulator = await emulatorForPackage(target.packageName) || tools.emulator;
   const webcams = imageEmulator
-    ? (await emulatorWebcamsFrom(imageEmulator, rootForPackage(target.packageName) || tools.root)).webcams
+    ? (await emulatorWebcamsFrom(imageEmulator, rootForPackage(target.packageName) || tools.root, CAMERA_LAUNCH_LIMIT_MS, name)).webcams
     : [];
   const resolvedCameras = resolveActiveCameraAssignments(
     input.cameraFront ?? 'webcam', input.cameraBack ?? 'webcam', input.cameraFrontDevice ?? '', input.cameraBackDevice ?? '', webcams,
@@ -4893,7 +4895,12 @@ export async function updateAvdSettings(name: string, input: AvdSettingsInput): 
   if (input.cameraFront || input.cameraBack || typeof input.microphoneEnabled === 'boolean' || input.cameraDevice || input.cameraFrontDevice || input.cameraBackDevice) {
     const selected = normalizeCameraSources(input.cameraFront ?? avd.cameraFront, input.cameraBack ?? avd.cameraBack);
     const microphone = input.microphoneEnabled ?? avd.microphoneEnabled;
-    const webcams = await emulatorWebcams();
+    const sdkTools = optionalSdk();
+    const imagePackage = avdSystemPackage(avd);
+    const imageEmulator = sdkTools ? await emulatorForPackage(imagePackage) || sdkTools.emulator : '';
+    const webcams = imageEmulator
+      ? (await emulatorWebcamsFrom(imageEmulator, rootForPackage(imagePackage) || sdkTools?.root || '', CAMERA_LAUNCH_LIMIT_MS, clean)).webcams
+      : [];
     const assignments = resolveActiveCameraAssignments(
       selected.front, selected.back,
       input.cameraFrontDevice ?? avd.cameraFrontDevice,
