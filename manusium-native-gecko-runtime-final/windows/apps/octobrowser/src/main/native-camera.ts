@@ -39,7 +39,14 @@ function binaries(): { controlPath: string; sourcePath: string } {
 async function runControl(args: string[]): Promise<{ stdout: string; stderr: string }> {
   const { controlPath } = binaries();
   if (!controlPath || !fs.existsSync(controlPath)) throw new Error('The Octo Camera control utility is not included in this build.');
-  return execFileAsync(controlPath, args, { windowsHide: true, timeout: 20_000, windowsVerbatimArguments: false });
+  try {
+    return await execFileAsync(controlPath, args, { windowsHide: true, timeout: 20_000, windowsVerbatimArguments: false });
+  } catch (error) {
+    const failure = error as NodeJS.ErrnoException & { stderr?: string; stdout?: string; code?: string | number };
+    const details = [failure.stderr?.trim(), failure.stdout?.trim()].filter(Boolean).join(' ');
+    const exitCode = failure.code === undefined ? '' : ` (exit ${failure.code})`;
+    throw new Error(`Octo Camera control failed${exitCode}${details ? `: ${details}` : '.'}`);
+  }
 }
 
 export async function nativeCameraStatus(): Promise<NativeCameraStatus> {
