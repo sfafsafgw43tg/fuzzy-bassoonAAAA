@@ -446,10 +446,6 @@ export async function renderVirtualBox(v: HTMLElement): Promise<void> {
   const netHost = h('div', {});
 
   v.append(h('div', { class: 'toolbar' }, h('h1', { text: t('android.title') })),
-    h('section', { class: 'vm-section private-space-section' },
-      h('div', { class: 'vm-section-head' },
-        h('div', { class: 'private-space-heading' }, h('div', { class: 'empty-icon' }, icon('privateSpace', 34)), h('div', {}, h('h2', { text: t('android.privateSpace.title') }), h('p', { class: 'hint', text: t('android.privateSpace.desc') })))),
-      h('p', { class: 'small muted', text: t('android.privateSpace.comingSoon') })),
     h('section', { class: 'vm-section android-section' },
       h('div', { class: 'vm-section-head' },
         h('div', {}, h('h2', { text: t('android.sectionTitle') }), h('p', { class: 'hint', text: t('android.desc') })),

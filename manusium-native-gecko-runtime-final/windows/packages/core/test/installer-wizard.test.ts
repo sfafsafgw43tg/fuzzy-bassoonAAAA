@@ -216,9 +216,9 @@ describe('steps and the console installer', () => {
     expect(mainProcess).toContain("&& !fingerprintUsesWebgl");
     expect(pageShim).toContain('const requestedViewport = fp.windowSize');
     expect(browserWindow).toContain('deviceScaleFactor: null');
-    expect(androidPage).toContain("t('android.privateSpace.title')");
-    expect(androidPage).toContain("t('android.privateSpace.desc')");
-    expect(icons).toContain('privateSpace:');
+    expect(androidPage).not.toContain('private-space-section');
+    expect(androidPage).not.toContain('android.privateSpace');
+    expect(icons).not.toContain('privateSpace:');
     expect(pageShim).toContain('Worker.evaluate() executes against that worker\'s own global scope');
   });
 
