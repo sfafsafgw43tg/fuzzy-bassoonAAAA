@@ -49,10 +49,9 @@ SetupIconFile={#RepoRoot}\branding\suite\installer.ico
 UninstallDisplayIcon={app}\OctoBrowser\Octo.su.exe
 UninstallDisplayName={#SuiteName} (Octo.su, OctoDetect.su)
 LicenseFile={#RepoRoot}\LICENSE
-; Classic wizard layout with dark OctoSuite artwork. Silent update invocations
-; remain quiet and do not show the post-install launch page.
-WizardStyle=classic
-WizardImageFile={#RepoRoot}\branding\suite\installer-wizard.bmp
+; Minimal modern wizard: flat OLED-black surfaces, restrained monochrome hierarchy,
+; and no oversized artwork competing with the install decision.
+WizardStyle=modern
 WizardSmallImageFile={#RepoRoot}\branding\suite\installer-wizard-small.bmp
 WizardImageStretch=no
 WizardResizable=no
@@ -163,12 +162,12 @@ Type: files; Name: "{app}\registry-state.ini"
 [Code]
 procedure InitializeWizard;
 begin
-  { Match the classic wizard surfaces to the black artwork. }
+  { Match the modern wizard surfaces to the dark OctoSuite shell. }
   WizardForm.Color := $000A0A0C;
   WizardForm.Font.Color := clWhite;
   WizardForm.InnerNotebook.Color := $000A0A0C;
   WizardForm.OuterNotebook.Color := $000A0A0C;
-  WizardForm.WizardBitmapImage.Visible := True;
+  WizardForm.WizardBitmapImage.Visible := False;
   WizardForm.WizardSmallBitmapImage.Visible := True;
 end;
 

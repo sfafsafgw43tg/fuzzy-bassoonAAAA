@@ -136,6 +136,23 @@ describe('cancelling stops the whole process tree', () => {
   });
 });
 
+describe('installer visual system', () => {
+  it('uses the minimal dark Nothing-inspired palette and optional typography', () => {
+    expect(ui).toContain('FromArgb(5, 5, 6)');
+    expect(ui).toContain('FromArgb(215, 25, 33)');
+    expect(ui).toContain("Get-WizFontFamily 'Space Grotesk' 'Segoe UI'");
+    expect(ui).toContain("Get-WizFontFamily 'Space Mono' 'Consolas'");
+    expect(ui).toContain('BrandDot');
+  });
+
+  it('keeps page motion short and separate from the install runner', () => {
+    expect(ui).toContain('$ui.TransitionTimer.Interval = 12');
+    expect(ui).toContain('$script:Ui.TransitionTimer.Start()');
+    expect(ui).toContain('$script:Ui.TransitionTimer.Stop()');
+    expect(ui).toContain('Octo.SetupRunner');
+  });
+});
+
 describe('the options reach the real installation', () => {
   it('the window hands every option to the work process, which reads each one', () => {
     for (const name of ['OCTO_SETUP_SDK', 'OCTO_SETUP_PROXY', 'OCTO_SETUP_ENVVARS', 'OCTO_SETUP_PATH', 'OCTO_SETUP_VM', 'OCTO_SETUP_STEPS']) {
@@ -371,9 +388,9 @@ describe('window structure', () => {
     }
   });
 
-  it('uses the black classic palette and starts Octo.su by default after success', () => {
-    expect(ui).toContain('Surface = [System.Drawing.Color]::FromArgb(15, 15, 19)');
-    expect(ui).toContain('Panel   = [System.Drawing.Color]::FromArgb(24, 24, 31)');
+  it('uses the OLED-black minimal palette and starts Octo.su by default after success', () => {
+    expect(ui).toContain('Surface = [System.Drawing.Color]::FromArgb(5, 5, 6)');
+    expect(ui).toContain('Panel   = [System.Drawing.Color]::FromArgb(13, 13, 15)');
     expect(ui).toContain('$ui.StartApp.Checked = $true');
     expect(ui).toContain("Invoke-Open 'octobrowser'");
   });

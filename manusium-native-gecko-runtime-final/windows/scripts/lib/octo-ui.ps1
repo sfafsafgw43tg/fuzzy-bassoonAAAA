@@ -143,18 +143,28 @@ namespace Octo
 # ------------------------------------------------------------- look and feel
 function Get-WizColors {
   return @{
-    Surface = [System.Drawing.Color]::FromArgb(15, 15, 19)
-    Panel   = [System.Drawing.Color]::FromArgb(24, 24, 31)
-    Footer  = [System.Drawing.Color]::FromArgb(10, 10, 14)
-    Border  = [System.Drawing.Color]::FromArgb(55, 55, 68)
-    Text    = [System.Drawing.Color]::FromArgb(240, 240, 246)
-    Muted   = [System.Drawing.Color]::FromArgb(158, 158, 176)
-    Accent  = [System.Drawing.Color]::FromArgb(139, 92, 246)
-    Done    = [System.Drawing.Color]::FromArgb(52, 211, 153)
-    Warn    = [System.Drawing.Color]::FromArgb(251, 191, 36)
-    Fail    = [System.Drawing.Color]::FromArgb(248, 113, 113)
-    Run     = [System.Drawing.Color]::FromArgb(96, 165, 250)
+    Surface = [System.Drawing.Color]::FromArgb(5, 5, 6)
+    Panel   = [System.Drawing.Color]::FromArgb(13, 13, 15)
+    Footer  = [System.Drawing.Color]::FromArgb(8, 8, 9)
+    Border  = [System.Drawing.Color]::FromArgb(38, 38, 42)
+    Text    = [System.Drawing.Color]::FromArgb(245, 245, 245)
+    Muted   = [System.Drawing.Color]::FromArgb(145, 145, 150)
+    Accent  = [System.Drawing.Color]::FromArgb(215, 25, 33)
+    Done    = [System.Drawing.Color]::FromArgb(115, 198, 143)
+    Warn    = [System.Drawing.Color]::FromArgb(222, 174, 83)
+    Fail    = [System.Drawing.Color]::FromArgb(226, 100, 105)
+    Run     = [System.Drawing.Color]::FromArgb(225, 225, 225)
   }
+}
+
+# Use the requested Nothing typography when it is installed, without making the
+# offline installer download a font. The fallbacks are present on stock Windows.
+function Get-WizFontFamily([string]$preferred, [string]$fallback) {
+  try {
+    $families = [System.Drawing.FontFamily]::Families | ForEach-Object { $_.Name }
+    if ($families -contains $preferred) { return $preferred }
+  } catch { }
+  return $fallback
 }
 
 function New-WizLabel([string]$text, [int]$x, [int]$y, [int]$w, [int]$h, [System.Drawing.Color]$color, $font) {
@@ -169,17 +179,21 @@ function New-WizLabel([string]$text, [int]$x, [int]$y, [int]$w, [int]$h, [System
 function New-WizButton([string]$text, [int]$x, [int]$y, [int]$w, [bool]$primary, $colors) {
   $button = New-Object System.Windows.Forms.Button
   $button.Text = $text
-  $button.SetBounds($x, $y, $w, 30)
+  $button.SetBounds($x, $y, $w, 34)
   $button.FlatStyle = [System.Windows.Forms.FlatStyle]::Flat
   $button.UseVisualStyleBackColor = $false
+  $button.Cursor = [System.Windows.Forms.Cursors]::Hand
+  $button.Padding = New-Object System.Windows.Forms.Padding(10, 0, 10, 0)
   if ($primary) {
     $button.BackColor = $colors.Accent
     $button.ForeColor = [System.Drawing.Color]::White
     $button.FlatAppearance.BorderSize = 0
+    $button.FlatAppearance.MouseOverBackColor = [System.Drawing.Color]::FromArgb(235, 38, 46)
   } else {
     $button.BackColor = $colors.Surface
     $button.ForeColor = $colors.Text
     $button.FlatAppearance.BorderColor = $colors.Border
+    $button.FlatAppearance.MouseOverBackColor = $colors.Border
   }
   return $button
 }
@@ -218,17 +232,23 @@ function Build-WizLayout([string]$version) {
   $ui = $script:Ui
   $c = $ui.Colors
   $form = $ui.Form
-  $titleFont = New-Object System.Drawing.Font('Segoe UI', 14, [System.Drawing.FontStyle]::Bold)
-  $boldFont = New-Object System.Drawing.Font('Segoe UI', 9.5, [System.Drawing.FontStyle]::Bold)
-  $logFont = New-Object System.Drawing.Font('Consolas', 9)
+  $ui.BodyFamily = Get-WizFontFamily 'Space Grotesk' 'Segoe UI'
+  $ui.MonoFamily = Get-WizFontFamily 'Space Mono' 'Consolas'
+  $titleFont = New-Object System.Drawing.Font($ui.BodyFamily, 15, [System.Drawing.FontStyle]::Regular)
+  $boldFont = New-Object System.Drawing.Font($ui.BodyFamily, 9.5, [System.Drawing.FontStyle]::Bold)
+  $logFont = New-Object System.Drawing.Font($ui.MonoFamily, 9)
 
   # Header: page title and subtitle on the left, the program version on the right.
   $header = New-Object System.Windows.Forms.Panel
   $header.SetBounds(0, 0, 760, 84)
   $header.BackColor = $c.Surface
   $form.Controls.Add($header)
-  $ui.HeaderTitle = New-WizLabel '' 24 14 480 26 $c.Text $titleFont
-  $ui.HeaderSub = New-WizLabel '' 24 44 712 34 $c.Muted $null
+  $ui.BrandDot = New-Object System.Windows.Forms.Panel
+  $ui.BrandDot.SetBounds(24, 19, 8, 8)
+  $ui.BrandDot.BackColor = $c.Accent
+  $header.Controls.Add($ui.BrandDot)
+  $ui.HeaderTitle = New-WizLabel '' 44 11 460 28 $c.Text $titleFont
+  $ui.HeaderSub = New-WizLabel '' 44 43 650 28 $c.Muted $null
   $ui.VersionLabel = New-WizLabel (T 'uiVersion' $version) 500 16 170 20 $c.Muted $null
   $ui.VersionLabel.TextAlign = [System.Drawing.ContentAlignment]::MiddleRight
   $header.Controls.Add($ui.HeaderTitle)
@@ -243,7 +263,7 @@ function Build-WizLayout([string]$version) {
     $header.Controls.Add($logo)
   }
   $accent = New-Object System.Windows.Forms.Panel
-  $accent.SetBounds(0, 84, 760, 3)
+  $accent.SetBounds(0, 84, 760, 2)
   $accent.BackColor = $c.Accent
   $form.Controls.Add($accent)
 
@@ -358,7 +378,7 @@ function Build-WizLayout([string]$version) {
   $p3.Controls.Add($ui.Eta)
   $ui.StepList = New-Object System.Windows.Forms.ListView
   $ui.StepList.SetBounds(24, 86, 712, 176)
-  $ui.StepList.Font = New-Object System.Drawing.Font('Segoe UI', 9)
+  $ui.StepList.Font = New-Object System.Drawing.Font($ui.MonoFamily, 9)
   $ui.StepList.BackColor = $c.Panel
   $ui.StepList.ForeColor = $c.Text
   New-WizStepColumns $ui.StepList
@@ -382,7 +402,7 @@ function Build-WizLayout([string]$version) {
   $p4.Controls.Add($ui.Summary)
   $ui.Outcome = New-Object System.Windows.Forms.ListView
   $ui.Outcome.SetBounds(24, 84, 712, 214)
-  $ui.Outcome.Font = New-Object System.Drawing.Font('Segoe UI', 9)
+  $ui.Outcome.Font = New-Object System.Drawing.Font($ui.MonoFamily, 9)
   $ui.Outcome.BackColor = $c.Panel
   $ui.Outcome.ForeColor = $c.Text
   New-WizStepColumns $ui.Outcome
@@ -402,6 +422,19 @@ function Build-WizLayout([string]$version) {
   # Timer that drains the runner's output on the UI thread.
   $ui.Timer = New-Object System.Windows.Forms.Timer
   $ui.Timer.Interval = 150
+  $ui.TransitionTimer = New-Object System.Windows.Forms.Timer
+  $ui.TransitionTimer.Interval = 12
+  $ui.TransitionTimer.Add_Tick({
+    $target = $script:Ui.TransitionTarget
+    if ($null -eq $target) { $script:Ui.TransitionTimer.Stop(); return }
+    $script:Ui.TransitionFrame++
+    $target.Left = [Math]::Max(0, 12 - ($script:Ui.TransitionFrame * 4))
+    if ($target.Left -le 0) {
+      $target.Left = 0
+      $script:Ui.TransitionTarget = $null
+      $script:Ui.TransitionTimer.Stop()
+    }
+  })
 
   # Event handlers.
   $ui.Browse.Add_Click({ Invoke-WizSafely { Invoke-WizBrowse } })
@@ -416,8 +449,18 @@ function Build-WizLayout([string]$version) {
 }
 
 function Show-WizPage([int]$page) {
+  $previous = [int]$script:Wiz.Page
   $script:Wiz.Page = $page
-  foreach ($number in 1..4) { $script:Ui.Pages[$number].Visible = ($number -eq $page) }
+  foreach ($number in 1..4) {
+    $script:Ui.Pages[$number].Visible = ($number -eq $page)
+    $script:Ui.Pages[$number].Left = 0
+  }
+  if ($previous -ne $page -and $script:Ui.Form.IsHandleCreated) {
+    $script:Ui.TransitionTarget = $script:Ui.Pages[$page]
+    $script:Ui.TransitionFrame = 0
+    $script:Ui.TransitionTarget.Left = 12
+    $script:Ui.TransitionTimer.Start()
+  }
   Update-WizHeader
   Update-WizFooter
 }
@@ -947,7 +990,7 @@ function Show-SetupUi {
     $form.MaximizeBox = $false
     $form.AutoScaleMode = [System.Windows.Forms.AutoScaleMode]::None
     $form.BackColor = $script:Ui.Colors.Surface
-    $form.Font = New-Object System.Drawing.Font('Segoe UI', 9)
+    $form.Font = New-Object System.Drawing.Font((Get-WizFontFamily 'Space Grotesk' 'Segoe UI'), 9)
     $icon = Join-Path $InstallRoot 'branding\suite\installer.ico'
     if (Test-Path -LiteralPath $icon) { try { $form.Icon = New-Object System.Drawing.Icon($icon) } catch { } }
     $script:Ui.Form = $form
@@ -969,6 +1012,8 @@ function Show-SetupUi {
   } finally {
     $script:Ui.Timer.Stop()
     $script:Ui.Timer.Dispose()
+    $script:Ui.TransitionTimer.Stop()
+    $script:Ui.TransitionTimer.Dispose()
     $script:Ui.Form.Dispose()
     Set-ConsoleVisible $true
   }

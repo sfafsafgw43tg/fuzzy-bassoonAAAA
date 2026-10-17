@@ -72,8 +72,8 @@ describe('maintenance scripts', () => {
     expect(iss).toContain('scripts\\*.bat');
     expect(iss).toContain('scripts\\start-all.bat');
     expect(iss).toContain('scripts\\github-update.bat');
-    expect(iss).toContain('WizardStyle=classic');
-    expect(iss).toContain('WizardImageFile={#RepoRoot}\\branding\\suite\\installer-wizard.bmp');
+    expect(iss).toContain('WizardStyle=modern');
+    expect(iss).not.toContain('WizardImageFile={#RepoRoot}\\branding\\suite\\installer-wizard.bmp');
     expect(iss).toContain('WizardSmallImageFile={#RepoRoot}\\branding\\suite\\installer-wizard-small.bmp');
     expect(iss).toContain('WizardForm.Color := $000A0A0C');
     expect(iss).toContain('Description: "{cm:LaunchBrowser}"; Flags: nowait postinstall skipifsilent runasoriginaluser');

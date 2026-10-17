@@ -23,7 +23,19 @@ scripts\install.bat -NoGui          the console instead of the window (CI, serve
 scripts\install.bat -Interactive    the console, asking the old yes/no questions
 ```
 
-Where Windows Forms is missing (Server Core) the console path is used automatically.
+when Windows Forms is missing (Server Core) the console path is used automatically.
+
+## Visual system
+
+The wizard uses a dark OLED-black Nothing-inspired system: Space Grotesk is preferred for
+interface copy and Space Mono for technical status rows and logs. The fonts are optional and
+are never downloaded by the installer; stock Windows falls back to Segoe UI and Consolas.
+The interface uses one red status accent, flat surfaces, compact technical controls, and
+short 36 ms page transitions. Installation work remains asynchronous and the transition never
+blocks the runner or changes the cancellation protocol.
+
+The packaged Inno Setup installer uses the modern flat layout with the oversized artwork hidden,
+so the release installer and source-checkout wizard share the same minimal hierarchy.
 
 ## The pages
 
