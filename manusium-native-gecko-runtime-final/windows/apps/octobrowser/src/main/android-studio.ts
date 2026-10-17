@@ -1691,8 +1691,8 @@ export function automaticWebcamFallback(
   explicitEndpoints: readonly string[] = [],
 ): EmulatorWebcam[] {
   if (platform !== 'win32' || report.webcams.length > 0) return [];
-  const saved = explicitEndpoints.find((value) => /^webcam\d+$/.test(value));
-  if (saved) return [{ name: saved, device: 'Saved Windows host camera endpoint', virtual: false, foreign: false }];
+  const saved = [...new Set(explicitEndpoints.filter((value) => /^webcam\d+$/.test(value)))];
+  if (saved.length) return saved.map((name) => ({ name, device: 'Saved Windows host camera endpoint', virtual: false, foreign: false }));
   if (hostCameraCount < 1) return [];
   return [{ name: 'webcam0', device: 'Windows host camera (webcam0, unverified fallback)', virtual: false, foreign: false }];
 }
@@ -3671,14 +3671,25 @@ export async function launchAndroidAvd(input: AndroidLaunchInput): Promise<Andro
   const emulatorRoot = rootForPackage(avdSystemPackage(avd)) || tools.root;
   const webcamReport = await emulatorWebcamsFrom(emulator, emulatorRoot, CAMERA_LAUNCH_LIMIT_MS, name);
   const needsHostCamera = front === 'webcam' || back === 'webcam';
-  if (needsHostCamera && !webcamReport.webcams.length) {
+  const selectedEndpoints = [
+    input.cameraFrontDevice ?? avd.cameraFrontDevice ?? '',
+    input.cameraBackDevice ?? avd.cameraBackDevice ?? '',
+    input.cameraDevice ?? avd.cameraDevice ?? '',
+  ];
+  const fallback = needsHostCamera
+    ? automaticWebcamFallback(await windowsCameraNames().then((items) => items.length), webcamReport, process.platform, selectedEndpoints)
+    : [];
+  if (fallback.length) {
+    launchNotes.push('The emulator camera list was temporarily unavailable; the saved Windows endpoint will be verified by the Android camera check after boot.');
+  }
+  const webcams = webcamReport.webcams.length ? webcamReport.webcams : fallback;
+  if (needsHostCamera && !webcams.length) {
     throw new Error([
       `The Android Emulator did not verify a host camera for ${name}.`,
       'Close other camera apps, refresh the camera list, enable the camera in the AVD, and cold-boot again.',
       webcamReport.detail || 'Run emulator.exe @AVD_NAME -webcam-list and select an endpoint that is listed.',
     ].join(' '));
   }
-  const webcams = webcamReport.webcams;
   const assignments = resolveActiveCameraAssignments(
     front, back,
     input.cameraFrontDevice ?? avd.cameraFrontDevice ?? '',

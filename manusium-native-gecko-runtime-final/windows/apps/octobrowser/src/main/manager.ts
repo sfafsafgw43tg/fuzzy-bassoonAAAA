@@ -2691,7 +2691,8 @@ export class Manager {
       if (selectedHostEndpoints.length) {
         const listed = await emulatorWebcams();
         const usesOctoCamera = listed.some((camera) => selectedHostEndpoints.includes(camera.name) && /vstudio|v-studio/i.test(camera.device));
-        if (usesOctoCamera && !mediaPluginActive('vstudio-mobile')) {
+        const companion = await mediaCompanionStatusAsync('vstudio-mobile');
+        if (usesOctoCamera && companion.enabled && !companion.running) {
           await ensureMediaCompanionAsync('vstudio-mobile');
           const request = requestMediaCompanionBroadcast('vstudio-mobile', true);
           startMediaCompanion('vstudio-mobile');
