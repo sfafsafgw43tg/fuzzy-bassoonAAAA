@@ -820,9 +820,17 @@ describe('the staged companion is kept current', () => {
     expect(formats).toContain('"width": 1280, "height": 720');
     expect(app).toContain('"format_id": "webcam_safe"');
     expect(app).toContain('"backend": "unitycapture"');
+    expect(app).toContain('"android_only": True');
+    expect(app).toContain('"desktop": False');
+    expect(app).toContain('"browser": False');
+    expect(app).toContain('"effect_autofocus": False');
     expect(preset).toContain('"format_id": "webcam_safe"');
     expect(preset).toContain('"fps": 30');
     expect(preset).toContain('"backend": "unitycapture"');
+    expect(preset).toContain('"effect_shake": false');
+    expect(preset).toContain('"effect_autofocus": false');
+    expect(studio).toContain("android_only: true");
+    expect(studio).toContain("format_id: 'webcam_safe'");
     expect(manager).toContain("if (companion.enabled && !companion.running)");
     expect(manager.indexOf("await waitForMediaCompanionCamera('vstudio-mobile', request)")).toBeLessThan(manager.indexOf('const launched = await launchAndroidAvd'));
   });

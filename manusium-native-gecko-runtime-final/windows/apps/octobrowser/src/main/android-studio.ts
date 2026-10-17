@@ -565,8 +565,16 @@ function migrateMobileStudioConfig(raw: string): string {
     const currentNames = parsed.device_names && typeof parsed.device_names === 'object' ? parsed.device_names as Record<string, unknown> : {};
     const migrated = {
       ...parsed,
+      mode: 'android',
+      android_only: true,
+      targets: ['android-emulator'],
+      outputs: { android: true, desktop: false, browser: false, obs_scene: false },
       device_names: { ...currentNames, camera: 'Unity Capture virtual camera' },
-      video: { ...currentVideo, format_id: 'webcam_safe', fps: 30, backend: 'unitycapture', orientation: 'landscape' },
+      video: {
+        ...currentVideo,
+        format_id: 'webcam_safe', fps: 30, backend: 'unitycapture', orientation: 'landscape',
+        effect_shake: false, effect_grain: false, effect_vignette: false, effect_autofocus: false,
+      },
     };
     return `${JSON.stringify(migrated, null, 2)}\n`;
   } catch {
