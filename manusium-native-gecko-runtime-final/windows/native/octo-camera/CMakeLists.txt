@@ -27,6 +27,6 @@ set_target_properties(octo-camera-source PROPERTIES OUTPUT_NAME "octo-camera-sou
 add_executable(octo-cameractl cameractl.cpp registration.cpp)
 target_compile_definitions(octo-cameractl PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
 target_include_directories(octo-cameractl PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
-target_link_libraries(octo-cameractl PRIVATE mfsensorgroup mfplat ole32 advapi32)
+target_link_libraries(octo-cameractl PRIVATE mfplat ole32 advapi32)
 
 install(TARGETS octo-camera-source octo-cameractl RUNTIME DESTINATION . LIBRARY DESTINATION . ARCHIVE DESTINATION .)

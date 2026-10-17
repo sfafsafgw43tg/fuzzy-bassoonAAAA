@@ -9,6 +9,34 @@
 namespace octo::camera {
 static std::wstring ClsidKey() { return L"Software\\Classes\\CLSID\\" + std::wstring(kSourceClsid); }
 
+using CreateVirtualCameraFn = HRESULT (WINAPI*)(
+  MFVirtualCameraType, MFVirtualCameraLifetime, MFVirtualCameraAccess,
+  LPCWSTR, LPCWSTR, const GUID*, ULONG, IMFVirtualCamera**);
+
+static HRESULT CreateVirtualCamera(
+    MFVirtualCameraType type, MFVirtualCameraLifetime lifetime,
+    MFVirtualCameraAccess access, LPCWSTR friendlyName, LPCWSTR sourceId,
+    IMFVirtualCamera** camera, HMODULE* module) {
+  if (!camera || !module) return E_POINTER;
+  *camera = nullptr;
+  *module = LoadLibraryW(L"mfsensorgroup.dll");
+  if (!*module) return HRESULT_FROM_WIN32(GetLastError());
+  const auto create = reinterpret_cast<CreateVirtualCameraFn>(
+      GetProcAddress(*module, "MFCreateVirtualCamera"));
+  if (!create) {
+    FreeLibrary(*module);
+    *module = nullptr;
+    return HRESULT_FROM_WIN32(ERROR_PROC_NOT_FOUND);
+  }
+  const HRESULT hr = create(type, lifetime, access, friendlyName, sourceId,
+                             nullptr, 0, camera);
+  if (FAILED(hr)) {
+    FreeLibrary(*module);
+    *module = nullptr;
+  }
+  return hr;
+}
+
 HRESULT InstallCurrentUser(const std::wstring& sourceDll) {
   if (sourceDll.empty()) return E_INVALIDARG;
   std::error_code error;
@@ -30,10 +58,12 @@ HRESULT InstallCurrentUser(const std::wstring& sourceDll) {
   HRESULT hr = MFStartup(MF_VERSION);
   if (FAILED(hr)) return hr;
   IMFVirtualCamera* camera = nullptr;
-  hr = MFCreateVirtualCamera(MFVirtualCameraType_SoftwareCameraSource, MFVirtualCameraLifetime_System, MFVirtualCameraAccess_CurrentUser,
-    kFriendlyName, kSourceClsid, nullptr, 0, &camera);
+  HMODULE module = nullptr;
+  hr = CreateVirtualCamera(MFVirtualCameraType_SoftwareCameraSource, MFVirtualCameraLifetime_System, MFVirtualCameraAccess_CurrentUser,
+    kFriendlyName, kSourceClsid, &camera, &module);
   if (SUCCEEDED(hr)) hr = camera->Start(nullptr);
   if (camera) { camera->Shutdown(); camera->Release(); }
+  if (module) FreeLibrary(module);
   MFShutdown();
   return hr;
 }
@@ -42,9 +72,11 @@ HRESULT UninstallCurrentUser() {
   HRESULT hr = MFStartup(MF_VERSION);
   if (FAILED(hr)) return hr;
   IMFVirtualCamera* camera = nullptr;
-  hr = MFCreateVirtualCamera(MFVirtualCameraType_SoftwareCameraSource, MFVirtualCameraLifetime_System, MFVirtualCameraAccess_CurrentUser,
-    kFriendlyName, kSourceClsid, nullptr, 0, &camera);
+  HMODULE module = nullptr;
+  hr = CreateVirtualCamera(MFVirtualCameraType_SoftwareCameraSource, MFVirtualCameraLifetime_System, MFVirtualCameraAccess_CurrentUser,
+    kFriendlyName, kSourceClsid, &camera, &module);
   if (SUCCEEDED(hr)) { camera->Stop(); hr = camera->Remove(); camera->Shutdown(); camera->Release(); }
+  if (module) FreeLibrary(module);
   MFShutdown();
   RegDeleteTreeW(HKEY_CURRENT_USER, ClsidKey().c_str());
   return SUCCEEDED(hr) || hr == MF_E_NOT_FOUND ? S_OK : hr;

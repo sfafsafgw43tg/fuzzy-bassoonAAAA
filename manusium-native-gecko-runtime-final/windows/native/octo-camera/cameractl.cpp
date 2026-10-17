@@ -22,7 +22,12 @@ int wmain(int argc, wchar_t** argv) {
     if (SUCCEEDED(hr)) { std::wcout << (installed ? L"installed\n" : L"not installed\n"); return installed ? 0 : 1; }
   } else { std::wcerr << L"unknown command\n"; return 2; }
   const bool success = SUCCEEDED(hr);
-  if (!success) std::wcerr << L"Octo Camera failed: 0x" << std::hex << static_cast<unsigned long>(hr) << L"\n";
+  if (!success) {
+    std::wcerr << L"Octo Camera failed: 0x" << std::hex << static_cast<unsigned long>(hr) << L"\n";
+    if (hr == HRESULT_FROM_WIN32(ERROR_PROC_NOT_FOUND)) {
+      std::wcerr << L"This Windows build does not expose MFCreateVirtualCamera; Windows 11 build 22000 or newer is required.\n";
+    }
+  }
   else std::wcout << L"ok\n";
   if (SUCCEEDED(com)) CoUninitialize();
   return success ? 0 : 1;
