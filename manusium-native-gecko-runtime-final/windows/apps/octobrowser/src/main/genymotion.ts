@@ -223,11 +223,19 @@ export const stopGenymotionDevice = (name: string) => mutate('stop', name);
 export const deleteGenymotionDevice = (name: string) => mutate('delete', name);
 export const resetGenymotionDevice = (name: string) => mutate('factoryreset', name);
 
-export function openGenymotion(): { opened: boolean; message: string } {
+export async function openGenymotion(): Promise<{ opened: boolean; message: string }> {
   const status = genymotionStatus();
   const executable = status.executable || (status.gmtoolExecutable ? path.join(path.dirname(status.gmtoolExecutable), 'genymotion.exe') : '');
   if (!executable || !fs.existsSync(executable)) return { opened: false, message: status.message };
-  const child = spawn(executable, [], { detached: true, stdio: 'ignore', windowsHide: true });
-  child.unref();
-  return { opened: true, message: 'Genymotion Desktop launched. Complete activation in Genymotion if requested.' };
+  return await new Promise((resolve) => {
+    const child = spawn(executable, [], { detached: true, stdio: 'ignore', windowsHide: true });
+    let settled = false;
+    const finish = (result: { opened: boolean; message: string }) => { if (!settled) { settled = true; resolve(result); } };
+    child.once('spawn', () => {
+      child.unref();
+      finish({ opened: true, message: 'Genymotion Desktop launched. Complete activation in Genymotion if requested.' });
+    });
+    child.once('error', (error) => finish({ opened: false, message: `Genymotion Desktop could not be started: ${error.message}` }));
+    setTimeout(() => finish({ opened: false, message: 'Genymotion Desktop did not start. Verify the installation and Windows security permissions.' }), 1500);
+  });
 }

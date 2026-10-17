@@ -1276,6 +1276,7 @@ export const pl: Record<string, string> = {
   'android.backend.genymotionDetail': 'Opcjonalny lokalny silnik Android · wstrzykiwanie kamery/multimediów zależy od edycji Genymotion',
   'android.backend.genymotionMissing': 'Genymotion Desktop nie jest zainstalowany',
   'android.backend.genymotionOpen': 'Otwórz Genymotion',
+  'android.backend.genymotionInstall': 'Zainstaluj Genymotion',
   'android.backend.genymotionOpened': 'Otworzono Genymotion Desktop',
   'android.backend.genymotionUnavailable': 'Genymotion Desktop jest niedostępny',
   'android.genymotion.beta': 'DRUGI SILNIK',

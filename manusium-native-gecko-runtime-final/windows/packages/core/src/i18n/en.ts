@@ -1277,6 +1277,7 @@ export const en: Record<string, string> = {
   'android.backend.genymotionDetail': 'Optional local Android backend · camera/media injection depends on Genymotion edition',
   'android.backend.genymotionMissing': 'Genymotion Desktop is not installed',
   'android.backend.genymotionOpen': 'Open Genymotion',
+  'android.backend.genymotionInstall': 'Install Genymotion',
   'android.backend.genymotionOpened': 'Genymotion Desktop opened',
   'android.backend.genymotionUnavailable': 'Genymotion Desktop is unavailable',
   'android.genymotion.beta': 'SECONDARY',

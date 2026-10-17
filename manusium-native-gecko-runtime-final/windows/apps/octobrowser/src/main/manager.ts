@@ -2597,7 +2597,12 @@ export class Manager {
     handle('mgr:genymotion-status', L, () => genymotionStatus());
     handle('mgr:genymotion-camera-info', L, async () => genymotionCameraInfo());
     handle('mgr:genymotion-media-folder', L, () => openGenymotionMediaFolder());
-    handle('mgr:genymotion-open', L, () => openGenymotion());
+    handle('mgr:genymotion-open', L, async () => openGenymotion());
+    handle('mgr:genymotion-download', L, async () => {
+      const url = 'https://www.genymotion.com/product-desktop/download/';
+      await shell.openExternal(url);
+      return { opened: true, message: `Opened the official Genymotion Desktop download page: ${url}` };
+    });
     handle('mgr:genymotion-list', L, async () => listGenymotionDevices());
     handle('mgr:genymotion-profiles', L, async () => genymotionProfiles());
     handle('mgr:genymotion-create', L, async (_e, input) => createGenymotionDevice(input as GenymotionCreateInput));

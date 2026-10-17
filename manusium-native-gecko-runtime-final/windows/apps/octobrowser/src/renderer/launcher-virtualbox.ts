@@ -497,12 +497,12 @@ export async function renderVirtualBox(v: HTMLElement): Promise<void> {
       title: t('android.backend.avd'), ready: avdReady, action: installTools,
       detail: sdkDetail,
     }));
-    const genymotionOpen = h('button', { class: 'btn small' }, icon('externalLink', 14), h('span', { text: t('android.backend.genymotionOpen') })) as HTMLButtonElement;
-    genymotionOpen.disabled = !genymotion?.available;
+    const genymotionIsInstalled = genymotion?.available === true;
+    const genymotionOpen = h('button', { class: 'btn small' }, icon('externalLink', 14), h('span', { text: t(genymotionIsInstalled ? 'android.backend.genymotionOpen' : 'android.backend.genymotionInstall') })) as HTMLButtonElement;
     genymotionOpen.title = genymotion?.message || t('android.backend.genymotionMissing');
     genymotionOpen.onclick = async () => {
       genymotionOpen.disabled = true;
-      const opened = await run(api.invoke<{ opened: boolean; message: string }>('mgr:genymotion-open'));
+      const opened = await run(api.invoke<{ opened: boolean; message: string }>(genymotionIsInstalled ? 'mgr:genymotion-open' : 'mgr:genymotion-download'));
       genymotionOpen.disabled = false;
       toast(opened?.opened ? t('android.backend.genymotionOpened') : t('android.backend.genymotionUnavailable'), opened?.opened ? 'ok' : 'err', opened?.message);
     };
