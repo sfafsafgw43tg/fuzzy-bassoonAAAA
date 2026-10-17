@@ -6,6 +6,7 @@ import { promisify } from 'node:util';
 const execFileAsync = promisify(execFile);
 const CONTROL = 'octo-cameractl.exe';
 const SOURCE = 'octo-camera-source.dll';
+const MISSING_COMPONENT = 'The native camera component is not included in this build. Close Octo.su, rerun setup on Windows, and ensure Visual Studio C++ desktop tools, Windows SDK 10.0.22621+, and CMake are installed.';
 
 export interface NativeCameraStatus {
   supported: boolean;
@@ -47,7 +48,7 @@ export async function nativeCameraStatus(): Promise<NativeCameraStatus> {
   }
   const { controlPath, sourcePath } = binaries();
   if (!controlPath || !sourcePath) {
-    return { supported: true, available: false, installed: false, controlPath, sourcePath, message: 'The native camera component is not included in this build.' };
+    return { supported: true, available: false, installed: false, controlPath, sourcePath, message: MISSING_COMPONENT };
   }
   try {
     await runControl(['status']);
@@ -60,7 +61,7 @@ export async function nativeCameraStatus(): Promise<NativeCameraStatus> {
 export async function installNativeCamera(): Promise<NativeCameraStatus> {
   if (process.platform !== 'win32') throw new Error('The Windows virtual camera is only available on Windows.');
   const { sourcePath } = binaries();
-  if (!sourcePath || !fs.existsSync(sourcePath)) throw new Error('The native camera source DLL is not included in this build.');
+  if (!sourcePath || !fs.existsSync(sourcePath)) throw new Error(`${MISSING_COMPONENT} Expected ${SOURCE} under the packaged resources/native-camera directory.`);
   await runControl(['install', '--source', sourcePath]);
   return nativeCameraStatus();
 }
