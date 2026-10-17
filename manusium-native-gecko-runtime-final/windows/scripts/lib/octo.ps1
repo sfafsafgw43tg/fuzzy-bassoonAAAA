@@ -2725,8 +2725,10 @@ function Resolve-WizardOutcome([string]$outcome) {
 # Everything that must be true before the apps can start from sources.
 function Test-Ready {
   $receipt = $null
+  $receiptPath = Join-Path $InstallRoot 'release\.octo-local-ready.json'
+  if (-not (Test-Path -LiteralPath $receiptPath -PathType Leaf)) { return $false }
   try {
-    $receipt = Get-Content -LiteralPath (Join-Path $InstallRoot 'release\.octo-local-ready.json') -Raw -Encoding UTF8 | ConvertFrom-Json
+    $receipt = Get-Content -LiteralPath $receiptPath -Raw -Encoding UTF8 | ConvertFrom-Json
     if ([string]$receipt.schema -ne 'octo.local-ready.v1') { return $false }
   } catch { return $false }
   if ([string]$receipt.mode -in @('prebuilt-inkbrowser', 'prebuilt-electron')) {
