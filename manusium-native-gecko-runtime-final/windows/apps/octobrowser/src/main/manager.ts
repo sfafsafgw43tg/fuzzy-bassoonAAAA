@@ -68,6 +68,7 @@ import { catalogEntry, catalogForPlatform, listInstalled, installChromium, remov
 import { discoverFirefoxRuntime, geckoCatalogEntry, installFirefoxRuntime, inspectFirefoxRuntime } from '@octo/shell/gecko-runtime';
 import { chromiumPrivacyArgs, prepareChromiumPrivacy, prepareFirefoxPrivacy } from '@octo/shell/engine-privacy';
 import { nativeBundledExtensionPaths } from './extensions';
+import { genymotionStatus, openGenymotion } from './genymotion';
 
 let importedHandsetsLoaded = false;
 
@@ -2588,6 +2589,8 @@ export class Manager {
       devices: ANDROID_CATALOG_DEVICES,
       systems: ANDROID_SYSTEM_IMAGES.map((item) => ({ ...item, installed: androidSystemImageInstalled(item.id), runsHere: imageRunsHere(item.abi) })),
     }));
+    handle('mgr:genymotion-status', L, () => genymotionStatus());
+    handle('mgr:genymotion-open', L, () => openGenymotion());
     handle('mgr:android-list', L, async () => {
       try { return { available: true, machines: await listAndroidAvds() }; }
       catch { return { available: false, machines: [] }; }

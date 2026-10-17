@@ -275,8 +275,8 @@ describe('vStudio Mobile inside the phones', () => {
     // An unknown or inactive camera is always disabled; never guess webcam0.
     expect(studio).toContain("return source === 'webcam' && WEBCAM.test(webcam) ? webcam : 'none';");
     expect(studio).not.toContain("webcam || 'webcam0'");
-    expect(studio).toContain("'octobrowser.cameraFront': values.front === 'none' ? 'none' : 'webcam',");
-    expect(studio).toContain("'octobrowser.cameraBack': values.back === 'none' ? 'none' : 'webcam',");
+    expect(studio).toContain("'octobrowser.cameraFront': values.front === 'none' ? 'none' : values.front === 'emulated' ? 'emulated' : 'webcam',");
+    expect(studio).toContain("'octobrowser.cameraBack': values.back === 'none' ? 'none' : values.back === 'emulated' ? 'emulated' : 'webcam',");
     expect(studio).not.toContain("'hw.camera': cameraEnabled");
     expect(studio).toContain("'hw.camera.back': values.back");
     // The guest is told a safe resolution: an unmeasured camera gets 640x480,
@@ -295,11 +295,11 @@ describe('vStudio Mobile inside the phones', () => {
     expect(studio).toContain("const selected = resolveAvdCameraSelection(");
     expect(studio).toContain("front: selected.front ? 'webcam' : 'none',");
     expect(studio).toContain("back: selected.back ? 'webcam' : 'none',");
-    // The emulator's own picture is not a camera here, so no lens is ever
-    // switched to it, and no GPU mode is required for it.
-    expect(studio).not.toContain('usesVirtualScene');
-    expect(studio).not.toContain("'virtualscene'");
-    expect(studio).not.toContain("'emulated'");
+    // Virtual scene is an explicit software-camera mode and must not inherit
+    // host webcam endpoints or require a host camera probe.
+    expect(studio).toContain("if (normalizedFront === 'emulated' || normalizedBack === 'emulated')");
+    expect(studio).toContain("normalizedFront === 'emulated' ? 'none' : normalizedFront");
+    expect(studio).toContain("backDevice: normalizedBack === 'emulated' ? '' : webcamSelection.back");
     // Sharing is explicit and accompanied by a warning, never silently rewritten.
     expect(studio).not.toContain("frontValue = 'none'");
     expect(studio).toContain("Some drivers cannot open both at once");
@@ -349,14 +349,13 @@ describe('vStudio Mobile inside the phones', () => {
     expect(manager).toContain('repairAndroidMedia(String(name ?? \'\'), { cameraDevice');
   });
 
-  it('offers explicit manual endpoints and Off without synthetic camera sources', () => {
+  it('offers explicit manual endpoints, Off, and the stable Virtual scene source', () => {
     expect(page).toContain('androidMediaDialog({ name: machine.name');
     // Off is selectable and webcam0 remains configurable when enumeration fails.
     expect(cameraUi).toContain("select<string>(deviceOf(facing), options, id => choose(facing, id))");
     expect(cameraUi).toContain("t('android.camera.manualEndpoint', { endpoint: id })");
-    expect(cameraUi).not.toMatch(/\[\s*'(none|emulated|virtualscene)'\s*,/);
-    expect(cameraUi).not.toContain("'emulated'");
-    expect(cameraUi).not.toContain("'virtualscene'");
+    expect(cameraUi).toContain("['emulated', t('android.camera.virtualScene')]");
+    expect(cameraUi).toContain("source === 'emulated'");
     expect(cameraUi).not.toContain("'android.camera.none'");
     expect(cameraUi).not.toContain("'android.camera.emulated'");
     expect(cameraUi).not.toContain("'android.camera.virtualscene'");

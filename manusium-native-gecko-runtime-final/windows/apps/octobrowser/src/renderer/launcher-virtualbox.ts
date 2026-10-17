@@ -25,6 +25,7 @@ interface MediaCompanion { plugin: string; ready?: boolean; requirements?: Array
 interface AndroidMachine { name: string; path: string; target: string; running: boolean; deviceLabel: string; resolution: string; ramMb: number; dataPartition: string; cameraFront: CameraSource; cameraBack: CameraSource; cameraFrontDevice: string; cameraBackDevice: string; cameraDevice: string; microphoneEnabled: boolean; networkSpeed: NetworkSpeed; incomplete: boolean; diskBytes: number; identity?: DeviceIdentity }
 interface AndroidStatus { javaVersion?: number; javaHome?: string; searched: string[]; missing: '' | 'sdk' | 'cmdline-tools' | 'emulator'; manualSdkRoot: boolean; available: boolean; sdkRoot: string; studioAppPath: string; avdManagerAvailable: boolean; emulatorAvailable: boolean; adbAvailable: boolean; defaultDirectory: string; mediaCompanion: MediaCompanion; devices: AndroidDevice[]; systems: AndroidSystem[] }
 interface AndroidResult { available: boolean; machines: AndroidMachine[] }
+interface GenymotionStatus { available: boolean; executable: string; shellExecutable: string; authenticated: 'unknown'; message: string }
 interface AndroidLaunchPrefs {
   proxyId: string; cameraFront: CameraSource; cameraBack: CameraSource;
   cameraFrontDevice: string; cameraBackDevice: string; cameraDevice: string;
@@ -458,9 +459,10 @@ export async function renderVirtualBox(v: HTMLElement): Promise<void> {
 
   const loadAndroid = async (): Promise<void> => {
     androidRefresh.classList.add('spinning');
-    const [sdkStatus, result] = await Promise.all([
+    const [sdkStatus, result, genymotion] = await Promise.all([
       run(api.invoke<AndroidStatus>('mgr:android-status')),
       run(api.invoke<AndroidResult>('mgr:android-list')),
+      run(api.invoke<GenymotionStatus>('mgr:genymotion-status')),
     ]);
     androidRefresh.classList.remove('spinning');
     status = sdkStatus;
@@ -486,6 +488,20 @@ export async function renderVirtualBox(v: HTMLElement): Promise<void> {
     engines.append(engineChip({
       title: t('android.backend.avd'), ready: avdReady, action: installTools,
       detail: sdkDetail,
+    }));
+    const genymotionOpen = h('button', { class: 'btn small' }, icon('externalLink', 14), h('span', { text: t('android.backend.genymotionOpen') })) as HTMLButtonElement;
+    genymotionOpen.disabled = !genymotion?.available;
+    genymotionOpen.title = genymotion?.message || t('android.backend.genymotionMissing');
+    genymotionOpen.onclick = async () => {
+      genymotionOpen.disabled = true;
+      const opened = await run(api.invoke<{ opened: boolean; message: string }>('mgr:genymotion-open'));
+      genymotionOpen.disabled = false;
+      toast(opened?.opened ? t('android.backend.genymotionOpened') : t('android.backend.genymotionUnavailable'), opened?.opened ? 'ok' : 'err', opened?.message);
+    };
+    engines.append(engineChip({
+      title: t('android.backend.genymotion'), ready: genymotion?.available === true,
+      action: genymotionOpen,
+      detail: genymotion?.available ? t('android.backend.genymotionDetail') : t('android.backend.genymotionMissing'),
     }));
     // The button stays usable even when the SDK was not detected: the
     // creator's first step is where it is installed, located or overridden,
