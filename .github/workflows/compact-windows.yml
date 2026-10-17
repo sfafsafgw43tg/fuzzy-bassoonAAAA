@@ -1,0 +1,133 @@
+name: Compact Windows release candidate
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'manusium-native-gecko-runtime-final/windows/apps/octocompact/**'
+      - 'manusium-native-gecko-runtime-final/windows/tools/*compact*'
+      - 'manusium-native-gecko-runtime-final/windows/tools/ci/compact-installed.ps1'
+      - 'manusium-native-gecko-runtime-final/windows/package*.json'
+      - '.github/workflows/compact-windows.yml'
+  push:
+    branches: ['arena/c10966b9-fuzzy-bassoonaaaa']
+    paths:
+      - '.github/workflows/compact-windows.yml'
+      - 'manusium-native-gecko-runtime-final/windows/apps/octocompact/**'
+      - 'manusium-native-gecko-runtime-final/windows/tools/*compact*'
+      - 'manusium-native-gecko-runtime-final/windows/tools/ci/compact-installed.ps1'
+      - 'manusium-native-gecko-runtime-final/windows/package*.json'
+permissions:
+  contents: read
+concurrency:
+  group: compact-windows-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  build:
+    # Same-repository arena pushes already build the PR head; avoid duplicate payloads.
+    if: github.event_name != 'pull_request' || github.head_ref != 'arena/c10966b9-fuzzy-bassoonaaaa'
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: manusium-native-gecko-runtime-final/windows
+    env:
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github
+            manusium-native-gecko-runtime-final/.github
+            manusium-native-gecko-runtime-final/windows
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Keep engine and packaging caches in the disposable runner temp directory
+        shell: pwsh
+        run: |
+          Add-Content $env:GITHUB_ENV "ELECTRON_CACHE=$env:RUNNER_TEMP/compact-electron-cache"
+          Add-Content $env:GITHUB_ENV "ELECTRON_BUILDER_CACHE=$env:RUNNER_TEMP/compact-builder-cache"
+      - name: Install build dependencies without an extra development Electron runtime
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Check current supported engine patch
+        run: npm run check:compact:engine
+      - name: Typecheck and preserve the full test suite
+        shell: pwsh
+        run: |
+          npm run typecheck
+          if ($LASTEXITCODE -ne 0) { throw 'Typecheck failed' }
+          npm test
+          if ($LASTEXITCODE -ne 0) { throw 'Tests failed' }
+      - name: Package one engine into one NSIS installer
+        shell: pwsh
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+        run: |
+          New-Item -ItemType Directory -Force ci-logs/compact | Out-Null
+          npm run dist:compact:windows 2>&1 | Tee-Object ci-logs/compact/package.log
+          if ($LASTEXITCODE -ne 0) {
+            $tail = (Get-Content ci-logs/compact/package.log -Tail 50) -join '%0A'
+            Write-Output "::error title=Packaging log::$tail"
+            throw 'Compact packaging failed'
+          }
+          node tools/measure-compact-build.mjs
+          if ($LASTEXITCODE -ne 0) { throw 'Size measurement failed' }
+      - uses: actions/upload-artifact@v4
+        with:
+          name: compact-CANDIDATE-${{ github.run_number }}
+          path: manusium-native-gecko-runtime-final/windows/release/compact/Octo-Compact-Setup-*.exe
+          if-no-files-found: error
+          retention-days: 7
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: compact-build-evidence-${{ github.run_number }}
+          path: manusium-native-gecko-runtime-final/windows/ci-logs/compact/**
+          retention-days: 7
+  clean-install:
+    needs: build
+    runs-on: windows-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: manusium-native-gecko-runtime-final/windows
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          sparse-checkout: |
+            .github
+            manusium-native-gecko-runtime-final/.github
+            manusium-native-gecko-runtime-final/windows
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          name: compact-CANDIDATE-${{ github.run_number }}
+          path: manusium-native-gecko-runtime-final/windows/release/compact
+      - name: Install test dependencies only, not a development browser
+        run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Verify actual installed browser, privacy, restart, size and uninstall
+        shell: pwsh
+        run: |
+          try {
+            ./tools/ci/compact-installed.ps1
+            if ($LASTEXITCODE -ne 0) { throw 'Clean-install verification failed' }
+            $report = Get-Content ci-logs/compact/installed-size.json -Raw
+            Write-Output "::notice title=Verified installed size::$($report.Replace("`r",'').Replace("`n",'%0A'))"
+            Add-Content $env:GITHUB_STEP_SUMMARY "## Compact Windows clean-install evidence"
+            Add-Content $env:GITHUB_STEP_SUMMARY $report
+          } catch {
+            Get-ChildItem ci-logs/compact -File -ErrorAction SilentlyContinue | Where-Object { $_.Extension -in '.json','.log' } | ForEach-Object {
+              $tail = ((Get-Content $_.FullName -Tail 35) -join '%0A').Replace('%','%25').Replace('%250A','%0A')
+              Write-Output "::error title=$($_.Name)::$tail"
+            }
+            throw
+          }
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: compact-clean-install-evidence-${{ github.run_number }}
+          path: manusium-native-gecko-runtime-final/windows/ci-logs/compact/**
+          retention-days: 7

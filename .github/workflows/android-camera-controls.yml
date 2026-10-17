@@ -1,0 +1,52 @@
+name: Android camera controls
+on:
+  workflow_dispatch:
+  push:
+    branches: ['arena/c10966b9-fuzzy-bassoonaaaa']
+    paths:
+      - '.github/workflows/android-camera-controls.yml'
+      - 'manusium-native-gecko-runtime-final/windows/apps/octobrowser/**'
+      - 'manusium-native-gecko-runtime-final/windows/packages/core/src/android-camera.ts'
+      - 'manusium-native-gecko-runtime-final/windows/packages/core/src/i18n/**'
+      - 'manusium-native-gecko-runtime-final/windows/e2e/*camera*'
+      - 'manusium-native-gecko-runtime-final/windows/e2e/camera-fixture/**'
+permissions:
+  contents: read
+concurrency:
+  group: android-camera-controls-${{ github.ref }}
+  cancel-in-progress: true
+jobs:
+  windows:
+    runs-on: windows-latest
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: manusium-native-gecko-runtime-final/windows
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - name: Check types and all regressions
+        shell: pwsh
+        run: |
+          npm run typecheck
+          if ($LASTEXITCODE -ne 0) { throw 'Typecheck failed' }
+          npm test
+          if ($LASTEXITCODE -ne 0) { throw 'Unit tests failed' }
+          npm run i18n:check
+          if ($LASTEXITCODE -ne 0) { throw 'Translations failed' }
+          npm run build:browser
+          if ($LASTEXITCODE -ne 0) { throw 'Browser build failed' }
+      - name: Install official Electron for the UI test, not an Android emulator
+        run: node node_modules/electron/install.js
+      - name: Exercise real picker UI with controlled camera responses
+        run: npx playwright test -c e2e/playwright.config.ts android-camera-controls.spec.ts
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: android-camera-test-results-${{ github.run_number }}
+          path: manusium-native-gecko-runtime-final/windows/test-results/**
+          retention-days: 7
+          if-no-files-found: warn

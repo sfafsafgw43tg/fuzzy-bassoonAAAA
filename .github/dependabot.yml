@@ -1,0 +1,11 @@
+version: 2
+updates:
+  - package-ecosystem: npm
+    directory: /manusium-native-gecko-runtime-final/windows
+    schedule:
+      interval: weekly
+    allow:
+      - dependency-name: electron
+      - dependency-name: electron-builder
+      - dependency-name: '@electron/fuses'
+    open-pull-requests-limit: 3

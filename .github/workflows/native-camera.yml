@@ -1,0 +1,51 @@
+name: Windows Native Camera Artifact
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'arena/**'
+    paths:
+      - 'manusium-native-gecko-runtime-final/windows/native/octo-camera/**'
+      - 'manusium-native-gecko-runtime-final/windows/tools/build-native-camera.mjs'
+      - '.github/workflows/native-camera.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: windows-latest
+    defaults:
+      run:
+        working-directory: manusium-native-gecko-runtime-final/windows
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: manusium-native-gecko-runtime-final/windows/package-lock.json
+      - name: Install dependencies
+        run: npm ci
+      - name: Validate native camera source
+        run: npm run check:native-camera
+      - name: Build and stage native camera
+        run: npm run build:native-camera
+      - name: Verify staged binaries
+        shell: pwsh
+        run: |
+          $required = @(
+            'resources/native-camera/octo-camera-source.dll',
+            'resources/native-camera/octo-cameractl.exe'
+          )
+          foreach ($file in $required) {
+            if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "Missing native camera artifact: $file" }
+          }
+      - name: Upload native camera artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: octo-native-camera-win32-x64-${{ github.sha }}
+          path: manusium-native-gecko-runtime-final/windows/resources/native-camera/
+          if-no-files-found: error
+          retention-days: 30
