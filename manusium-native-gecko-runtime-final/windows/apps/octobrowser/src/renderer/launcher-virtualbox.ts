@@ -25,7 +25,9 @@ interface MediaCompanion { plugin: string; ready?: boolean; requirements?: Array
 interface AndroidMachine { name: string; path: string; target: string; running: boolean; deviceLabel: string; resolution: string; ramMb: number; dataPartition: string; cameraFront: CameraSource; cameraBack: CameraSource; cameraFrontDevice: string; cameraBackDevice: string; cameraDevice: string; microphoneEnabled: boolean; networkSpeed: NetworkSpeed; incomplete: boolean; diskBytes: number; identity?: DeviceIdentity }
 interface AndroidStatus { javaVersion?: number; javaHome?: string; searched: string[]; missing: '' | 'sdk' | 'cmdline-tools' | 'emulator'; manualSdkRoot: boolean; available: boolean; sdkRoot: string; studioAppPath: string; avdManagerAvailable: boolean; emulatorAvailable: boolean; adbAvailable: boolean; defaultDirectory: string; mediaCompanion: MediaCompanion; devices: AndroidDevice[]; systems: AndroidSystem[] }
 interface AndroidResult { available: boolean; machines: AndroidMachine[] }
-interface GenymotionStatus { available: boolean; executable: string; shellExecutable: string; authenticated: 'unknown'; message: string }
+interface GenymotionStatus { available: boolean; executable: string; gmtoolExecutable: string; shellExecutable: string; authenticated: 'unknown'; camera: { hostUvc: boolean; mediaInjection: 'edition-dependent'; virtualCamera: false }; message: string }
+interface GenymotionDevice { id: string; name: string; status: 'running' | 'off' | 'unknown'; ip: string; adbSerial: string; androidVersion: string; model: string }
+interface GenymotionProfiles { hardwareProfiles: string[]; osImages: string[] }
 interface AndroidLaunchPrefs {
   proxyId: string; cameraFront: CameraSource; cameraBack: CameraSource;
   cameraFrontDevice: string; cameraBackDevice: string; cameraDevice: string;
@@ -446,23 +448,25 @@ export async function renderVirtualBox(v: HTMLElement): Promise<void> {
   const setupHost = h('div', {});
   const netHost = h('div', {});
   const virtualBrowserHost = h('div', {});
+  const genymotionHost = h('div', {});
 
   v.append(h('div', { class: 'toolbar' }, h('h1', { text: t('android.title') })),
     h('section', { class: 'vm-section android-section' },
       h('div', { class: 'vm-section-head' },
         h('div', {}, h('h2', { text: t('android.sectionTitle') }), h('p', { class: 'hint', text: t('android.desc') })),
         h('div', { class: 'row' }, cameraStudio, androidCreate, androidImport, androidRefresh)),
-      engines, installHost, setupHost, netHost, virtualBrowserHost, androidList));
+      engines, installHost, setupHost, netHost, virtualBrowserHost, genymotionHost, androidList));
 
   let status: AndroidStatus | undefined;
   let catalog: unknown;
 
   const loadAndroid = async (): Promise<void> => {
     androidRefresh.classList.add('spinning');
-    const [sdkStatus, result, genymotion] = await Promise.all([
+    const [sdkStatus, result, genymotion, genymotionDevices] = await Promise.all([
       run(api.invoke<AndroidStatus>('mgr:android-status')),
       run(api.invoke<AndroidResult>('mgr:android-list')),
       run(api.invoke<GenymotionStatus>('mgr:genymotion-status')),
+      run(api.invoke<GenymotionDevice[]>('mgr:genymotion-list')),
     ]);
     androidRefresh.classList.remove('spinning');
     status = sdkStatus;
@@ -503,6 +507,8 @@ export async function renderVirtualBox(v: HTMLElement): Promise<void> {
       action: genymotionOpen,
       detail: genymotion?.available ? t('android.backend.genymotionDetail') : t('android.backend.genymotionMissing'),
     }));
+    clear(genymotionHost);
+    if (genymotion?.available) genymotionHost.append(genymotionPanel(genymotionDevices ?? [], loadAndroid));
     // The button stays usable even when the SDK was not detected: the
     // creator's first step is where it is installed, located or overridden,
     // so disabling it here only created a dead end.
@@ -605,4 +611,74 @@ function virtualAndroidBrowserPanel(machines: AndroidMachine[]): HTMLElement {
       h('div', {}, h('h2', { id: 'virtual-android-browser-title' }, t('android.virtualBrowser.title'), h('span', { class: 'pill warn', text: t('android.virtualBrowser.beta') })), status),
       h('div', { class: 'row' },
         h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.virtualBrowser.selectDevice') }), deviceSelect), open)));
+}
+
+
+function genymotionPanel(devices: GenymotionDevice[], reload: () => Promise<void>): HTMLElement {
+  const list = h('div', { class: 'vm-list' });
+  const refresh = h('button', { class: 'btn small', type: 'button', 'aria-label': t('android.genymotion.refresh') }, icon('refreshCircle', 14), h('span', { text: t('android.genymotion.refresh') })) as HTMLButtonElement;
+  const create = h('button', { class: 'btn small primary', type: 'button' }, icon('plus', 14), h('span', { text: t('android.genymotion.create') })) as HTMLButtonElement;
+  const status = h('p', { class: 'hint', role: 'status', 'aria-live': 'polite', text: t('android.genymotion.note') });
+  const paint = (): void => {
+    list.replaceChildren();
+    if (!devices.length) {
+      list.append(h('div', { class: 'empty compact' }, h('div', { class: 'empty-icon' }, icon('smartphone', 30)), h('p', { class: 'muted', text: t('android.genymotion.none') })));
+      return;
+    }
+    for (const device of devices) {
+      const running = device.status === 'running';
+      const start = h('button', { class: 'btn small', type: 'button', disabled: running }, icon('play', 13), h('span', { text: t('android.genymotion.start') })) as HTMLButtonElement;
+      const stop = h('button', { class: 'btn small', type: 'button', disabled: !running }, icon('stop', 13), h('span', { text: t('android.genymotion.stop') })) as HTMLButtonElement;
+      const more = h('button', { class: 'btn small', type: 'button', 'aria-label': t('common.more') }, icon('dots', 13), h('span', { text: t('common.more') })) as HTMLButtonElement;
+      const act = async (action: 'start' | 'stop' | 'delete' | 'reset'): Promise<void> => {
+        start.disabled = true; stop.disabled = true; more.disabled = true;
+        const channel = action === 'start' ? 'mgr:genymotion-start' : action === 'stop' ? 'mgr:genymotion-stop' : action === 'delete' ? 'mgr:genymotion-delete' : 'mgr:genymotion-reset';
+        const result = await run(api.invoke<{ ok: boolean; message: string }>(channel, device.name));
+        status.textContent = result?.message || (result?.ok ? t('android.genymotion.done') : t('android.genymotion.failed'));
+        if (!result?.ok) { start.disabled = running; stop.disabled = !running; more.disabled = false; return; }
+        toast(t('android.genymotion.done'), 'ok', result.message);
+        await reload();
+      };
+      start.onclick = () => void act('start');
+      stop.onclick = () => void act('stop');
+      more.onclick = () => popupMenu(more, [
+        { icon: 'refreshCircle', label: t('android.genymotion.reset'), danger: true, fn: () => confirmDialog(t('android.genymotion.resetConfirm', { name: device.name }), () => act('reset'), 'android.genymotion.done') },
+        { icon: 'trash', label: t('android.genymotion.delete'), danger: true, fn: () => confirmDialog(t('android.genymotion.deleteConfirm', { name: device.name }), () => act('delete'), 'android.genymotion.done') },
+      ]);
+      const detail = [device.model, device.androidVersion, device.ip || device.adbSerial].filter(Boolean).join(' · ');
+      list.append(h('div', { class: 'vm-row android-row' }, h('div', { class: 'vm-mark' }, icon('smartphone', 19)),
+        h('div', { class: 'vm-name grow' }, h('div', { class: 'vm-meta' }, h('b', { class: 'vm-title-text', text: device.name }), h('span', { class: `pill ${running ? 'ok' : 'muted'}`, text: running ? t('android.running') : t('android.genymotion.off') })), h('span', { class: 'small muted vm-detail', text: detail || t('android.genymotion.detail') })),
+        h('div', { class: 'vm-actions' }, start, stop, more)));
+    }
+  };
+  refresh.onclick = async () => { refresh.disabled = true; devices = await run(api.invoke<GenymotionDevice[]>('mgr:genymotion-list')) ?? []; refresh.disabled = false; paint(); };
+  create.onclick = () => {
+    modal(t('android.genymotion.createTitle'), (box) => {
+      const name = input('', { placeholder: t('android.genymotion.namePh'), maxlength: '80', autocomplete: 'off' });
+      const profileSlot = h('div', {}, h('p', { class: 'hint', text: t('android.genymotion.loadingProfiles') }));
+      const imageSlot = h('div', {});
+      const note = h('p', { class: 'hint', role: 'status', 'aria-live': 'polite' });
+      const submit = h('button', { class: 'btn primary', type: 'button', disabled: true }, icon('plus', 14), h('span', { text: t('android.genymotion.create') })) as HTMLButtonElement;
+      box.append(h('p', { class: 'muted', text: t('android.genymotion.createNote') }), h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.genymotion.name') }), name), profileSlot, imageSlot, note, h('div', { class: 'row end' }, submit));
+      void (async () => {
+        const profiles = await run(api.invoke<GenymotionProfiles>('mgr:genymotion-profiles'));
+        if (!profiles?.hardwareProfiles.length || !profiles.osImages.length) { profileSlot.replaceChildren(h('p', { class: 'hint warn', text: t('android.genymotion.profilesUnavailable') })); return; }
+        const profile = select(profiles.hardwareProfiles[0], profiles.hardwareProfiles.map((item): [string, string] => [item, item]), () => undefined);
+        const image = select(profiles.osImages[0], profiles.osImages.map((item): [string, string] => [item, item]), () => undefined);
+        profileSlot.replaceChildren(h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.genymotion.hardwareProfile') }), profile));
+        imageSlot.replaceChildren(h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.genymotion.osImage') }), image));
+        submit.disabled = false;
+        submit.onclick = async () => {
+          submit.disabled = true;
+          const result = await run(api.invoke<{ ok: boolean; message: string }>('mgr:genymotion-create', { name: name.value.trim(), hardwareProfile: profile.value, osImage: image.value }));
+          note.textContent = result?.message || t('android.genymotion.failed');
+          if (result?.ok) { toast(t('android.genymotion.created'), 'ok'); await reload(); closeModal(); }
+          else submit.disabled = false;
+        };
+      })();
+    });
+  };
+  paint();
+  return h('section', { class: 'vm-section android-genymotion', 'aria-labelledby': 'genymotion-title' },
+    h('div', { class: 'vm-section-head' }, h('div', {}, h('h2', { id: 'genymotion-title' }, t('android.backend.genymotion'), h('span', { class: 'pill beta', text: t('android.genymotion.beta') })), status), h('div', { class: 'row' }, create, refresh)), list);
 }
