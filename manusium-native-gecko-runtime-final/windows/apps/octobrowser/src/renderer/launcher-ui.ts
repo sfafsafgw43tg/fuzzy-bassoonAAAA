@@ -94,6 +94,7 @@ export interface Settings {
   tor: { torBrowserPath: string }; offline: boolean; offlineMode: 'online' | 'practical' | 'strict'; api: { enabled: boolean; port: number };
   /** vStudio media plugins: Mobile is standalone on this PC, Web serves browser profiles. */
   plugins: Record<MediaPluginId, { enabled: boolean }>;
+  androidVirtualBrowserBeta: boolean;
 }
 
 /** Identifiers of the two media plugins, kept in step with @octo/core. */

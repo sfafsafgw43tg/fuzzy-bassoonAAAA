@@ -444,13 +444,14 @@ export async function renderVirtualBox(v: HTMLElement): Promise<void> {
   const installHost = h('div', {});
   const setupHost = h('div', {});
   const netHost = h('div', {});
+  const virtualBrowserHost = h('div', {});
 
   v.append(h('div', { class: 'toolbar' }, h('h1', { text: t('android.title') })),
     h('section', { class: 'vm-section android-section' },
       h('div', { class: 'vm-section-head' },
         h('div', {}, h('h2', { text: t('android.sectionTitle') }), h('p', { class: 'hint', text: t('android.desc') })),
         h('div', { class: 'row' }, cameraStudio, androidCreate, androidImport, androidRefresh)),
-      engines, installHost, setupHost, netHost, androidList));
+      engines, installHost, setupHost, netHost, virtualBrowserHost, androidList));
 
   let status: AndroidStatus | undefined;
   let catalog: unknown;
@@ -502,6 +503,8 @@ export async function renderVirtualBox(v: HTMLElement): Promise<void> {
     // ---- device list ---------------------------------------------------
     clear(androidList);
     const machines = result?.machines ?? [];
+    clear(virtualBrowserHost);
+    if (S.init?.settings?.androidVirtualBrowserBeta === true) virtualBrowserHost.append(virtualAndroidBrowserPanel(machines));
     if (machines.some((machine) => machine.incomplete)) {
       androidList.append(h('p', { class: 'hint warn vm-note', text: t('android.incompleteNote') }));
     }
@@ -560,4 +563,30 @@ export async function renderVirtualBox(v: HTMLElement): Promise<void> {
     }
   };
   await loadAndroid();
+}
+
+function virtualAndroidBrowserPanel(machines: AndroidMachine[]): HTMLElement {
+  let selected = machines.find((machine) => machine.running)?.name ?? machines[0]?.name ?? '';
+  const options: Array<[string, string]> = machines.length
+    ? machines.map((machine): [string, string] => [machine.name, `${machine.deviceLabel || machine.name}${machine.running ? ' · ' + t('android.running') : ''}`])
+    : [['', t('android.virtualBrowser.none')]];
+  const deviceSelect = select<string>(selected, options, (value) => { selected = value; });
+  const open = h('button', { class: 'btn primary', 'aria-label': t('android.virtualBrowser.open') }, icon('globe', 14), h('span', { text: t('android.virtualBrowser.open') })) as HTMLButtonElement;
+  const status = h('p', { class: 'hint', 'aria-live': 'polite', text: t('android.virtualBrowser.desc') });
+  open.disabled = !selected;
+  open.onclick = async () => {
+    if (!selected) return;
+    open.disabled = true;
+    open.textContent = t('android.virtualBrowser.opening');
+    const result = await run(api.invoke<{ opened: boolean; reason: string }>('mgr:android-open-browser', selected));
+    open.disabled = false;
+    open.replaceChildren(icon('globe', 14), h('span', { text: t('android.virtualBrowser.open') }));
+    if (result?.opened) { status.textContent = t('android.virtualBrowser.opened'); toast(t('android.virtualBrowser.opened'), 'ok'); }
+    else { status.textContent = result?.reason || t('android.virtualBrowser.noBrowser'); toast(t('android.virtualBrowser.failed'), 'err', status.textContent); }
+  };
+  return h('section', { class: 'vm-section android-virtual-browser', 'aria-labelledby': 'virtual-android-browser-title' },
+    h('div', { class: 'vm-section-head' },
+      h('div', {}, h('h2', { id: 'virtual-android-browser-title' }, t('android.virtualBrowser.title'), h('span', { class: 'pill warn', text: t('android.virtualBrowser.beta') })), status),
+      h('div', { class: 'row' },
+        h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.virtualBrowser.selectDevice') }), deviceSelect), open)));
 }

@@ -1025,6 +1025,18 @@ function pluginsPanel(): HTMLElement {
   const panel = h('div', { class: 'panel plugins-panel' },
     h('h2', { text: t('plugins.title') }),
     h('p', { class: 'hint', text: t('plugins.intro') }));
+  const betaEnabled = S.init?.settings?.androidVirtualBrowserBeta === true;
+  const betaToggle = toggle(betaEnabled, 'plugins.enabled', async (value) => {
+    await saveSettings({ androidVirtualBrowserBeta: value });
+    render();
+  });
+  panel.append(h('div', { class: 'plugin-row beta-feature-row' },
+    h('div', { class: 'plugin-head' },
+      h('b', { text: t('plugins.androidBrowserBeta') }),
+      h('span', { class: 'pill warn', text: t('plugins.beta') }),
+      h('span', { class: `pill ${betaEnabled ? 'ok' : ''}`, text: t(betaEnabled ? 'state.on' : 'state.off') })),
+    h('p', { class: 'small', text: t('plugins.androidBrowserBeta.desc') }),
+    h('div', { class: 'row' }, betaToggle)));
   const list = h('div', { class: 'plugin-list' }, h('p', { class: 'small muted', text: t('state.loading') }));
   panel.append(list);
   void (async () => {

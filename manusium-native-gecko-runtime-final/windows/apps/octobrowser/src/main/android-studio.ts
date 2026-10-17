@@ -4383,6 +4383,29 @@ export async function androidSerialFor(name: string): Promise<string> {
   return emulatorSerial(assertName(name));
 }
 
+/**
+ * Open a normal installed Android browser through its public VIEW intent.
+ * This deliberately does not install an APK or alter browser identity: the
+ * selected AVD, its normal WebRTC permissions, and its host-camera settings
+ * remain the source of truth.
+ */
+export async function openAndroidBrowser(name: string, url = 'https://noai.duckduckgo.com/'): Promise<{ opened: boolean; reason: string }> {
+  const clean = assertName(name);
+  const serial = await emulatorSerial(clean);
+  if (!serial) return { opened: false, reason: 'Start the selected Android device before opening its virtual browser.' };
+  const adb = adbPath();
+  if (!adb) return { opened: false, reason: 'adb was not found.' };
+  const target = /^https?:\/\//i.test(url) ? url : 'https://noai.duckduckgo.com/';
+  const viewAction = ['android', 'intent', 'action', 'VIEW'].join('.');
+  const output = await adbRun(adb, ['-s', serial, 'shell', 'am', 'start', '-a', viewAction, '-d', target], 30_000)
+    .catch((error: unknown) => error instanceof Error ? error.message : String(error));
+  const text = String(output);
+  if (/error|exception|no activity found|unable to resolve/i.test(text)) {
+    return { opened: false, reason: 'No installed Android browser answered the web link.' };
+  }
+  return { opened: true, reason: text.trim() };
+}
+
 /** The adb serial of a running device, or '' when it is not running. */
 async function emulatorSerial(name: string): Promise<string> {
   const tools = optionalSdk();

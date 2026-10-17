@@ -149,6 +149,8 @@ export interface AppSettings {
   api: { enabled: boolean; port: number };
   /** On/off switches of the vStudio media plugins (Mobile = Android, Web = browser profiles). */
   plugins: MediaPluginSettingsMap;
+  /** Experimental AVD browser surface; hidden from Devices until explicitly enabled. */
+  androidVirtualBrowserBeta: boolean;
   filtersUpdatedAt?: string;
 }
 
@@ -169,6 +171,7 @@ export function defaultSettings(): AppSettings {
     offlineMode: 'online',
     api: { enabled: false, port: 35555 },
     plugins: defaultMediaPlugins(),
+    androidVirtualBrowserBeta: false,
   };
 }
 
@@ -291,6 +294,7 @@ export function validateSettings(value: unknown): AppSettings {
     offline: offlineMode !== 'online', offlineMode,
     api: { enabled: strictBool(api.enabled, d.api.enabled), port: strictInt(api.port, 1024, 65535, d.api.port) },
     plugins: validateMediaPlugins(value.plugins),
+    androidVirtualBrowserBeta: strictBool(value.androidVirtualBrowserBeta, d.androidVirtualBrowserBeta),
     filtersUpdatedAt: typeof value.filtersUpdatedAt === 'string' ? value.filtersUpdatedAt : undefined,
   };
 }
