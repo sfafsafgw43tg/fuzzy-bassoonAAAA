@@ -17,6 +17,7 @@ export interface GenymotionDevice {
 
 export interface GenymotionStatus {
   available: boolean;
+  managementAvailable: boolean;
   executable: string;
   gmtoolExecutable: string;
   shellExecutable: string;
@@ -52,10 +53,15 @@ function roots(): string[] {
 }
 
 function locate(file: 'genymotion.exe' | 'genymotion-shell.exe' | 'gmtool.exe'): string {
-  const found = roots().flatMap((root) => [
+  const known = [
+    process.env.ProgramW6432 ? path.join(process.env.ProgramW6432, 'Genymobile', 'Genymotion', file) : '',
+    process.env.ProgramFiles ? path.join(process.env.ProgramFiles, 'Genymobile', 'Genymotion', file) : '',
+    process.env['ProgramFiles(x86)'] ? path.join(process.env['ProgramFiles(x86)'], 'Genymobile', 'Genymotion', file) : '',
+  ];
+  const found = [...known, ...roots().flatMap((root) => [
     path.join(root, 'Genymobile', 'Genymotion', file),
     path.join(root, 'Genymobile', 'Genymotion', 'tools', file),
-  ]).find((item) => fs.existsSync(item));
+  ])].filter(Boolean).find((item) => fs.existsSync(item));
   return found ?? '';
 }
 
@@ -123,16 +129,16 @@ function parseTextDevices(raw: string): GenymotionDevice[] {
 
 export function genymotionStatus(): GenymotionStatus {
   if (process.platform !== 'win32') {
-    return { available: false, executable: '', gmtoolExecutable: '', shellExecutable: '', authenticated: 'unknown', camera: { hostUvc: true, mediaInjection: 'edition-dependent', virtualCamera: 'experimental-3.10+', fixedResolution: '1280x720' }, message: 'Genymotion Desktop integration is currently supported on Windows only.' };
+    return { available: false, managementAvailable: false, executable: '', gmtoolExecutable: '', shellExecutable: '', authenticated: 'unknown', camera: { hostUvc: true, mediaInjection: 'edition-dependent', virtualCamera: 'experimental-3.10+', fixedResolution: '1280x720' }, message: 'Genymotion Desktop integration is currently supported on Windows only.' };
   }
   const executable = locate('genymotion.exe');
   const gmtoolExecutable = locate('gmtool.exe');
   const shellExecutable = locate('genymotion-shell.exe');
   if (!executable && !gmtoolExecutable) {
-    return { available: false, executable: '', gmtoolExecutable: '', shellExecutable: '', authenticated: 'unknown', camera: { hostUvc: true, mediaInjection: 'edition-dependent', virtualCamera: 'experimental-3.10+', fixedResolution: '1280x720' }, message: 'Genymotion Desktop is not installed.' };
+    return { available: false, managementAvailable: false, executable: '', gmtoolExecutable: '', shellExecutable: '', authenticated: 'unknown', camera: { hostUvc: true, mediaInjection: 'edition-dependent', virtualCamera: 'experimental-3.10+', fixedResolution: '1280x720' }, message: 'Genymotion Desktop is not installed.' };
   }
   return {
-    available: Boolean(executable && gmtoolExecutable), executable, gmtoolExecutable, shellExecutable,
+    available: Boolean(executable || gmtoolExecutable), managementAvailable: Boolean(gmtoolExecutable), executable, gmtoolExecutable, shellExecutable,
     authenticated: 'unknown', camera: { hostUvc: true, mediaInjection: 'edition-dependent', virtualCamera: 'experimental-3.10+', fixedResolution: '1280x720' },
     message: 'Genymotion handles its own account activation and licensing. Octo never stores or bypasses credentials. Windows virtual cameras are not guaranteed; use a physical UVC webcam or Genymotion media injection.',
   };
@@ -181,8 +187,8 @@ export async function listGenymotionDevices(): Promise<GenymotionDevice[]> {
 
 export async function genymotionProfiles(): Promise<{ hardwareProfiles: string[]; osImages: string[] }> {
   const [hardware, images] = await Promise.all([command(['admin', 'hwprofiles']), command(['admin', 'osimages'])]);
-  const lines = (value: string) => value.split(/\r?\n/).map((line) => line.trim()).filter((line) => line && !/^[-=]|^(name|id)\b/i.test(line));
-  return { hardwareProfiles: lines(hardware.stdout), osImages: lines(images.stdout) };
+  const lines = (value: string) => value.split(/\r?\n/).map((line) => line.trim()).filter((line) => line && !/^[-=]|^(name|id|usage|error)\b/i.test(line));
+  return { hardwareProfiles: lines(`${hardware.stdout}\n${hardware.stderr}`), osImages: lines(`${images.stdout}\n${images.stderr}`) };
 }
 
 export async function createGenymotionDevice(input: GenymotionCreateInput): Promise<{ ok: boolean; message: string }> {
@@ -219,8 +225,9 @@ export const resetGenymotionDevice = (name: string) => mutate('factoryreset', na
 
 export function openGenymotion(): { opened: boolean; message: string } {
   const status = genymotionStatus();
-  if (!status.executable) return { opened: false, message: status.message };
-  const child = spawn(status.executable, [], { detached: true, stdio: 'ignore', windowsHide: true });
+  const executable = status.executable || (status.gmtoolExecutable ? path.join(path.dirname(status.gmtoolExecutable), 'genymotion.exe') : '');
+  if (!executable || !fs.existsSync(executable)) return { opened: false, message: status.message };
+  const child = spawn(executable, [], { detached: true, stdio: 'ignore', windowsHide: true });
   child.unref();
   return { opened: true, message: 'Genymotion Desktop launched. Complete activation in Genymotion if requested.' };
 }

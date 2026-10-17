@@ -25,7 +25,7 @@ interface MediaCompanion { plugin: string; ready?: boolean; requirements?: Array
 interface AndroidMachine { name: string; path: string; target: string; running: boolean; deviceLabel: string; resolution: string; ramMb: number; dataPartition: string; cameraFront: CameraSource; cameraBack: CameraSource; cameraFrontDevice: string; cameraBackDevice: string; cameraDevice: string; microphoneEnabled: boolean; networkSpeed: NetworkSpeed; incomplete: boolean; diskBytes: number; identity?: DeviceIdentity }
 interface AndroidStatus { javaVersion?: number; javaHome?: string; searched: string[]; missing: '' | 'sdk' | 'cmdline-tools' | 'emulator'; manualSdkRoot: boolean; available: boolean; sdkRoot: string; studioAppPath: string; avdManagerAvailable: boolean; emulatorAvailable: boolean; adbAvailable: boolean; defaultDirectory: string; mediaCompanion: MediaCompanion; devices: AndroidDevice[]; systems: AndroidSystem[] }
 interface AndroidResult { available: boolean; machines: AndroidMachine[] }
-interface GenymotionStatus { available: boolean; executable: string; gmtoolExecutable: string; shellExecutable: string; authenticated: 'unknown'; camera: { hostUvc: boolean; mediaInjection: 'edition-dependent'; virtualCamera: false }; message: string }
+interface GenymotionStatus { available: boolean; managementAvailable: boolean; executable: string; gmtoolExecutable: string; shellExecutable: string; authenticated: 'unknown'; camera: { hostUvc: boolean; mediaInjection: 'edition-dependent'; virtualCamera: 'experimental-3.10+'; fixedResolution: '1280x720' }; message: string }
 interface GenymotionDevice { id: string; name: string; status: 'running' | 'off' | 'unknown'; ip: string; adbSerial: string; androidVersion: string; model: string }
 interface GenymotionProfiles { hardwareProfiles: string[]; osImages: string[] }
 interface GenymotionCameraInfo { available: boolean; version: string; obsVirtualCamera: 'supported-experimentally' | 'upgrade-required' | 'unknown'; fixedResolution: '1280x720'; mediaFolder: string; message: string }
@@ -509,7 +509,7 @@ export async function renderVirtualBox(v: HTMLElement): Promise<void> {
       detail: genymotion?.available ? t('android.backend.genymotionDetail') : t('android.backend.genymotionMissing'),
     }));
     clear(genymotionHost);
-    if (genymotion?.available) genymotionHost.append(genymotionPanel(genymotionDevices ?? [], loadAndroid));
+    if (genymotion?.managementAvailable) genymotionHost.append(genymotionPanel(genymotionDevices ?? [], loadAndroid));
     // The button stays usable even when the SDK was not detected: the
     // creator's first step is where it is installed, located or overridden,
     // so disabling it here only created a dead end.
@@ -674,7 +674,15 @@ function genymotionPanel(devices: GenymotionDevice[], reload: () => Promise<void
       box.append(h('p', { class: 'muted', text: t('android.genymotion.createNote') }), h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.genymotion.name') }), name), profileSlot, imageSlot, note, h('div', { class: 'row end' }, submit));
       void (async () => {
         const profiles = await run(api.invoke<GenymotionProfiles>('mgr:genymotion-profiles'));
-        if (!profiles?.hardwareProfiles.length || !profiles.osImages.length) { profileSlot.replaceChildren(h('p', { class: 'hint warn', text: t('android.genymotion.profilesUnavailable') })); return; }
+        if (!profiles?.hardwareProfiles.length || !profiles.osImages.length) {
+          const open = h('button', { class: 'btn small', type: 'button' }, icon('externalLink', 13), h('span', { text: t('android.backend.genymotionOpen') })) as HTMLButtonElement;
+          open.onclick = async () => {
+            const result = await run(api.invoke<{ opened: boolean; message: string }>('mgr:genymotion-open'));
+            note.textContent = result?.message || t('android.backend.genymotionUnavailable');
+          };
+          profileSlot.replaceChildren(h('p', { class: 'hint warn', text: t('android.genymotion.profilesUnavailable') }), h('div', { class: 'row' }, open));
+          return;
+        }
         const profile = select(profiles.hardwareProfiles[0], profiles.hardwareProfiles.map((item): [string, string] => [item, item]), () => undefined);
         const image = select(profiles.osImages[0], profiles.osImages.map((item): [string, string] => [item, item]), () => undefined);
         profileSlot.replaceChildren(h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.genymotion.hardwareProfile') }), profile));
