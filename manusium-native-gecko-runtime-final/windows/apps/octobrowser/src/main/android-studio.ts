@@ -460,11 +460,27 @@ function locate(sdkRoot: string, tool: 'avdmanager' | 'sdkmanager' | 'emulator' 
 }
 
 function bundleCandidates(): string[] {
-  return [...new Set([
-    path.resolve(process.cwd(), 'studio.zip'),
-    path.resolve(__dirname, '..', '..', '..', '..', 'studio.zip'),
-    process.resourcesPath ? path.join(process.resourcesPath, 'studio.zip') : '',
-  ].filter(Boolean))];
+  const candidates: string[] = [];
+  const add = (value: string): void => {
+    if (value && !candidates.includes(value)) candidates.push(value);
+  };
+  add(path.resolve(process.cwd(), 'studio.zip'));
+  // Development builds place main code below dist/, while portable builds can
+  // place it below app.asar. Walk upward so either layout finds the repository
+  // payload without depending on the current working directory.
+  let current = __dirname;
+  for (let depth = 0; depth < 8; depth++) {
+    add(path.join(current, 'studio.zip'));
+    add(path.join(current, 'resources', 'studio.zip'));
+    current = path.dirname(current);
+  }
+  if (process.resourcesPath) {
+    add(path.join(process.resourcesPath, 'studio.zip'));
+    add(path.join(process.resourcesPath, 'app.asar.unpacked', 'studio.zip'));
+    add(path.join(path.dirname(process.resourcesPath), 'studio.zip'));
+  }
+  if (process.execPath) add(path.join(path.dirname(process.execPath), 'resources', 'studio.zip'));
+  return candidates;
 }
 
 function studioBundle(): { available: boolean; bytes: number; path: string } {
@@ -1674,7 +1690,7 @@ export function automaticWebcamFallback(
   const saved = explicitEndpoints.find((value) => /^webcam\d+$/.test(value));
   if (saved) return [{ name: saved, device: 'Saved Windows host camera endpoint', virtual: false, foreign: false }];
   if (hostCameraCount < 1) return [];
-  return [{ name: 'webcam0', device: 'Windows host camera (automatic fallback)', virtual: false, foreign: false }];
+  return [{ name: 'webcam0', device: 'Windows host camera (webcam0, unverified fallback)', virtual: false, foreign: false }];
 }
 
 /** One emulator run that prints the camera list. Whatever it printed is kept, even when it is stopped. */
@@ -1741,9 +1757,13 @@ function windowsCameraNames(): Promise<WindowsCameraName[]> {
  */
 function readWindowsCameraNames(): Promise<WindowsCameraName[]> {
   const script = "try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }; "
-    + "Get-PnpDevice -PresentOnly -Status OK -ErrorAction SilentlyContinue "
+    + "$rows=@(Get-PnpDevice -PresentOnly -Status OK -ErrorAction SilentlyContinue "
     + "| Where-Object { $_.Class -in @('Camera','Image','Media') -or $_.FriendlyName -match '(?i)camera|webcam|capture|virtual' } "
-    + "| Select-Object InstanceId, FriendlyName | ConvertTo-Json -Compress";
+    + "| Select-Object InstanceId, FriendlyName); "
+    + "if($rows.Count -eq 0){$rows=@(Get-CimInstance Win32_PnPEntity -ErrorAction SilentlyContinue "
+    + "| Where-Object { $_.Name -match '(?i)camera|webcam|capture|virtual' } "
+    + "| Select-Object @{Name='InstanceId';Expression={$_.PNPDeviceID}}, @{Name='FriendlyName';Expression={$_.Name}})}; "
+    + "$rows | ConvertTo-Json -Compress";
   return new Promise((resolve) => {
     execFile('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', script],
       { windowsHide: true, timeout: 15_000, encoding: 'utf8', maxBuffer: 4 * 1024 * 1024 },
@@ -1851,7 +1871,15 @@ export async function androidCameraChoices(deps = { tools: optionalSdk, cameraNa
     if (report.webcams.length) return { webcams: report.webcams, emulatorAvailable: true, hostCameraCount, emulatorPath: emulator, sdkRoot: root, problem: '', detail: '' };
     last = report;
   }
-  return { webcams: [], emulatorAvailable: true, hostCameraCount, emulatorPath: candidates[0], sdkRoot: path.dirname(path.dirname(candidates[0] ?? '')), problem: last.problem, detail: last.detail };
+  // Some Windows emulator builds fail `-webcam-list` after a virtual camera is
+  // hot-plugged, even though the host still has a usable capture endpoint. Keep
+  // the picker actionable with the emulator's conventional first endpoint, but
+  // mark it unverified so the UI never presents it as a successful probe.
+  const fallback = automaticWebcamFallback(hostCameraCount ?? 0, last, process.platform);
+  const detail = fallback.length
+    ? `${last.detail || 'The emulator did not return its camera list.'} webcam0 is shown as an unverified fallback.`.trim()
+    : last.detail;
+  return { webcams: fallback, emulatorAvailable: true, hostCameraCount, emulatorPath: candidates[0], sdkRoot: path.dirname(path.dirname(candidates[0] ?? '')), problem: last.problem, detail };
 }
 
 export interface ActiveCameraAssignments {
