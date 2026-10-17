@@ -1,5 +1,6 @@
 #include "registration.h"
 #include <Windows.h>
+#include <objbase.h>
 #include <iostream>
 
 int wmain(int argc, wchar_t** argv) {
