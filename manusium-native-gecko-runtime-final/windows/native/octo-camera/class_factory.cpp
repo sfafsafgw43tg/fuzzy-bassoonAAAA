@@ -14,11 +14,11 @@ HRESULT ClassFactory::CreateInstance(IUnknown* outer, REFIID riid, void** object
 HRESULT ClassFactory::LockServer(BOOL lock) { if (lock) InterlockedIncrement(&g_serverLocks); else InterlockedDecrement(&g_serverLocks); return S_OK; }
 }
 
-extern "C" HRESULT __declspec(dllexport) __stdcall DllGetClassObject(REFCLSID clsid, REFIID riid, void** object) {
-  if (clsid != octo::camera::CLSID_OctoCameraSource) return CLASS_E_CLASSNOTAVAILABLE;
+STDAPI DllGetClassObject(REFCLSID clsid, REFIID riid, void** object) {
+  if (clsid != CLSID_OctoCameraSource) return CLASS_E_CLASSNOTAVAILABLE;
   static octo::camera::ClassFactory factory;
   return factory.QueryInterface(riid, object);
 }
-extern "C" HRESULT __declspec(dllexport) __stdcall DllCanUnloadNow() {
+STDAPI DllCanUnloadNow() {
   return octo::camera::g_serverLocks == 0 ? S_OK : S_FALSE;
 }

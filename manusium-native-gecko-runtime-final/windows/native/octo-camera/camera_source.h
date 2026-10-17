@@ -49,7 +49,7 @@ class VirtualCameraSource final : public IMFMediaSourceEx, public IMFGetService 
 
  private:
   VirtualCameraSource();
-  ~VirtualCameraSource() override;
+  ~VirtualCameraSource();
   HRESULT Initialize();
 
   std::atomic<ULONG> refs_{1};
