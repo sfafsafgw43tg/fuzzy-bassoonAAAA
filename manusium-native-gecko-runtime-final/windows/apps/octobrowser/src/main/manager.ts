@@ -2681,6 +2681,23 @@ export class Manager {
           this.ctx.logger.warn('android.proxyLocation.checkFailed', { proxyId, reason: error instanceof Error ? error.message : String(error) });
         }
       }
+      // If the selected emulator endpoint is Octo's own vStudio Mobile camera,
+      // publish its producer before probing/starting the AVD. Starting the
+      // emulator first leaves CameraProvider attached to an empty DirectShow
+      // endpoint and is the source of the recurring "Camera keeps stopping"
+      // failure. Third-party cameras (OBS, DroidCam, etc.) are never started
+      // or controlled here.
+      const selectedHostEndpoints = [String(input?.cameraFrontDevice ?? ''), String(input?.cameraBackDevice ?? '')].filter(Boolean);
+      if (selectedHostEndpoints.length) {
+        const listed = await emulatorWebcams();
+        const usesOctoCamera = listed.some((camera) => selectedHostEndpoints.includes(camera.name) && /vstudio|v-studio/i.test(camera.device));
+        if (usesOctoCamera && !mediaPluginActive('vstudio-mobile')) {
+          await ensureMediaCompanionAsync('vstudio-mobile');
+          const request = requestMediaCompanionBroadcast('vstudio-mobile', true);
+          startMediaCompanion('vstudio-mobile');
+          await waitForMediaCompanionCamera('vstudio-mobile', request);
+        }
+      }
       const launched = await launchAndroidAvd({
         name: String(input?.name ?? ''), cameraFront: input?.cameraFront, cameraBack: input?.cameraBack,
         cameraFrontDevice: String(input?.cameraFrontDevice ?? ''), cameraBackDevice: String(input?.cameraBackDevice ?? ''),

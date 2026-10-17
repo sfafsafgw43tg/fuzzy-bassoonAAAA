@@ -80,7 +80,7 @@ Write-Host "Emulator: $emulator"
 Write-Host "AVD:      $AvdName"
 Write-Host "Config:   $config"
 
-$listOutput = (& $emulator -webcam-list 2>&1 | Out-String)
+$listOutput = (& $emulator "@$AvdName" -webcam-list 2>&1 | Out-String)
 $listed = @([regex]::Matches($listOutput, '\bwebcam\d{1,2}\b', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase) | ForEach-Object { $_.Value.ToLowerInvariant() } | Select-Object -Unique)
 if ($listed.Count -eq 0 -and -not $AllowUnlisted -and ($BackCamera -ne 'none' -or $FrontCamera -ne 'none')) {
   Write-Host $listOutput.Trim()

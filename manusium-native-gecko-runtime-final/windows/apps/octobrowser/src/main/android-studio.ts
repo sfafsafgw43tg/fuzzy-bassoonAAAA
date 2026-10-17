@@ -1813,7 +1813,8 @@ async function emulatorCameraReport(tools: { emulator: string; root: string }, t
   // Current emulator builds require an AVD name for -webcam-list. Older
   // builds accepted the flag without one, so retain the empty-name fallback
   // for the global picker and SDKs that still support the legacy form.
-  const target = avdName.trim() ? [`@${avdName.trim()}`] : [];
+  const probeName = avdName.trim() || scanAvdFolders()[0]?.name || '';
+  const target = probeName ? [`@${probeName}`] : [];
   const args = [...target, ...await emulatorTelemetryArgs(tools.emulator, tools.root), ...(forPicker ? ['-webcam-list', '-verbose'] : ['-webcam-list'])];
   const run = await runCameraList(tools.emulator, args, tools.root, timeout);
   const parsed = parseWebcamList(run.text);

@@ -151,7 +151,7 @@ if (-not (Test-Path -LiteralPath $apk)) { Fail "Diagnostic APK was not produced 
 $avds = @(& $emulator -list-avds 2>&1 | ForEach-Object { $_.ToString().Trim() } | Where-Object { $_ })
 if ($avds -notcontains $AvdName) { Fail "AVD '$AvdName' is not installed. Available AVDs: $($avds -join ', ')" }
 
-$webcams = (& $emulator -webcam-list 2>&1 | Out-String)
+$webcams = (& $emulator "@$AvdName" -webcam-list 2>&1 | Out-String)
 Write-Host $webcams.Trim()
 $listed = @([regex]::Matches($webcams, '\bwebcam\d{1,2}\b', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase) | ForEach-Object { $_.Value.ToLowerInvariant() } | Select-Object -Unique)
 foreach ($camera in @($BackCamera, $FrontCamera)) {
