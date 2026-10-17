@@ -15,6 +15,7 @@ add_library(octo-camera-source SHARED
   media_types.cpp
   shared_frame_reader.cpp
   class_factory.cpp
+  octo_camera_guids.cpp
   dllmain.cpp
 )
 

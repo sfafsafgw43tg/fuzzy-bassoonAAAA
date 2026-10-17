@@ -4,7 +4,7 @@ import path from 'node:path';
 const root = path.resolve('native/octo-camera');
 const required = [
   'CMakeLists.txt', 'README.md', 'feed_protocol.h', 'frame_queue.h',
-  'media_types.cpp', 'camera_source.cpp', 'camera_stream.cpp',
+  'media_types.cpp', 'camera_source.cpp', 'camera_stream.cpp', 'octo_camera_guids.cpp',
   'shared_frame_reader.cpp', 'class_factory.cpp', 'registration.cpp', 'cameractl.cpp',
 ];
 for (const file of required) {
