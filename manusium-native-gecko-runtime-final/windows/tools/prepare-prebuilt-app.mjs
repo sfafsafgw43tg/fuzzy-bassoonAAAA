@@ -25,7 +25,20 @@ const electronDir = path.join(root, 'node_modules', 'electron');
 const electronDist = path.join(electronDir, 'dist');
 const electronExe = path.join(electronDist, 'electron.exe');
 if (!fs.existsSync(electronExe)) {
-  throw new Error(`Prebuilt Electron/Chromium binary is missing: ${electronExe}. Run the dependency repair step first.`);
+  // ensure-deps normally performs this repair, but source installers and copied
+  // checkouts can reach this script directly after npm ran with scripts disabled.
+  // Repair the verified Electron package here instead of failing with a vague
+  // missing-prebuilt error.
+  const installScript = path.join(electronDir, 'install.js');
+  if (fs.existsSync(installScript)) {
+    const repair = spawnSync(process.execPath, [installScript], { cwd: root, stdio: 'inherit', windowsHide: true });
+    if (repair.error || repair.status !== 0) {
+      throw new Error(`Electron runtime download failed (exit ${repair.status ?? 'unknown'}): ${repair.error?.message ?? 'check the network and npm cache, then rerun install.bat.'}`);
+    }
+  }
+  if (!fs.existsSync(electronExe)) {
+    throw new Error(`Prebuilt Electron runtime is missing: ${electronExe}. Close running Electron processes, check network access to the Electron mirror, then rerun install.bat.`);
+  }
 }
 
 const chromiumVersion = process.env.INKBROWSER_CHROMIUM_VERSION ?? '155.0.8059.39';

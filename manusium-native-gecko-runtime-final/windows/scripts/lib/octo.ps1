@@ -2479,7 +2479,7 @@ function Get-SetupSteps {
           # release-publication gap, not a damaged runtime. Keep the Electron
           # app usable, but do not hide checksum, manifest, or other failures.
           $fetchError = [string]$fetch.text
-          if ($fetchError -match '(?i)HTTP 404|release not found|no release') {
+          if ($fetchError -match '(?i)HTTP 404|release not found|no release|fetch failed|EACCES|ENETUNREACH|ECONN|ETIMEDOUT|network') {
             Warn (T 'nativeRuntimeNotPublished')
           } else {
             foreach ($line in @($fetchError -split "`r?`n" | Select-Object -Last 20)) { Write-Log 'error' $line }
