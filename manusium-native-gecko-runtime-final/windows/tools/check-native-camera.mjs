@@ -26,6 +26,8 @@ const directShowCmake = fs.readFileSync(path.join(directShowRoot, 'CMakeLists.tx
 const directShowFrameBuffer = fs.readFileSync(path.join(directShowRoot, 'softcamcore/FrameBuffer.cpp'), 'utf8');
 const directShowStream = fs.readFileSync(path.join(directShowRoot, 'softcamcore/DShowSoftcam.cpp'), 'utf8');
 const mediaFrameReader = fs.readFileSync(path.join(root, 'shared_frame_reader.cpp'), 'utf8');
+const directShowFilter = fs.readFileSync(path.join(directShowRoot, 'softcam.cpp'), 'utf8');
+const registrationHeader = fs.readFileSync(path.join(root, 'registration.h'), 'utf8');
 const assertions = [
   [cmake.includes('mfsensorgroup'), 'Media Foundation sensor-group library is linked'],
   [cmake.includes('registration.cpp'), 'registration client is built'],
@@ -45,6 +47,9 @@ const assertions = [
   [mediaFrameReader.includes('MapViewOfFile(') && mediaFrameReader.includes('VirtualQuery'), 'Media Foundation reader maps the actual shared-memory size'],
   [directShowStream.includes('if (!m_screenshot)') && directShowStream.includes('std::nothrow'), 'DirectShow fallback initializes a safe frame before the feed is active'],
   [directShowStream.includes('m_valid(true)') && directShowStream.includes('m_width(m_frame_buffer.width() > 0 ? m_frame_buffer.width() : 1280)'), 'DirectShow fallback advertises a stable stream without an active producer'],
+  [registrationHeader.includes('kDirectShowClsid'), 'Media Foundation and DirectShow have separate registration identifiers'],
+  [directShowFilter.includes('0xa6c2b7e1'), 'DirectShow filter uses the dedicated CLSID'],
+  [control.includes('FindSiblingDirectShow'), 'camera controller discovers the bundled DirectShow DLL automatically'],
 ];
 for (const [ok, message] of assertions) if (!ok) throw new Error(`native camera contract failed: ${message}`);
 console.log(`native camera contract ok (${required.length} files)`);

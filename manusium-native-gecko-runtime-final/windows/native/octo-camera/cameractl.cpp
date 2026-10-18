@@ -2,6 +2,7 @@
 #include <Windows.h>
 #include <objbase.h>
 #include <shellapi.h>
+#include <filesystem>
 #include <iostream>
 
 namespace {
@@ -28,6 +29,13 @@ HRESULT RunElevatedDirectShow(const std::wstring& action, const std::wstring& fi
   CloseHandle(execute.hProcess);
   return exitCode == 0 ? S_OK : HRESULT_FROM_WIN32(ERROR_ACCESS_DENIED);
 }
+
+std::wstring FindSiblingDirectShow(const std::wstring& sourceDll) {
+  std::error_code error;
+  const auto candidate = std::filesystem::path(sourceDll).parent_path() / L"octo-directshow-camera.dll";
+  if (std::filesystem::is_regular_file(candidate, error)) return candidate.wstring();
+  return {};
+}
 }
 
 int wmain(int argc, wchar_t** argv) {
@@ -53,6 +61,7 @@ int wmain(int argc, wchar_t** argv) {
     hr = command == L"register-directshow" ? octo::camera::InstallDirectShow(argv[2]) : octo::camera::UninstallDirectShow(argv[2]);
   } else if (command == L"install") {
     if (sourcePath.empty()) { std::wcerr << L"install requires --source <octo-camera-source.dll>\n"; if (SUCCEEDED(com)) CoUninitialize(); return 2; }
+    if (directShowPath.empty()) directShowPath = FindSiblingDirectShow(sourcePath);
     const HRESULT mediaFoundation = octo::camera::InstallCurrentUser(sourcePath);
     HRESULT directShow = S_OK;
     // Android Emulator discovers Windows cameras through DirectShow even on
@@ -66,6 +75,7 @@ int wmain(int argc, wchar_t** argv) {
     else if (SUCCEEDED(mediaFoundation) && FAILED(directShow)) hr = directShow;
     else hr = mediaFoundation;
   } else if (command == L"uninstall") {
+    if (directShowPath.empty() && !sourcePath.empty()) directShowPath = FindSiblingDirectShow(sourcePath);
     const HRESULT mediaFoundation = octo::camera::UninstallCurrentUser();
     HRESULT directShow = S_OK;
     if (!directShowPath.empty()) {
@@ -78,7 +88,7 @@ int wmain(int argc, wchar_t** argv) {
   } else if (command == L"status") {
     bool installed = false;
     hr = octo::camera::IsInstalled(installed);
-    if (SUCCEEDED(hr) && !installed && !directShowPath.empty()) {
+    if (SUCCEEDED(hr) && !installed) {
       bool directShowInstalled = false;
       hr = octo::camera::IsDirectShowInstalled(directShowInstalled);
       installed = directShowInstalled;

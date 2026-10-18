@@ -4,10 +4,12 @@
 #include <mfapi.h>
 #include <mferror.h>
 #include <shlwapi.h>
+#include <dshow.h>
 #include <filesystem>
 
 namespace octo::camera {
 static std::wstring ClsidKey() { return L"Software\\Classes\\CLSID\\" + std::wstring(kSourceClsid); }
+static std::wstring DirectShowClsidKey() { return L"Software\\Classes\\CLSID\\" + std::wstring(kDirectShowClsid); }
 
 using CreateVirtualCameraFn = HRESULT (WINAPI*)(
   MFVirtualCameraType, MFVirtualCameraLifetime, MFVirtualCameraAccess,
@@ -97,8 +99,19 @@ static HRESULT CallDirectShowRegistration(const std::wstring& filterDll, const c
   return hr;
 }
 
+static void RemoveLegacyDirectShowEntry() {
+  IFilterMapper2* mapper = nullptr;
+  if (SUCCEEDED(CoCreateInstance(CLSID_FilterMapper2, nullptr, CLSCTX_INPROC_SERVER,
+                                 IID_IFilterMapper2, reinterpret_cast<void**>(&mapper)))) {
+    mapper->UnregisterFilter(&CLSID_VideoInputDeviceCategory, 0, CLSID_OctoCameraSource);
+    mapper->Release();
+  }
+}
+
 HRESULT InstallDirectShow(const std::wstring& filterDll) {
-  return CallDirectShowRegistration(filterDll, "DllRegisterServer");
+  const HRESULT hr = CallDirectShowRegistration(filterDll, "DllRegisterServer");
+  if (SUCCEEDED(hr)) RemoveLegacyDirectShowEntry();
+  return hr;
 }
 
 HRESULT UninstallDirectShow(const std::wstring& filterDll) {
@@ -108,7 +121,7 @@ HRESULT UninstallDirectShow(const std::wstring& filterDll) {
 HRESULT IsDirectShowInstalled(bool& installed) {
   installed = false;
   HKEY key = nullptr;
-  const LSTATUS status = RegOpenKeyExW(HKEY_CLASSES_ROOT, ClsidKey().c_str(), 0, KEY_READ, &key);
+  const LSTATUS status = RegOpenKeyExW(HKEY_CLASSES_ROOT, DirectShowClsidKey().c_str(), 0, KEY_READ, &key);
   if (status == ERROR_FILE_NOT_FOUND) return S_OK;
   if (status != ERROR_SUCCESS) return HRESULT_FROM_WIN32(status);
   installed = true;
