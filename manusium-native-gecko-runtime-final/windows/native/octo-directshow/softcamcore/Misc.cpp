@@ -1,6 +1,7 @@
 #include "Misc.h"
 
 #include <windows.h>
+#include <mmsystem.h>
 #include <cmath>
 #include <cassert>
 
