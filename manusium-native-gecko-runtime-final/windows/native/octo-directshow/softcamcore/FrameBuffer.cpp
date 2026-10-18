@@ -116,6 +116,7 @@ void FrameBuffer::transferToDIB(void* image_bits, std::uint64_t* out_frame_count
   if (!image_bits || !*this) return;
 
   octo::camera::FeedHeader header{};
+  MemoryBarrier();
   std::memcpy(&header, view_, sizeof(header));
   if (!octo::camera::IsValidHeader(header, mapping_bytes_) ||
       header.width != static_cast<std::uint32_t>(width_) ||
@@ -126,6 +127,7 @@ void FrameBuffer::transferToDIB(void* image_bits, std::uint64_t* out_frame_count
 
   std::vector<std::uint8_t> nv12(header.frameBytes);
   std::memcpy(nv12.data(), view_ + octo::camera::kHeaderBytes, nv12.size());
+  MemoryBarrier();
   octo::camera::FeedHeader after{};
   std::memcpy(&after, view_, sizeof(after));
   if (after.sequence != header.sequence) {
