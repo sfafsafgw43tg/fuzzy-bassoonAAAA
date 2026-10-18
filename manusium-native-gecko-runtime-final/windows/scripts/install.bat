@@ -18,6 +18,18 @@ rem   install.bat -Background   run the complete setup hidden; inspect %LOCALAPP
 rem The classic entry point starts immediately without a startup elevation handoff.
 rem Individual privileged operations request UAC at the point where Windows requires it.
 setlocal EnableExtensions DisableDelayedExpansion
+set "OCTO_PS=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
+if not exist "%OCTO_PS%" set "OCTO_PS=powershell.exe"
+set "OCTO_ELEVATED_ARG="
+for %%A in (%*) do if /I "%%~A"=="-Elevated" set "OCTO_ELEVATED_ARG=1"
+if not defined OCTO_ELEVATED_ARG (
+  net session >nul 2>&1
+  if errorlevel 1 (
+    call :octo_elevate %*
+    call set "OCTO_ELEVATE_RC=%%ERRORLEVEL%%"
+    goto :octo_elevated_exit
+  )
+)
 rem Classic installer behavior: a normal double-click keeps this console visible so
 rem the user can see UAC, progress, errors and the final result. Only an explicit
 rem -Background request uses the hidden launcher; -NoGui and -Interactive remain visible.
@@ -36,10 +48,16 @@ rem Remember the console code page, switch to UTF-8 for PowerShell output, resto
 set "OCTO_CP="
 for /f "tokens=2 delims=:." %%a in ('chcp') do set "OCTO_CP=%%a"
 chcp 65001 >nul 2>&1
-set "OCTO_PS=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
-if not exist "%OCTO_PS%" set "OCTO_PS=powershell.exe"
 "%OCTO_PS%" -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0lib\octo.ps1" install %*
 set "OCTO_RC=%ERRORLEVEL%"
 if defined OCTO_CP chcp %OCTO_CP% >nul 2>&1
 if not defined OCTO_NOPAUSE pause
 endlocal & exit /b %OCTO_RC%
+
+:octo_elevated_exit
+endlocal & exit /b %OCTO_ELEVATE_RC%
+
+:octo_elevate
+if "%~1"=="" (set "OCTO_ELEVATE_ARGS=__OCTO_NO_ARGS__") else (set "OCTO_ELEVATE_ARGS=%*")
+"%OCTO_PS%" -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0lib\elevate-installer.ps1" -BatchPath "%~f0" -WorkingDirectory "%~dp0" %OCTO_ELEVATE_ARGS%
+exit /b %ERRORLEVEL%

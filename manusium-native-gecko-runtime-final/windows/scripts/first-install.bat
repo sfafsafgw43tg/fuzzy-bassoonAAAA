@@ -9,6 +9,18 @@ rem Thin wrapper: all logic is in lib\octo.ps1 (Windows PowerShell 5.1, built in
 rem Paths with spaces and Polish characters are safe: %~dp0 is always quoted and
 rem delayed expansion is disabled (so "!" in folder names is not touched).
 setlocal EnableExtensions DisableDelayedExpansion
+set "OCTO_PS=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
+if not exist "%OCTO_PS%" set "OCTO_PS=powershell.exe"
+set "OCTO_ELEVATED_ARG="
+for %%A in (%*) do if /I "%%~A"=="-Elevated" set "OCTO_ELEVATED_ARG=1"
+if not defined OCTO_ELEVATED_ARG (
+  net session >nul 2>&1
+  if errorlevel 1 (
+    call :octo_elevate %*
+    call set "OCTO_ELEVATE_RC=%%ERRORLEVEL%%"
+    goto :octo_elevated_exit
+  )
+)
 set "OCTO_WANTS_CONSOLE="
 echo %* | find /i "-nogui" >nul 2>&1 && set "OCTO_WANTS_CONSOLE=1"
 echo %* | find /i "-interactive" >nul 2>&1 && set "OCTO_WANTS_CONSOLE=1"
@@ -33,3 +45,11 @@ set "OCTO_RC=%ERRORLEVEL%"
 if defined OCTO_CP chcp %OCTO_CP% >nul 2>&1
 if not defined OCTO_NOPAUSE pause
 endlocal & exit /b %OCTO_RC%
+
+:octo_elevated_exit
+endlocal & exit /b %OCTO_ELEVATE_RC%
+
+:octo_elevate
+if "%~1"=="" (set "OCTO_ELEVATE_ARGS=__OCTO_NO_ARGS__") else (set "OCTO_ELEVATE_ARGS=%*")
+"%OCTO_PS%" -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0lib\elevate-installer.ps1" -BatchPath "%~f0" -WorkingDirectory "%~dp0" %OCTO_ELEVATE_ARGS%
+exit /b %ERRORLEVEL%
