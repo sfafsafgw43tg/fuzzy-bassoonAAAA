@@ -105,6 +105,17 @@ HRESULT UninstallDirectShow(const std::wstring& filterDll) {
   return CallDirectShowRegistration(filterDll, "DllUnregisterServer");
 }
 
+HRESULT IsDirectShowInstalled(bool& installed) {
+  installed = false;
+  HKEY key = nullptr;
+  const LSTATUS status = RegOpenKeyExW(HKEY_CLASSES_ROOT, ClsidKey().c_str(), 0, KEY_READ, &key);
+  if (status == ERROR_FILE_NOT_FOUND) return S_OK;
+  if (status != ERROR_SUCCESS) return HRESULT_FROM_WIN32(status);
+  installed = true;
+  RegCloseKey(key);
+  return S_OK;
+}
+
 HRESULT IsInstalled(bool& installed) {
   installed = false;
   HKEY key = nullptr;

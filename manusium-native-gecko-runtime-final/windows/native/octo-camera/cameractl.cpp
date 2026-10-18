@@ -65,7 +65,13 @@ int wmain(int argc, wchar_t** argv) {
       if (IsAccessDenied(hr)) hr = RunElevatedDirectShow(L"unregister-directshow", directShowPath);
     }
   } else if (command == L"status") {
-    bool installed = false; hr = octo::camera::IsInstalled(installed);
+    bool installed = false;
+    hr = octo::camera::IsInstalled(installed);
+    if (SUCCEEDED(hr) && !installed && !directShowPath.empty()) {
+      bool directShowInstalled = false;
+      hr = octo::camera::IsDirectShowInstalled(directShowInstalled);
+      installed = directShowInstalled;
+    }
     if (SUCCEEDED(hr)) { std::wcout << (installed ? L"installed\n" : L"not installed\n"); return installed ? 0 : 1; }
   } else { std::wcerr << L"unknown command\n"; return 2; }
   const bool success = SUCCEEDED(hr);

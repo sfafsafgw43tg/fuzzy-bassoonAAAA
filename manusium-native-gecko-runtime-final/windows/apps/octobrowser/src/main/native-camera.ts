@@ -71,8 +71,10 @@ export async function nativeCameraStatus(): Promise<NativeCameraStatus> {
     return { supported: true, available: false, installed: false, controlPath, sourcePath, directShowPath, message: MISSING_COMPONENT };
   }
   try {
-    await runControl(['status']);
-    return { supported: true, available: true, installed: true, controlPath, sourcePath, directShowPath, message: 'Octo Camera is registered for this Windows user.' };
+    const statusArgs = ['status'];
+    if (directShowPath && fs.existsSync(directShowPath)) statusArgs.push('--directshow', directShowPath);
+    await runControl(statusArgs);
+    return { supported: true, available: true, installed: true, controlPath, sourcePath, directShowPath, message: 'Octo Camera is registered for this Windows user (Media Foundation or DirectShow fallback).' };
   } catch {
     return { supported: true, available: true, installed: false, controlPath, sourcePath, directShowPath, message: 'Octo Camera is available but not registered for this Windows user.' };
   }

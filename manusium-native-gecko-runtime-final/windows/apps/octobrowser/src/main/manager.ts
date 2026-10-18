@@ -3058,7 +3058,20 @@ export class Manager {
       return openAndroidBrowser(String(name ?? ''));
     });
     handle('mgr:native-camera-status', L, () => nativeCameraStatus());
-    handle('mgr:native-camera-install', L, () => installNativeCamera());
+    handle('mgr:native-camera-install', L, async () => {
+      const result = await installNativeCamera();
+      if (result.installed && process.platform === 'win32' && Notification.isSupported()) {
+        const strings = DICTS[this.ctx.lang] ?? DICTS.en;
+        const notification = new Notification({
+          title: strings['android.nativeCamera.connectedTitle'],
+          body: strings['android.nativeCamera.connectedBody'],
+          silent: false,
+        });
+        notification.on('click', () => { this.launcher?.show(); this.launcher?.focus(); });
+        notification.show();
+      }
+      return result;
+    });
     handle('mgr:native-camera-uninstall', L, () => uninstallNativeCamera());
     handle('mgr:plugin-update', L, async (_e, plugin: string) => {
       const id = plugin === 'vstudio-web' ? 'vstudio-web' : 'vstudio-mobile';

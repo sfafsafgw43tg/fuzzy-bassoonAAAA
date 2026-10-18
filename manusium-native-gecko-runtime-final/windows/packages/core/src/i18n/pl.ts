@@ -1206,6 +1206,8 @@ export const pl: Record<string, string> = {
   'android.nativeCamera.installed': 'Kamera Windows zainstalowana',
   'android.nativeCamera.removed': 'Kamera Windows usunięta',
   'android.nativeCamera.failed': 'Operacja kamery Windows nie powiodła się',
+  'android.nativeCamera.connectedTitle': 'Kamera Octo została podłączona',
+  'android.nativeCamera.connectedBody': 'Urządzenie kamery Windows jest teraz dostępne. Uruchom Camera Studio i wybierz Octo Camera lub Unity Capture w aplikacji kamery.',
   'android.progress.starting': 'Uruchamianie',
   'android.progress.download': 'Pobieranie',
   'android.downloads.title': 'Pobrane · urządzenie Android',

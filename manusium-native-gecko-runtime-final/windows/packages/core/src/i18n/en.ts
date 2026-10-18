@@ -1207,6 +1207,8 @@ export const en: Record<string, string> = {
   'android.nativeCamera.installed': 'Windows Camera installed',
   'android.nativeCamera.removed': 'Windows Camera removed',
   'android.nativeCamera.failed': 'Windows Camera action failed',
+  'android.nativeCamera.connectedTitle': 'Octo Camera connected',
+  'android.nativeCamera.connectedBody': 'A Windows camera device is now available. Start Camera Studio and select Octo Camera or Unity Capture in your camera app.',
   'android.progress.starting': 'Starting',
   'android.progress.download': 'Downloading',
   'android.downloads.title': 'Downloads · Android device',

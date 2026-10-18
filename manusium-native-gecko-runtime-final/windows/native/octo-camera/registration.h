@@ -11,6 +11,7 @@ HRESULT InstallCurrentUser(const std::wstring& sourceDll);
 HRESULT UninstallCurrentUser();
 HRESULT InstallDirectShow(const std::wstring& filterDll);
 HRESULT UninstallDirectShow(const std::wstring& filterDll);
+HRESULT IsDirectShowInstalled(bool& installed);
 HRESULT IsInstalled(bool& installed);
 
 } // namespace octo::camera
