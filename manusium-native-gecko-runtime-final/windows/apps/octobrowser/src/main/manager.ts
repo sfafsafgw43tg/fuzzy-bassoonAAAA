@@ -3389,11 +3389,11 @@ export class Manager {
       if (withData && list.some((id) => this.isRunning(id))) throw new Error(this.t('err.closeProfileFirst'));
       const win = BrowserWindow.fromWebContents(e.sender)!;
       const r = await dialog.showSaveDialog(win, {
-        defaultPath: path.join(ctx.layout.backups, `octo-backup-${fileStamp()}.octobackup`),
-        filters: [{ name: 'Octo.su backup (encrypted)', extensions: ['octobackup'] }],
+        defaultPath: path.join(ctx.layout.backups, `octo-profiles-${fileStamp()}.zip`),
+        filters: [{ name: 'Octo.su portable profile ZIP (encrypted)', extensions: ['zip'] }],
       });
       if (r.canceled || !r.filePath) return null;
-      const result = await this.profiles.exportBundle(list, passphrase, r.filePath, !!withData);
+      const result = await this.profiles.exportBundleZip(list, passphrase, r.filePath, !!withData);
       L.info('backup.exported', { profiles: result.profiles, withData: !!withData });
       return { ...result, file: r.filePath };
     });
@@ -3401,7 +3401,7 @@ export class Manager {
       const win = BrowserWindow.fromWebContents(e.sender)!;
       const r = await dialog.showOpenDialog(win, {
         properties: ['openFile'],
-        filters: [{ name: 'Octo.su backup', extensions: ['octobackup'] }],
+        filters: [{ name: 'Octo.su portable profile ZIP', extensions: ['zip', 'octobackup'] }],
       });
       if (r.canceled || !r.filePaths[0]) return null;
       return { file: r.filePaths[0], name: path.basename(r.filePaths[0]) };
@@ -3409,7 +3409,7 @@ export class Manager {
     handle('mgr:backup-import', L, async (_e, file: string, passphrase: string) => {
       if (!file) throw new Error(this.t('backup.needFile'));
       try {
-        const created = await this.profiles.importBundle(String(file), String(passphrase ?? ''));
+        const created = await this.profiles.importBundleZip(String(file), String(passphrase ?? ''));
         this.pushProfiles();
         L.info('backup.imported', { profiles: created.length });
         return { profiles: created.map((profile) => ({ id: profile.id, name: profile.name })) };

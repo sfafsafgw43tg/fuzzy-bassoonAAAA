@@ -51,7 +51,7 @@ export function renderBackup(root: HTMLElement): void {
 }
 
 /** Export: every stopped profile, a fresh phrase shown once, one file. */
-async function exportFlow(): Promise<void> {
+export async function exportFlow(): Promise<void> {
   // The rail can be clicked before the first profile list arrives; ask once so
   // "Export" never says there is nothing to back up while profiles exist.
   if (!S.profiles.length) S.profiles = (await run(api.invoke<Profile[]>('mgr:profiles'))) ?? S.profiles;
@@ -81,7 +81,7 @@ async function exportFlow(): Promise<void> {
 }
 
 /** Import: pick the file, type its 12 words, get the profiles as new entries. */
-async function importFlow(): Promise<void> {
+export async function importFlow(): Promise<void> {
   const picked = await run(api.invoke<{ file: string; name: string } | null>('mgr:backup-pick'));
   if (!picked) return;
 

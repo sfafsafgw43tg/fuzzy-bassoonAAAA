@@ -16,6 +16,7 @@ export * from './credman';
 export * from './secretstore';
 export * from './privacy';
 export * from './archive';
+export * from './portable-zip';
 export * from './profiles';
 export * from './mobile';
 export * from './browser-identity';

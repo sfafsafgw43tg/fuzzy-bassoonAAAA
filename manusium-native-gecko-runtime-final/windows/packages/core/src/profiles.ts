@@ -23,6 +23,7 @@ import { copyDir, ensureDir, secureDeleteDir, atomicWriteFile } from './fsutil';
 import { ProtectionConfig, ProtectionLevel } from './privacy';
 import { browserEngineFor, DEFAULT_CHROMIUM_RUNTIME_VERSION, type BrowserEngine } from './inkbrowser';
 import { packDir, unpackTo, isCachePath } from './archive';
+import { unzipSingleFile, zipSingleFile } from './portable-zip';
 import {
   KdfParams, DEFAULT_KDF, decryptWithKey, decryptWithPassword, deriveKey, encryptWithKey, encryptWithPassword,
   wipe,
@@ -1129,6 +1130,19 @@ export class ProfileManager {
     }
   }
 
+  /** Export the encrypted bundle inside a standard ZIP for easy transfer. */
+  async exportBundleZip(ids: string[], passphrase: string, outFile: string, includeData = true): Promise<{ profiles: number; bytes: number }> {
+    const temp = path.join(this.layout.temp, `bundle-${crypto.randomBytes(6).toString('hex')}.octobackup`);
+    ensureDir(this.layout.temp);
+    try {
+      const result = await this.exportBundle(ids, passphrase, temp, includeData);
+      const archive = zipSingleFile('octo-profile-bundle.octobackup', fs.readFileSync(temp));
+      atomicWriteFile(outFile, archive);
+      return { profiles: result.profiles, bytes: archive.length };
+    } finally {
+      fs.rmSync(temp, { force: true });
+    }
+  }
   /**
    * Read a bundle's manifest without importing anything, so the UI can show
    * what is inside before the user commits to it.
@@ -1178,6 +1192,21 @@ export class ProfileManager {
     }
   }
 
+  /** Import a portable ZIP or the legacy encrypted .octobackup format. */
+  async importBundleZip(file: string, passphrase: string): Promise<Profile[]> {
+    const input = fs.readFileSync(file);
+    const payload = input.subarray(0, 4).equals(Buffer.from([0x50, 0x4b, 0x03, 0x04]))
+      ? unzipSingleFile(input, 'octo-profile-bundle.octobackup')
+      : input;
+    const temp = path.join(this.layout.temp, `bundle-${crypto.randomBytes(6).toString('hex')}.octobackup`);
+    ensureDir(this.layout.temp);
+    try {
+      fs.writeFileSync(temp, payload);
+      return await this.importBundle(temp, passphrase);
+    } finally {
+      fs.rmSync(temp, { force: true });
+    }
+  }
   /**
    * Import an encrypted export as a NEW profile (new id, never overwrites).
    * This is also the "recover my profile on another computer" path: the export

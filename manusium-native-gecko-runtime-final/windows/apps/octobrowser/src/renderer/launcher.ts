@@ -15,7 +15,7 @@ import { renderProfiles, renderFolders } from './launcher-profiles';
 import { renderProxies } from './launcher-proxies';
 import { renderTrash } from './launcher-trash';
 import { renderVirtualBox } from './launcher-virtualbox';
-import { renderBackup } from './launcher-backup';
+import { exportFlow, importFlow, renderBackup } from './launcher-backup';
 import { runInstall } from './launcher-android-install';
 import { openDolphinImportDialog } from './launcher-dolphin';
 
@@ -670,6 +670,13 @@ function renderSettings(v: HTMLElement): void {
       h('span', { class: 'hint', text: t('settings.dataDirHint2') })),
   ));
 
+  const portableExport = h('button', { class: 'btn primary' }, icon('export', 15), h('span', { text: t('backup.exportZip') }));
+  const portableImport = h('button', { class: 'btn' }, icon('import', 15), h('span', { text: t('backup.importZip') }));
+  portableExport.onclick = () => void exportFlow();
+  portableImport.onclick = () => void importFlow();
+  v.append(h('div', { class: 'panel' }, h('h2', { text: t('settings.portableProfiles') }),
+    h('p', { class: 'hint', text: t('settings.portableProfilesHint') }),
+    h('div', { class: 'row' }, portableExport, portableImport)));
   const archiveBody = h('div', { class: 'archive-list' }, h('p', { class: 'muted', text: t('settings.archiveLoading') }));
   const archivePanel = h('details', { class: 'panel profile-archive-panel' });
   const archiveSummary = h('summary', { class: 'archive-summary' },
