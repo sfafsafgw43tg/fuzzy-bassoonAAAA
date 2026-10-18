@@ -9,7 +9,7 @@ const installer = fs.readFileSync(path.join(root, 'scripts/lib/octo.ps1'), 'utf8
 const fn = (name: string) => new RegExp(`function ${name}(?:\\([^\\n]*\\))? \\{([\\s\\S]*?)\\r?\\n\\}`).exec(installer)?.[1] ?? '';
 describe('branded local Windows setup', () => {
   it('keeps strict packaging separate while setup uses the prebuilt app runtime', () => {
-    expect(installer).not.toContain("package:local:windows");
+    expect(installer).toContain("package:local:windows");
     expect(installer).toContain("prepare:prebuilt:windows");
     expect(prebuilt).toContain("path.join(outputResources, 'app')");
     expect(prebuilt).toContain('copyTree(electronDist, output)');

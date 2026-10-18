@@ -2507,7 +2507,21 @@ function Get-SetupSteps {
           if ($detail.Length -gt 700) { $detail = $detail.Substring(0, 700) + '...' }
           if (-not $detail) { $detail = 'No output was returned. Check that Node.js, the Electron runtime, and the release folder are writable.' }
           Warn "Prepare prebuilt Octo applications failed (exit $($prepared.code)): $detail"
-          return $false
+          # Manual Electron layout is preferred, but electron-builder can still
+          # produce a valid runnable directory when a copied checkout has a
+          # stale Electron dist tree or a locked release folder. Retry through
+          # the existing builder and keep native Chromium optional for this
+          # recovery path; the app remains fully usable with Electron profiles.
+          $oldSkipNative = $env:OCTO_SKIP_NATIVE_RUNTIME_VERIFY
+          $env:OCTO_SKIP_NATIVE_RUNTIME_VERIFY = '1'
+          $fallback = Invoke-NpmResult @('run', 'package:local:windows')
+          if ($null -eq $oldSkipNative) { Remove-Item Env:OCTO_SKIP_NATIVE_RUNTIME_VERIFY -ErrorAction SilentlyContinue } else { $env:OCTO_SKIP_NATIVE_RUNTIME_VERIFY = $oldSkipNative }
+          if ($fallback.code -ne 0) {
+            foreach ($line in @(([string]$fallback.text) -split "`r?`n" | Where-Object { $_ -and $_.Trim() } | Select-Object -Last 20)) { Write-Log 'error' $line }
+            Warn "Electron Builder fallback also failed (exit $($fallback.code)). Close running apps and retry setup."
+            return $false
+          }
+          Say 'Electron Builder fallback completed; continuing with the Electron compatibility app.' 'Yellow'
         }
         if (-not (Install-NativeCameraBundle)) { return $false }
         if ($nativeAvailable) {
