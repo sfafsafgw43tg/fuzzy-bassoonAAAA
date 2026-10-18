@@ -47,6 +47,8 @@ const assertions = [
   [mediaFrameReader.includes('MapViewOfFile(') && mediaFrameReader.includes('VirtualQuery'), 'Media Foundation reader maps the actual shared-memory size'],
   [directShowStream.includes('if (!m_screenshot)') && directShowStream.includes('std::nothrow'), 'DirectShow fallback initializes a safe frame before the feed is active'],
   [directShowStream.includes('m_valid(true)') && directShowStream.includes('m_width(m_frame_buffer.width() > 0 ? m_frame_buffer.width() : 1280)'), 'DirectShow fallback advertises a stable stream without an active producer'],
+  [directShowStream.includes('MEDIASUBTYPE_YUY2') && directShowStream.includes("MAKEFOURCC('Y', 'U', 'Y', '2')"), 'DirectShow fallback advertises YUY2 for Android Emulator compatibility'],
+  [directShowFrameBuffer.includes('row[x * 2 + 1]') && directShowFrameBuffer.includes('row[x * 2 + 3]'), 'DirectShow fallback converts NV12 to packed YUY2'],
   [registrationHeader.includes('kDirectShowClsid'), 'Media Foundation and DirectShow have separate registration identifiers'],
   [directShowFilter.includes('0xa6c2b7e1'), 'DirectShow filter uses the dedicated CLSID'],
   [control.includes('FindSiblingDirectShow'), 'camera controller discovers the bundled DirectShow DLL automatically'],

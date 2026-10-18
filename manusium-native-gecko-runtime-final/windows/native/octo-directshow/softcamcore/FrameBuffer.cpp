@@ -17,7 +17,7 @@ inline std::uint8_t ClampByte(int value) {
 
 void ClearDib(void* output, int width, int height) {
   if (!output) return;
-  const int stride = (width * 3 + 3) & ~3;
+  const int stride = (width * 2 + 3) & ~3;
   std::memset(output, 0, static_cast<std::size_t>(stride) * height);
 }
 
@@ -135,23 +135,23 @@ void FrameBuffer::transferToDIB(void* image_bits, std::uint64_t* out_frame_count
     return;
   }
 
-  const int stride = (width_ * 3 + 3) & ~3;
+  const int stride = (width_ * 2 + 3) & ~3;
   auto* output = static_cast<std::uint8_t*>(image_bits);
   const auto* yPlane = nv12.data();
   const auto* uvPlane = yPlane + static_cast<std::size_t>(header.stride) * height_;
   for (int y = 0; y < height_; ++y) {
     const int sourceY = height_ - 1 - y;
     auto* row = output + static_cast<std::size_t>(y) * stride;
-    for (int x = 0; x < width_; ++x) {
-      const int yValue = yPlane[static_cast<std::size_t>(sourceY) * header.stride + x];
+    for (int x = 0; x + 1 < width_; x += 2) {
+      const int yValue0 = yPlane[static_cast<std::size_t>(sourceY) * header.stride + x];
+      const int yValue1 = yPlane[static_cast<std::size_t>(sourceY) * header.stride + x + 1];
       const int uvRow = sourceY / 2;
       const int uvOffset = (x / 2) * 2;
-      const int u = uvPlane[static_cast<std::size_t>(uvRow) * header.stride + uvOffset] - 128;
-      const int v = uvPlane[static_cast<std::size_t>(uvRow) * header.stride + uvOffset + 1] - 128;
-      const int c = (std::max)(0, yValue - 16);
-      row[x * 3 + 0] = ClampByte((298 * c + 516 * u + 128) >> 8);
-      row[x * 3 + 1] = ClampByte((298 * c - 100 * u - 208 * v + 128) >> 8);
-      row[x * 3 + 2] = ClampByte((298 * c + 409 * v + 128) >> 8);
+      const auto uvIndex = static_cast<std::size_t>(uvRow) * header.stride + uvOffset;
+      row[x * 2 + 0] = static_cast<std::uint8_t>(yValue0);
+      row[x * 2 + 1] = uvPlane[uvIndex];
+      row[x * 2 + 2] = static_cast<std::uint8_t>(yValue1);
+      row[x * 2 + 3] = uvPlane[uvIndex + 1];
     }
   }
   sequence_ = header.sequence;

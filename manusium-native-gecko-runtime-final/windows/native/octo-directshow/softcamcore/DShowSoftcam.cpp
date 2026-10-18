@@ -100,7 +100,7 @@ AM_MEDIA_TYPE* allocateMediaType()
 
 std::size_t calcDIBSize(int width, int height)
 {
-    std::size_t stride = (static_cast<unsigned>(width) * 3 + 3) & ~3u;
+    std::size_t stride = (static_cast<unsigned>(width) * 2 + 3) & ~3u;
     return stride * static_cast<unsigned>(height);
 }
 
@@ -112,7 +112,7 @@ void fillMediaType(AM_MEDIA_TYPE* amt, int width, int height, float framerate)
     {
         framerate = 60.0f;
     }
-    const float bit_rate = (float)width * (float)height * 24 * framerate;
+    const float bit_rate = (float)width * (float)height * 16 * framerate;
     const float period = 10 * 1000 * 1000 / framerate;
 
     VIDEOINFOHEADER* pFormat = (VIDEOINFOHEADER*)pbFormat;
@@ -124,12 +124,12 @@ void fillMediaType(AM_MEDIA_TYPE* amt, int width, int height, float framerate)
     pFormat->bmiHeader.biWidth = width;
     pFormat->bmiHeader.biHeight = height;
     pFormat->bmiHeader.biPlanes = 1;
-    pFormat->bmiHeader.biBitCount = 24;
-    pFormat->bmiHeader.biCompression = BI_RGB;
+    pFormat->bmiHeader.biBitCount = 16;
+    pFormat->bmiHeader.biCompression = MAKEFOURCC('Y', 'U', 'Y', '2');
     pFormat->bmiHeader.biSizeImage = static_cast<uint32_t>(calcDIBSize(width, height));
 
     amt->majortype = MEDIATYPE_Video;
-    amt->subtype = MEDIASUBTYPE_RGB24;
+    amt->subtype = MEDIASUBTYPE_YUY2;
     amt->bFixedSizeSamples = TRUE;
     amt->bTemporalCompression = FALSE;
     amt->lSampleSize = static_cast<uint32_t>(calcDIBSize(width, height));
@@ -211,7 +211,7 @@ Softcam::SetFormat(AM_MEDIA_TYPE *mt)
         return E_FAIL;
     }
     if (mt->majortype != MEDIATYPE_Video ||
-        mt->subtype != MEDIASUBTYPE_RGB24)
+        mt->subtype != MEDIASUBTYPE_YUY2)
     {
         LOG("-> E_FAIL (invalid media type)\n");
         return E_FAIL;
@@ -225,8 +225,8 @@ Softcam::SetFormat(AM_MEDIA_TYPE *mt)
             LOG("-> E_FAIL (invalid dimension)\n");
             return E_FAIL;
         }
-        if (pFormat->bmiHeader.biBitCount != 24 ||
-            pFormat->bmiHeader.biCompression != BI_RGB)
+        if (pFormat->bmiHeader.biBitCount != 16 ||
+            pFormat->bmiHeader.biCompression != MAKEFOURCC('Y', 'U', 'Y', '2'))
         {
             LOG("-> E_FAIL (invalid color format)\n");
             return E_FAIL;
