@@ -1,4 +1,4 @@
-﻿# scripts/lib/octo.ps1
+# scripts/lib/octo.ps1
 #
 # Shared implementation of the OctoSuite maintenance scripts (scripts\*.bat).
 # Target: Windows PowerShell 5.1 (built into Windows 10/11) - no PS7 syntax.
@@ -199,6 +199,10 @@ $Messages = @{
     androidFailed     = '{0} could not be installed automatically (code {1}). Install it manually from {2}.'
     androidDone       = 'Android components are ready. Start Android Studio once so it finishes downloading its SDK.'
     mediaCheck        = 'Checking what the vStudio Mobile and vStudio Web plugins need (Python, OBS virtual camera, VB-CABLE)...'
+    cameraCheck       = 'Checking and registering the bundled Windows camera (Media Foundation + DirectShow)...'
+    cameraMissing     = 'The bundled Windows camera files are missing. Rebuild the native camera package before running install.bat again.'
+    cameraDone        = 'Windows camera installed and registered. Android Emulator and Windows capture apps can now use Octo Camera.'
+    cameraFailed      = 'Windows camera registration failed (code {0}). Run install.bat as administrator and verify Windows camera access is enabled.'
     stepOf            = 'Step {0} of {1}: {2}'
     stepShortcut      = 'Desktop shortcut for Octo.su'
     shortcutDone      = 'Desktop shortcut created: {0}'
@@ -434,6 +438,10 @@ $Messages = @{
     androidFailed     = 'Nie udało się automatycznie zainstalować {0} (kod {1}). Zainstaluj ręcznie z {2}.'
     androidDone       = 'Składniki Androida są gotowe. Uruchom raz Android Studio, aby dokończyło pobieranie SDK.'
     mediaCheck        = 'Sprawdzanie wymagań wtyczek vStudio Mobile i vStudio Web (Python, kamera wirtualna OBS, VB-CABLE)...'
+    cameraCheck       = 'Sprawdzanie i rejestrowanie dołączonej kamery Windows (Media Foundation + DirectShow)...'
+    cameraMissing     = 'Brakuje plików dołączonej kamery Windows. Zbuduj ponownie pakiet natywnej kamery przed ponownym uruchomieniem install.bat.'
+    cameraDone        = 'Kamera Windows została zainstalowana i zarejestrowana. Emulator Androida oraz aplikacje Windows mogą używać Octo Camera.'
+    cameraFailed      = 'Rejestracja kamery Windows nie powiodła się (kod {0}). Uruchom install.bat jako administrator i sprawdź dostęp do kamer w Windows.'
     stepOf            = 'Krok {0} z {1}: {2}'
     stepShortcut      = 'Skrót do Octo.su na pulpicie'
     shortcutDone      = 'Utworzono skrót na pulpicie: {0}'
@@ -2086,6 +2094,46 @@ function Install-MediaPrerequisites {
   return (Install-PrereqTable $MediaPrereqs)
 }
 
+function Get-NativeCameraBundleRoot {
+  $candidates = @(
+    (Join-Path $InstallRoot 'resources\native-camera'),
+    (Join-Path $InstallRoot 'release\octobrowser\win-unpacked\resources\native-camera')
+  )
+  foreach ($candidate in ($candidates | Select-Object -Unique)) {
+    if (Test-Path -LiteralPath $candidate -PathType Container) { return $candidate }
+  }
+  return $null
+}
+
+function Install-NativeCameraBundle {
+  Say (T 'cameraCheck') 'Cyan'
+  $root = Get-NativeCameraBundleRoot
+  if (-not $root) { Warn (T 'cameraMissing'); return $false }
+  $controller = Join-Path $root 'octo-cameractl.exe'
+  $source = Join-Path $root 'octo-camera-source.dll'
+  $directShow = Join-Path $root 'octo-directshow-camera.dll'
+  $missing = @($controller, $source, $directShow) | Where-Object { -not (Test-Path -LiteralPath $_ -PathType Leaf) }
+  if ($missing.Count -gt 0) {
+    Warn (T 'cameraMissing')
+    Write-Log 'error' "Native camera bundle is incomplete: $($missing -join ', ')"
+    return $false
+  }
+  try {
+    $result = Invoke-Native $controller @('install', '--source', $source) $root
+    if ($result.code -ne 0) {
+      foreach ($line in @(([string]$result.text) -split "`r?`n" | Select-Object -Last 12)) { Write-Log 'error' $line }
+      Warn (T 'cameraFailed' $result.code)
+      return $false
+    }
+    Say (T 'cameraDone') 'Green'
+    return $true
+  } catch {
+    Write-Log 'error' "Native camera registration exception: $($_.Exception.Message)"
+    Warn (T 'cameraFailed' 'exception')
+    return $false
+  }
+}
+
 function Install-AndroidPrerequisites {
   Say (T 'androidCheck') 'Cyan'
   return (Install-PrereqTable $AndroidPrereqs)
@@ -2452,6 +2500,7 @@ function Get-SetupSteps {
         # Electron only and record that native Chromium is unavailable.
         $env:OCTO_REQUIRE_NATIVE_CHROMIUM = if ($nativeAvailable) { '1' } else { '0' }
         Invoke-Npm @('run', 'prepare:prebuilt:windows')
+        if (-not (Install-NativeCameraBundle)) { return $false }
         if ($nativeAvailable) {
           $nativeAvailable = Test-AllChromiumRuntimes (Join-Path $InstallRoot 'resources')
           if (-not $nativeAvailable) { Warn 'The prebuilt InkBrowser runtime did not pass the final installer check.'; return $false }
