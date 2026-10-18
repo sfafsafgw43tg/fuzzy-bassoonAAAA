@@ -27,13 +27,22 @@ static void MakeBlack(Frame& frame, std::uint32_t width, std::uint32_t height) {
 
 bool SharedFrameReader::ReadLatest(Frame& frame, std::uint32_t width, std::uint32_t height) {
   if (!IsSupportedSize(width, height)) return false;
-  const std::size_t maxBytes = kHeaderBytes + static_cast<std::size_t>(1920) * 1080 * 3 / 2;
   if (!mapping_) {
     mapping_ = OpenFileMappingW(FILE_MAP_READ, FALSE, kFeedMappingName);
     if (mapping_) {
-      view_ = MapViewOfFile(static_cast<HANDLE>(mapping_), FILE_MAP_READ, 0, 0, maxBytes);
+      view_ = MapViewOfFile(static_cast<HANDLE>(mapping_), FILE_MAP_READ, 0, 0, 0);
       if (!view_) { CloseHandle(static_cast<HANDLE>(mapping_)); mapping_ = nullptr; }
-      else mappingBytes_ = maxBytes;
+      else {
+        MEMORY_BASIC_INFORMATION memory{};
+        if (!VirtualQuery(view_, &memory, sizeof(memory)) || memory.RegionSize < kHeaderBytes) {
+          UnmapViewOfFile(view_);
+          CloseHandle(static_cast<HANDLE>(mapping_));
+          view_ = nullptr;
+          mapping_ = nullptr;
+        } else {
+          mappingBytes_ = memory.RegionSize;
+        }
+      }
     }
   }
   if (!view_) { MakeBlack(frame, width, height); return false; }

@@ -25,6 +25,7 @@ const protocol = read('feed_protocol.h');
 const directShowCmake = fs.readFileSync(path.join(directShowRoot, 'CMakeLists.txt'), 'utf8');
 const directShowFrameBuffer = fs.readFileSync(path.join(directShowRoot, 'softcamcore/FrameBuffer.cpp'), 'utf8');
 const directShowStream = fs.readFileSync(path.join(directShowRoot, 'softcamcore/DShowSoftcam.cpp'), 'utf8');
+const mediaFrameReader = fs.readFileSync(path.join(root, 'shared_frame_reader.cpp'), 'utf8');
 const assertions = [
   [cmake.includes('mfsensorgroup'), 'Media Foundation sensor-group library is linked'],
   [cmake.includes('registration.cpp'), 'registration client is built'],
@@ -40,6 +41,8 @@ const assertions = [
   [directShowCmake.includes('strmiids'), 'DirectShow fallback links DirectShow identifiers'],
   [directShowCmake.includes('baseclasses'), 'DirectShow fallback builds the Base Classes'],
   [directShowFrameBuffer.includes('kFeedMappingName'), 'DirectShow fallback reads the Octo shared feed'],
+  [directShowFrameBuffer.includes('MapViewOfFile(') && directShowFrameBuffer.includes('VirtualQuery'), 'DirectShow fallback maps the actual shared-memory size'],
+  [mediaFrameReader.includes('MapViewOfFile(') && mediaFrameReader.includes('VirtualQuery'), 'Media Foundation reader maps the actual shared-memory size'],
   [directShowStream.includes('if (!m_screenshot)') && directShowStream.includes('std::nothrow'), 'DirectShow fallback initializes a safe frame before the feed is active'],
   [directShowStream.includes('m_valid(true)') && directShowStream.includes('m_width(m_frame_buffer.width() > 0 ? m_frame_buffer.width() : 1280)'), 'DirectShow fallback advertises a stable stream without an active producer'],
 ];

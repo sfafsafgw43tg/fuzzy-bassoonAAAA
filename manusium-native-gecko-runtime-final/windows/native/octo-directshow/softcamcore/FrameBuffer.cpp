@@ -11,9 +11,6 @@
 namespace softcam {
 namespace {
 
-constexpr std::size_t kMaxMappingBytes =
-    octo::camera::kHeaderBytes + static_cast<std::size_t>(1920) * 1080 * 3 / 2;
-
 inline std::uint8_t ClampByte(int value) {
   return static_cast<std::uint8_t>((std::min)(255, (std::max)(0, value)));
 }
@@ -66,12 +63,18 @@ FrameBuffer FrameBuffer::open() {
   result.mapping_ = OpenFileMappingW(FILE_MAP_READ, FALSE, octo::camera::kFeedMappingName);
   if (!result.mapping_) return result;
   result.view_ = static_cast<const std::uint8_t*>(MapViewOfFile(
-      result.mapping_, FILE_MAP_READ, 0, 0, kMaxMappingBytes));
+      result.mapping_, FILE_MAP_READ, 0, 0, 0));
   if (!result.view_) {
     result.release();
     return result;
   }
-  result.mapping_bytes_ = kMaxMappingBytes;
+  MEMORY_BASIC_INFORMATION memory{};
+  if (!VirtualQuery(result.view_, &memory, sizeof(memory)) ||
+      memory.RegionSize < octo::camera::kHeaderBytes) {
+    result.release();
+    return result;
+  }
+  result.mapping_bytes_ = memory.RegionSize;
   octo::camera::FeedHeader header{};
   std::memcpy(&header, result.view_, sizeof(header));
   if (!octo::camera::IsValidHeader(header, result.mapping_bytes_)) {
