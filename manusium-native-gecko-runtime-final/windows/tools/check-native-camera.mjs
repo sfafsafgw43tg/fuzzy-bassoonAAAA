@@ -20,6 +20,7 @@ const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 const cmake = read('CMakeLists.txt');
 const source = read('camera_source.cpp');
 const registration = read('registration.cpp');
+const control = read('cameractl.cpp');
 const protocol = read('feed_protocol.h');
 const directShowCmake = fs.readFileSync(path.join(directShowRoot, 'CMakeLists.txt'), 'utf8');
 const directShowFrameBuffer = fs.readFileSync(path.join(directShowRoot, 'softcamcore/FrameBuffer.cpp'), 'utf8');
@@ -30,6 +31,7 @@ const assertions = [
   [source.includes('MFCreateEventQueue'), 'source uses an event queue'],
   [registration.includes('MFVirtualCameraAccess_CurrentUser'), 'registration defaults to current-user scope'],
   [registration.includes('MFVirtualCameraType_SoftwareCameraSource'), 'registration uses software-camera source type'],
+  [control.includes('Android Emulator discovers Windows cameras through DirectShow'), 'control registers DirectShow alongside Media Foundation'],
   [/camera->Start\(nullptr\)/.test(registration), 'registration starts the camera'],
   [registration.includes('camera->Remove()'), 'uninstall removes the camera'],
   [protocol.includes('kFeedMagic'), 'feed protocol is versioned and validated'],

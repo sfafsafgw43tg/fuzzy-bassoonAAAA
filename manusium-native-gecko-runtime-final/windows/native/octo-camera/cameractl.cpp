@@ -53,17 +53,28 @@ int wmain(int argc, wchar_t** argv) {
     hr = command == L"register-directshow" ? octo::camera::InstallDirectShow(argv[2]) : octo::camera::UninstallDirectShow(argv[2]);
   } else if (command == L"install") {
     if (sourcePath.empty()) { std::wcerr << L"install requires --source <octo-camera-source.dll>\n"; if (SUCCEEDED(com)) CoUninitialize(); return 2; }
-    hr = octo::camera::InstallCurrentUser(sourcePath);
-    if (hr == apiMissing && !directShowPath.empty()) {
-      hr = octo::camera::InstallDirectShow(directShowPath);
-      if (IsAccessDenied(hr)) hr = RunElevatedDirectShow(L"register-directshow", directShowPath);
+    const HRESULT mediaFoundation = octo::camera::InstallCurrentUser(sourcePath);
+    HRESULT directShow = S_OK;
+    // Android Emulator discovers Windows cameras through DirectShow even on
+    // Windows 11. Register both backends so the same camera is usable by MF
+    // applications and by emulator/Unity/legacy capture clients.
+    if (!directShowPath.empty()) {
+      directShow = octo::camera::InstallDirectShow(directShowPath);
+      if (IsAccessDenied(directShow)) directShow = RunElevatedDirectShow(L"register-directshow", directShowPath);
     }
+    if (mediaFoundation == apiMissing) hr = directShow;
+    else if (SUCCEEDED(mediaFoundation) && FAILED(directShow)) hr = directShow;
+    else hr = mediaFoundation;
   } else if (command == L"uninstall") {
-    hr = octo::camera::UninstallCurrentUser();
-    if (hr == apiMissing && !directShowPath.empty()) {
-      hr = octo::camera::UninstallDirectShow(directShowPath);
-      if (IsAccessDenied(hr)) hr = RunElevatedDirectShow(L"unregister-directshow", directShowPath);
+    const HRESULT mediaFoundation = octo::camera::UninstallCurrentUser();
+    HRESULT directShow = S_OK;
+    if (!directShowPath.empty()) {
+      directShow = octo::camera::UninstallDirectShow(directShowPath);
+      if (IsAccessDenied(directShow)) directShow = RunElevatedDirectShow(L"unregister-directshow", directShowPath);
     }
+    if (mediaFoundation == apiMissing) hr = directShow;
+    else if (SUCCEEDED(mediaFoundation) && FAILED(directShow)) hr = directShow;
+    else hr = mediaFoundation;
   } else if (command == L"status") {
     bool installed = false;
     hr = octo::camera::IsInstalled(installed);
