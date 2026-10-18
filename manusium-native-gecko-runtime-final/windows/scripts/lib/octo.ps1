@@ -2499,7 +2499,16 @@ function Get-SetupSteps {
         # Strictly verify a downloaded runtime. When no release exists, package
         # Electron only and record that native Chromium is unavailable.
         $env:OCTO_REQUIRE_NATIVE_CHROMIUM = if ($nativeAvailable) { '1' } else { '0' }
-        Invoke-Npm @('run', 'prepare:prebuilt:windows')
+        $prepared = Invoke-NpmResult @('run', 'prepare:prebuilt:windows')
+        if ($prepared.code -ne 0) {
+          $prepareTail = @(([string]$prepared.text) -split "`r?`n" | Where-Object { $_ -and $_.Trim() } | Select-Object -Last 20)
+          foreach ($line in $prepareTail) { Write-Log 'error' $line }
+          $detail = (($prepareTail -join ' ') -replace '\s+', ' ').Trim()
+          if ($detail.Length -gt 700) { $detail = $detail.Substring(0, 700) + '...' }
+          if (-not $detail) { $detail = 'No output was returned. Check that Node.js, the Electron runtime, and the release folder are writable.' }
+          Warn "Prepare prebuilt Octo applications failed (exit $($prepared.code)): $detail"
+          return $false
+        }
         if (-not (Install-NativeCameraBundle)) { return $false }
         if ($nativeAvailable) {
           $nativeAvailable = Test-AllChromiumRuntimes (Join-Path $InstallRoot 'resources')
