@@ -1522,6 +1522,7 @@ export const pl: Record<string, string> = {
   'android.camera.manager': "Menedżer kamery",
   'android.camera.hostTesting': "Testuj kamery w Octo (wyłączone = tylko Android)",
   'android.camera.androidOnlyHint': "Pozostaw wyłączone, gdy Android używa kamery. Zatrzymuje testy w Octo, nie wyłącza urządzenia w Windows ani innych aplikacji.",
+  'android.camera.obsBridgeHint': 'Ścieżka OBS: uruchom Camera Studio → dodaj „Unity Capture virtual camera” w OBS → kliknij Start Virtual Camera → wybierz tutaj „OBS Virtual Camera”. Naciśnij Odśwież, wybierz ją dla jednego obiektywu i uruchom urządzenie Android na zimno.',
   'android.camera.useWebcam0Both': "Użyj webcam0 z przodu i z tyłu",
   'android.camera.disableBoth': "Wyłącz obie kamery Androida",
   'android.camera.restartHint': "Zapisz ustawienia, następnie zatrzymaj urządzenie Android i uruchom je na zimno, aby zastosować zmiany kamer.",

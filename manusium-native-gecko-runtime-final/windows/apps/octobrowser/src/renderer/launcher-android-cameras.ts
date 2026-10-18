@@ -297,6 +297,7 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
     h('legend', { text: t('android.camera.manager') }),
     h('label', {}, hostToggle, h('span', { text: t('android.camera.hostTesting') })),
     h('p', { class: 'hint', text: t('android.camera.androidOnlyHint') }),
+    h('p', { class: 'hint', text: t('android.camera.obsBridgeHint') }),
     h('div', { class: 'camera-picker-foot' }, both, off),
     h('p', { class: 'hint', text: t('android.camera.restartHint') }));
   const unsubscribe = cameraTests.subscribe(() => {

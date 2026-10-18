@@ -1523,6 +1523,7 @@ export const en: Record<string, string> = {
   'android.camera.manager': "Webcam manager",
   'android.camera.hostTesting': "Test cameras in Octo (off = Android only)",
   'android.camera.androidOnlyHint': "Keep this off while Android uses the webcam. It stops Octo host tests, not the Windows device or other applications.",
+  'android.camera.obsBridgeHint': 'OBS route: start Camera Studio → add “Unity Capture virtual camera” to OBS → click Start Virtual Camera → select “OBS Virtual Camera” here. Refresh, choose it for one lens, then cold-start the Android device.',
   'android.camera.useWebcam0Both': "Use webcam0 for front and back",
   'android.camera.disableBoth': "Turn both Android cameras off",
   'android.camera.restartHint': "Save the settings, then stop and cold-start the Android device to apply camera changes.",
