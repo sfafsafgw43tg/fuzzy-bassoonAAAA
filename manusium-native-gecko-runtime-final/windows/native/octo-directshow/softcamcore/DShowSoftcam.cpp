@@ -1,4 +1,5 @@
 #include "DShowSoftcam.h"
+#include "Misc.h"
 
 #include <cstring>
 #include <string>

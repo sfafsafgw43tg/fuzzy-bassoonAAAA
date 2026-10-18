@@ -32,9 +32,10 @@ add_library(octo-directshow-camera SHARED
 )
 
 target_compile_definitions(octo-directshow-camera PRIVATE
-  UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX
+  UNICODE _UNICODE WIN32_LEAN_AND_MEAN
   OCTO_DIRECTSHOW_CAMERA_EXPORTS
 )
+target_compile_options(octo-directshow-camera PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/Zc:strictStrings->)
 target_include_directories(octo-directshow-camera PRIVATE
   ${CMAKE_CURRENT_SOURCE_DIR}
   ${BASE}
