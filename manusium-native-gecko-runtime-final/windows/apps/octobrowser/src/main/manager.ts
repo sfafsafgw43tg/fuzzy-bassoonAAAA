@@ -56,7 +56,7 @@ import { androidNetworkStatus, clearAndroidProxy, setAllAndroidNetworkOff, setAn
 import type { QuietBootResult } from './android-quiet-boot';
 import { ScreenStream, execAdb, keyArgs, nextRotation, parseRotation, parseScreenAction, pngDimensions, rotationLockArgs, rotationReadArgs, rotationSetArgs, screencapArgs, tapArgs } from './android-screen';
 import { parseSecondaryDisplay } from './android-displays';
- import { importAvdFolder, type CameraSource, androidCameraChoices, androidMediaCheck, repairAndroidMedia, emulatorWebcams, androidCameraChoicesCached, stopAndroidAvd, stopOwnedAndroidProcesses, androidLaunchPrefs, rememberAndroidLaunch, ANDROID_LOCALES, adbPath, androidSerialFor, openAndroidBrowser, configureMediaCompanion, applyDeviceIdentity, grantAndroidMediaPermissions, reportAndroidProgress, setAndroidProgressSink, type AndroidProgress, acceptAndroidLicenses, androidPackageInstalled, createAndroidAvdFromSpec, quietBootAndroidAvd, installAndroidPackage, updateAvdSettings, type AvdSettingsInput, androidStudioStatusAsync, ANDROID_CATALOG_DEVICES, ANDROID_SYSTEM_IMAGES, androidDiskInfo, androidSdkCandidates, androidSystemImageInstalled, clearAndroidSdkRoot, installAndroidTools, setAndroidSdkRoot, createAndroidAvd, defaultAvdDirectory, deleteAndroidAvd, ensureMediaCompanionAsync, installAndroidSystemImage, launchAndroidAvd, listAndroidAvds, androidInstallRoot, androidInstallTarget, imageRunsHere, setAndroidInstallRoot, clearAndroidInstallRoot, availableSystemImageIds, androidToolLogPath, mediaCompanionStatusAsync, openAndroidAvdFolder, openAndroidStudio, requestMediaCompanionBroadcast, waitForMediaCompanionCamera, startMediaCompanion, stopMediaCompanion, setMediaPluginEnabled, mediaPluginActive, startWebMediaCompanionAsync, applyAndroidLocation, applyRandomPolishAndroidLocation, type AndroidAvdCreateInput, type AndroidLaunchInput} from './android-studio';
+ import { importAvdFolder, type CameraSource, androidCameraChoices, androidMediaCheck, repairAndroidMedia, emulatorWebcams, androidCameraChoicesCached, stopAndroidAvd, stopOwnedAndroidProcesses, androidLaunchPrefs, rememberAndroidLaunch, ANDROID_LOCALES, adbPath, androidSerialFor, openAndroidBrowser, configureMediaCompanion, applyDeviceIdentity, grantAndroidMediaPermissions, reportAndroidProgress, setAndroidProgressSink, type AndroidProgress, acceptAndroidLicenses, androidPackageInstalled, createAndroidAvdFromSpec, quietBootAndroidAvd, installAndroidPackage, updateAvdSettings, type AvdSettingsInput, androidStudioStatusAsync, ANDROID_CATALOG_DEVICES, ANDROID_SYSTEM_IMAGES, androidDiskInfo, androidSdkCandidates, androidSystemImageInstalled, clearAndroidSdkRoot, installAndroidTools, setAndroidSdkRoot, createAndroidAvd, defaultAvdDirectory, deleteAndroidAvd, ensureMediaCompanionAsync, installAndroidSystemImage, launchAndroidAvd, listAndroidAvds, androidInstallRoot, androidInstallTarget, imageRunsHere, setAndroidInstallRoot, clearAndroidInstallRoot, availableSystemImageIds, androidToolLogPath, mediaCompanionStatusAsync, openAndroidAvdFolder, openAndroidStudio, requestMediaCompanionBroadcast, waitForMediaCompanionCamera, startMediaCompanion, stopMediaCompanion, startObsVirtualCamera, setMediaPluginEnabled, mediaPluginActive, startWebMediaCompanionAsync, applyAndroidLocation, applyRandomPolishAndroidLocation, type AndroidAvdCreateInput, type AndroidLaunchInput} from './android-studio';
 import { ANDROID_STORES, androidStore, androidStoreStates, changeAndroidStoreState, installAndroidStores, readMediaFolder, pushMediaToDevice } from './android-stores';
 import { addCustomImage, customCataloguePath, importSystemImageArchive, importSystemImageDirectory, inspectSystemImageDirectory, readCustomCatalogue, removeCustomImage, validCustomPackage } from './android-custom';
 import { installMediaRequirement, vbCableInstalledAsync } from './media-requirements';
@@ -3049,6 +3049,7 @@ export class Manager {
     // Every camera the emulator can hand to Android right now, and a one-click
     // repair that wires the device to one of them.
     handle('mgr:android-webcams', L, () => emulatorWebcams());
+    handle('mgr:android-start-obs', L, () => startObsVirtualCamera());
     handle('mgr:android-camera-choices', L, () => androidCameraChoicesCached());
     handle('mgr:android-media-check', L, (_e, name: string) => androidMediaCheck(String(name ?? '')));
     handle('mgr:android-media-repair', L, (_e, name: string, input: { cameraDevice?: string; start?: boolean }) =>
@@ -3060,23 +3061,15 @@ export class Manager {
     handle('mgr:native-camera-status', L, () => nativeCameraStatus());
     handle('mgr:native-camera-install', L, async () => {
       const result = await installNativeCamera();
-      if (result.installed && process.platform === 'win32') {
+      if (result.installed && process.platform === 'win32' && Notification.isSupported()) {
         const strings = DICTS[this.ctx.lang] ?? DICTS.en;
-        const title = strings['android.nativeCamera.connectedTitle'];
-        const body = strings['android.nativeCamera.connectedBody'];
-        if (Notification.isSupported()) {
-          const notification = new Notification({ title, body, silent: false });
-          notification.on('click', () => { this.launcher?.show(); this.launcher?.focus(); });
-          notification.show();
-        } else {
-          // Some Windows sessions disable Electron toasts until the app has an
-          // AppUserModelId. Never report a successful install silently there.
-          const messageOptions = {
-            type: 'info' as const, title, message: body, buttons: ['OK'], noLink: true,
-          };
-          if (this.launcher) void dialog.showMessageBox(this.launcher, messageOptions);
-          else void dialog.showMessageBox(messageOptions);
-        }
+        const notification = new Notification({
+          title: strings['android.nativeCamera.connectedTitle'],
+          body: strings['android.nativeCamera.connectedBody'],
+          silent: false,
+        });
+        notification.on('click', () => { this.launcher?.show(); this.launcher?.focus(); });
+        notification.show();
       }
       return result;
     });

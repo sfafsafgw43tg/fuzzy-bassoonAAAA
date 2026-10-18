@@ -568,8 +568,7 @@ function migrateMobileStudioConfig(raw: string): string {
       mode: 'android',
       android_only: true,
       targets: ['android-emulator'],
-      outputs: { android: true, desktop: false, browser: false, obs_scene: true },
-      obs: { enabled: true, input: 'Unity Capture virtual camera', output: 'OBS Virtual Camera', route: 'camera-studio-to-obs-to-android' },
+      outputs: { android: true, desktop: false, browser: false, obs_scene: false },
       device_names: { ...currentNames, camera: 'Unity Capture virtual camera' },
       video: {
         ...currentVideo,
@@ -1819,6 +1818,20 @@ function windowsCameraNames(): Promise<WindowsCameraName[]> {
  * Resolves to an empty list when PowerShell cannot answer: a camera is then
  * shown by its hardware ID, never guessed.
  */
+export interface ObsVirtualCameraStartResult { ok: boolean; message: string; cameraName?: string }
+export async function startObsVirtualCamera(): Promise<ObsVirtualCameraStartResult> {
+  if (process.platform !== 'win32') return { ok: false, message: 'OBS Virtual Camera startup is supported on Windows only.' };
+  const existing=(await windowsCameraNames()).find((item)=>/obs\s*virtual\s*camera/i.test(item.friendlyName));
+  if (existing) return { ok:true, message:'OBS Virtual Camera is already available.', cameraName:existing.friendlyName };
+  const candidates=[process.env.ProgramFiles?path.join(process.env.ProgramFiles,'obs-studio','bin','64bit','obs64.exe'):'',process.env['ProgramFiles(x86)']?path.join(process.env['ProgramFiles(x86)'],'obs-studio','bin','64bit','obs64.exe'):'',process.env.LOCALAPPDATA?path.join(process.env.LOCALAPPDATA,'Programs','obs-studio','bin','64bit','obs64.exe'):''].filter(Boolean);
+  const executable=candidates.find((item)=>fs.existsSync(item));
+  if (!executable) return { ok:false, message:'OBS Studio was not found. Install OBS Studio, then try again.' };
+  try { const child=spawn(executable,['--startvirtualcam'],{detached:true,stdio:'ignore',windowsHide:true}); child.unref(); } catch(error) { return {ok:false,message:`OBS Studio could not be started: ${error instanceof Error?error.message:String(error)}`}; }
+  const started=Date.now();
+  while(Date.now()-started<20000){ windowsNamesCache=null; const camera=(await windowsCameraNames()).find((item)=>/obs\s*virtual\s*camera/i.test(item.friendlyName)); if(camera) return {ok:true,message:'OBS Virtual Camera is ready. Select it as the Android webcam and cold-start the emulator.',cameraName:camera.friendlyName}; await new Promise((resolve)=>setTimeout(resolve,500)); }
+  return {ok:false,message:'OBS started, but OBS Virtual Camera did not appear in Windows within 20 seconds. Click Start Virtual Camera in OBS and refresh the Android camera list.'};
+}
+
 function readWindowsCameraNames(): Promise<WindowsCameraName[]> {
   const script = "try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }; "
     + "$rows=@(Get-PnpDevice -PresentOnly -Status OK -ErrorAction SilentlyContinue "
@@ -2669,8 +2682,7 @@ export function configureMediaCompanion(input: {
     mode: 'android',
     android_only: true,
     targets: ['android-emulator'],
-    outputs: { android: true, desktop: false, browser: false, obs_scene: true },
-    obs: { enabled: true, input: 'Unity Capture virtual camera', output: 'OBS Virtual Camera', route: 'camera-studio-to-obs-to-android' },
+    outputs: { android: true, desktop: false, browser: false, obs_scene: false },
     device_names: { camera: cameraName, microphone: microphoneName },
     camera_name: cameraName,
     microphone_name: microphoneName,

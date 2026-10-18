@@ -279,6 +279,8 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
   const backSlot = h('div', { class: 'vbox-live-host' });
   const frontSlot = h('div', { class: 'vbox-live-host' });
   const statusSlot = h('div', { class: 'camera-scan-status', role: 'status' });
+  const obsButton = h('button', { type: 'button', class: 'btn small', text: t('android.camera.startObs') }) as HTMLButtonElement;
+  obsButton.onclick = async () => { obsButton.disabled = true; await run(api.invoke<{ ok: boolean; message: string }>('mgr:android-start-obs'), 'android.camera.obsResult'); obsButton.disabled = false; await scan(true); };
   const refreshButton = h('button', { type: 'button', class: 'btn small' },
     icon('refreshCircle', 14), h('span', { text: t('common.refresh') })) as HTMLButtonElement;
   refreshButton.onclick = () => void scan(true);
@@ -297,7 +299,6 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
     h('legend', { text: t('android.camera.manager') }),
     h('label', {}, hostToggle, h('span', { text: t('android.camera.hostTesting') })),
     h('p', { class: 'hint', text: t('android.camera.androidOnlyHint') }),
-    h('p', { class: 'hint', text: t('android.camera.obsBridgeHint') }),
     h('div', { class: 'camera-picker-foot' }, both, off),
     h('p', { class: 'hint', text: t('android.camera.restartHint') }));
   const unsubscribe = cameraTests.subscribe(() => {
@@ -319,7 +320,7 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
   const element = h('div', { class: 'camera-picker' },
     manager,
     h('div', { class: 'grid2' }, backSlot, frontSlot),
-    h('div', { class: 'camera-picker-foot' }, refreshButton),
+    h('div', { class: 'camera-picker-foot' }, refreshButton, obsButton),
     statusSlot);
 
   const emit = (): void => {
