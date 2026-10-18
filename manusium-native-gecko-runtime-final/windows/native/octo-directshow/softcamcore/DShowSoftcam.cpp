@@ -8,6 +8,7 @@
 #include <cmath>
 #include <chrono>
 #include <ctime>
+#include <new>
 #include <utility>
 
 
@@ -168,10 +169,10 @@ CUnknown * Softcam::CreateInstance(
 Softcam::Softcam(LPUNKNOWN lpunk, const GUID& clsid, HRESULT *phr) :
     CSource(NAME("DirectShow Softcam"), lpunk, clsid),
     m_frame_buffer(FrameBuffer::open()),
-    m_valid(m_frame_buffer ? true : false),
-    m_width(m_frame_buffer.width()),
-    m_height(m_frame_buffer.height()),
-    m_framerate(m_frame_buffer.framerate())
+    m_valid(true),
+    m_width(m_frame_buffer.width() > 0 ? m_frame_buffer.width() : 1280),
+    m_height(m_frame_buffer.height() > 0 ? m_frame_buffer.height() : 720),
+    m_framerate(m_frame_buffer.framerate() > 0.0f ? m_frame_buffer.framerate() : 30.0f)
 {
     // This code is okay though it may look strange as the return value is ignored.
     // Calling the SoftcamStream constructor results in calling the CBaseOutputPin
@@ -410,10 +411,17 @@ HRESULT SoftcamStream::FillBuffer(IMediaSample *pms)
 {
     CheckPointer(pms,E_POINTER);
 
-    BYTE *pData;
-    pms->GetPointer(&pData);
+    BYTE *pData = nullptr;
+    if (FAILED(pms->GetPointer(&pData)) || !pData) return E_POINTER;
     long lDataLen = pms->GetSize();
+    if (lDataLen <= 0) return E_INVALIDARG;
     ZeroMemory(pData, (std::size_t)lDataLen);
+    const std::size_t screenshot_size = calcDIBSize(m_width, m_height);
+    if (!m_screenshot)
+    {
+        m_screenshot.reset(new (std::nothrow) uint8_t[screenshot_size]);
+        if (m_screenshot) ZeroMemory(m_screenshot.get(), screenshot_size);
+    }
     {
         if (auto fb = getParent()->getFrameBuffer())
         {
@@ -427,20 +435,21 @@ HRESULT SoftcamStream::FillBuffer(IMediaSample *pms)
                 getParent()->releaseFrameBuffer();
 
                 // Save the last image for a placeholder.
-            const std::size_t size = calcDIBSize(m_width, m_height);
+            const std::size_t size = screenshot_size;
             if (!m_screenshot)
             {
-                m_screenshot.reset(new uint8_t[size]);
-                ZeroMemory(m_screenshot.get(), size);
+                m_screenshot.reset(new (std::nothrow) uint8_t[size]);
+                if (m_screenshot) ZeroMemory(m_screenshot.get(), size);
             }
-                {
-                    // Darken the image to indicate that the source is inactive.
-                    for (std::size_t i = 0; i < size; i++)
+            if (m_screenshot)
+            {
+                // Darken the image to indicate that the source is inactive.
+                for (std::size_t i = 0; i < size; i++)
                     {
                         pData[i] /= 4;
                     }
                 }
-                std::memcpy(m_screenshot.get(), pData, size);
+                std::memcpy(m_screenshot.get(), pData, (std::min)(size, static_cast<std::size_t>(lDataLen)));
             }
         }
         else
@@ -449,8 +458,10 @@ HRESULT SoftcamStream::FillBuffer(IMediaSample *pms)
             m_frame_counter = 0;
             Timer::sleep(0.100f);
 
-            const std::size_t size = calcDIBSize(m_width, m_height);
-            std::memcpy(pData, m_screenshot.get(), size);
+            if (m_screenshot)
+            {
+                std::memcpy(pData, m_screenshot.get(), (std::min)(screenshot_size, static_cast<std::size_t>(lDataLen)));
+            }
         }
 
         CAutoLock lock(&m_critsec);

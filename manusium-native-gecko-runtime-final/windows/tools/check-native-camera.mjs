@@ -24,6 +24,7 @@ const control = read('cameractl.cpp');
 const protocol = read('feed_protocol.h');
 const directShowCmake = fs.readFileSync(path.join(directShowRoot, 'CMakeLists.txt'), 'utf8');
 const directShowFrameBuffer = fs.readFileSync(path.join(directShowRoot, 'softcamcore/FrameBuffer.cpp'), 'utf8');
+const directShowStream = fs.readFileSync(path.join(directShowRoot, 'softcamcore/DShowSoftcam.cpp'), 'utf8');
 const assertions = [
   [cmake.includes('mfsensorgroup'), 'Media Foundation sensor-group library is linked'],
   [cmake.includes('registration.cpp'), 'registration client is built'],
@@ -39,6 +40,8 @@ const assertions = [
   [directShowCmake.includes('strmiids'), 'DirectShow fallback links DirectShow identifiers'],
   [directShowCmake.includes('baseclasses'), 'DirectShow fallback builds the Base Classes'],
   [directShowFrameBuffer.includes('kFeedMappingName'), 'DirectShow fallback reads the Octo shared feed'],
+  [directShowStream.includes('if (!m_screenshot)') && directShowStream.includes('std::nothrow'), 'DirectShow fallback initializes a safe frame before the feed is active'],
+  [directShowStream.includes('m_valid(true)') && directShowStream.includes('m_width(m_frame_buffer.width() > 0 ? m_frame_buffer.width() : 1280)'), 'DirectShow fallback advertises a stable stream without an active producer'],
 ];
 for (const [ok, message] of assertions) if (!ok) throw new Error(`native camera contract failed: ${message}`);
 console.log(`native camera contract ok (${required.length} files)`);
