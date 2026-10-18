@@ -878,3 +878,14 @@ describe('portable handset files', () => {
     expect(() => registerHandsetFile({ ...example, codename: '../escape' })).toThrow(/codename/i);
   });
 });
+
+describe('Windows native camera connection notification', () => {
+  it('notifies after a successful native camera installation', () => {
+    expect(manager).toContain("handle('mgr:native-camera-install'");
+    expect(manager).toContain("if (result.installed && process.platform === 'win32' && Notification.isSupported())");
+    expect(manager).toContain("title: strings['android.nativeCamera.connectedTitle']");
+    expect(manager).toContain("body: strings['android.nativeCamera.connectedBody']");
+    expect(manager).toContain('silent: false');
+    expect(manager).toContain('notification.show()');
+  });
+});
