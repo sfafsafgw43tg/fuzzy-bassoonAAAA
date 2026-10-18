@@ -4,8 +4,10 @@ import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(fileURLToPath(new URL('..', import.meta.url)));
-const project = path.join(root, 'native', 'octo-camera');
-const build = path.join(project, 'build');
+const projects = [
+  { source: path.join(root, 'native', 'octo-camera'), build: path.join(root, 'native', 'octo-camera', 'build') },
+  { source: path.join(root, 'native', 'octo-directshow'), build: path.join(root, 'native', 'octo-directshow', 'build') },
+];
 const output = path.join(root, 'resources', 'native-camera');
 
 if (process.platform !== 'win32') {
@@ -20,10 +22,17 @@ function run(command, args) {
 }
 
 fs.mkdirSync(output, { recursive: true });
-run('cmake', ['-S', project, '-B', build, '-A', 'x64']);
-run('cmake', ['--build', build, '--config', 'Release', '--parallel']);
+for (const project of projects) {
+  run('cmake', ['-S', project.source, '-B', project.build, '-A', 'x64']);
+  run('cmake', ['--build', project.build, '--config', 'Release', '--parallel']);
+}
 
-for (const name of ['octo-camera-source.dll', 'octo-cameractl.exe']) {
+const artifacts = [
+  ['octo-camera-source.dll', projects[0].build],
+  ['octo-cameractl.exe', projects[0].build],
+  ['octo-directshow-camera.dll', projects[1].build],
+];
+for (const [name, build] of artifacts) {
   const candidates = [path.join(build, 'Release', name), path.join(build, name)];
   const source = candidates.find((file) => fs.existsSync(file));
   if (!source) throw new Error(`Native camera build did not produce ${name}`);

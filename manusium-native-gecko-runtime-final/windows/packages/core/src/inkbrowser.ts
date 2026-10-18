@@ -11,11 +11,8 @@ export function browserEngineFor(value: unknown): BrowserEngine {
   return value === 'inkbrowser' || value === 'firefox' ? value : 'electron';
 }
 
-/**
- * Chrome/Chromium is the default for new profiles. Electron remains available as a
- * lightweight compatibility option for profiles that need the legacy embedded path.
- */
-export const NEW_PROFILE_ENGINE: BrowserEngine = 'inkbrowser';
+/** Electron is the compatibility-first default for newly created profiles. */
+export const NEW_PROFILE_ENGINE: BrowserEngine = 'electron';
 export const DEFAULT_CHROMIUM_RUNTIME_VERSION = '155.0.8059.39';
 
 /** The launcher file of the native Chromium base. */

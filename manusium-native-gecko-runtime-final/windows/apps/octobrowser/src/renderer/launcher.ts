@@ -948,6 +948,7 @@ function renderAbout(v: HTMLElement): void {
     h('div', { class: 'panel' }, h('h2', { text: `Octo.su ${init.version}` }), h('p', { text: t('about.desc') }), h('p', { class: 'hint', text: t('status.noGuarantee') })),
     h('div', { class: 'panel' }, h('h2', { text: t('about.connections') }), h('p', { class: 'hint', text: t('about.telemetryOff') }), conns),
     h('div', { class: 'panel' }, h('h2', { text: t('about.licenses') }), h('p', { text: t('about.licensesDesc') })),
+    h('div', { class: 'panel' }, h('h2', { text: t('about.roadmapTitle') }), h('p', { class: 'hint', text: t('about.roadmapNote') })),
   );
 }
 

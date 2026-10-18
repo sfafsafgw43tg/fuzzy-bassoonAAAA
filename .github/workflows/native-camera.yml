@@ -7,6 +7,7 @@ on:
       - 'arena/**'
     paths:
       - 'manusium-native-gecko-runtime-final/windows/native/octo-camera/**'
+      - 'manusium-native-gecko-runtime-final/windows/native/octo-directshow/**'
       - 'manusium-native-gecko-runtime-final/windows/tools/build-native-camera.mjs'
       - '.github/workflows/native-camera.yml'
 
@@ -37,7 +38,8 @@ jobs:
         run: |
           $required = @(
             'resources/native-camera/octo-camera-source.dll',
-            'resources/native-camera/octo-cameractl.exe'
+            'resources/native-camera/octo-cameractl.exe',
+            'resources/native-camera/octo-directshow-camera.dll'
           )
           foreach ($file in $required) {
             if (-not (Test-Path -LiteralPath $file -PathType Leaf)) { throw "Missing native camera artifact: $file" }

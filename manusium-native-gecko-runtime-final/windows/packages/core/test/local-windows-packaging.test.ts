@@ -75,9 +75,9 @@ describe('branded local Windows setup', () => {
     const editor = fs.readFileSync(path.join(root, 'apps/octobrowser/src/renderer/launcher-editor.ts'), 'utf8');
     const engine = fs.readFileSync(path.join(root, 'packages/core/src/inkbrowser.ts'), 'utf8');
     const open = fn('Invoke-Open');
-    expect(editor).toContain("engine: 'inkbrowser'");
+    expect(editor).toContain('engine: NEW_PROFILE_ENGINE');
     expect(editor).toContain("d.engine = choice === 'chromium' ? 'inkbrowser' : choice");
-    expect(engine).toContain("export const NEW_PROFILE_ENGINE: BrowserEngine = 'inkbrowser'");
+    expect(engine).toContain("export const NEW_PROFILE_ENGINE: BrowserEngine = 'electron'");
     expect(open).toContain("$electronExe = Get-ElectronLauncherExe 'octobrowser'");
   });
   it('labels the primary base as Chrome while explaining its InkBrowser Chromium fork', () => {

@@ -170,7 +170,7 @@ function kindDefaults(kind: Kind, addons: string[]): Pick<Draft, 'protection' | 
 function newDraft(): Draft {
   const folder = S.folder && S.folder !== '__none' ? S.folder : '';
   return {
-    name: '', kind: 'antidetect', engine: 'inkbrowser', chromiumRuntime: '155.0.8059.39', status: '', tags: [], folder, profileDirectory: '', notes: '', startPages: [CHROMIUM_DEFAULT_START_PAGE], homePage: CHROMIUM_DEFAULT_START_PAGE, searchEngine: 'duckduckgo-noai', theme: 'dark', browserShell: 'chrome', baseChromeLook: true, ordinaryBrowser: false, appMode: false, smartPaste: true,
+    name: '', kind: 'antidetect', engine: NEW_PROFILE_ENGINE, chromiumRuntime: '155.0.8059.39', status: '', tags: [], folder, profileDirectory: '', notes: '', startPages: [CHROMIUM_DEFAULT_START_PAGE], homePage: CHROMIUM_DEFAULT_START_PAGE, searchEngine: 'duckduckgo-noai', theme: 'dark', browserShell: 'chrome', baseChromeLook: true, ordinaryBrowser: false, appMode: false, smartPaste: true,
     dns: { mode: 'inherit', dohTemplate: '' },
     ...kindDefaults('antidetect', S.init.addons.filter((a) => a.kind !== 'external-app').map((a) => a.id)),
     vstudioWebOnLaunch: false,
@@ -443,9 +443,9 @@ function general(b: HTMLElement, d: Draft, creating: boolean, p: Profile | null,
   }
   b.append(section(t('profile.kind'), grid, h('p', { class: 'hint', text: t(`profile.kindDesc.${d.kind}`) }), !creating ? h('p', { class: 'hint', text: t('ui.kindFixed') }) : null));
 
-  // Base is the real browser engine choice. Chrome is the primary choice and
-  // maps to the bundled, source-built Octo InkBrowser Chromium executable. The
-  // visual shell is derived from the selected engine; it is not the engine.
+  // Base is the real browser engine choice. Electron is selected for new
+  // profiles because it is the compatibility-first bundled engine. The visual
+  // shell is derived from the selected engine; it is not the engine.
   const base = d.engine === 'firefox' ? 'firefox' : d.engine === 'electron' ? 'electron' : 'chromium';
   const baseGrid = h('div', { class: 'kind-grid browser-base-grid', role: 'radiogroup' });
   for (const choice of ['chromium', 'firefox', 'electron'] as const) {

@@ -41,8 +41,8 @@ describe('browser engine choice', () => {
     expect(browserEngineFor('firefox')).toBe('firefox');
   });
 
-  it('new profiles use the primary native Chromium choice while Electron remains available', () => {
-    expect(NEW_PROFILE_ENGINE).toBe('inkbrowser');
+  it('new profiles use the compatibility-first Electron choice', () => {
+    expect(NEW_PROFILE_ENGINE).toBe('electron');
     expect(inkbrowserBlocks(factsFor(defaultProfile('personal', 'Default')))).toEqual(['fingerprint', 'protection']);
   });
 

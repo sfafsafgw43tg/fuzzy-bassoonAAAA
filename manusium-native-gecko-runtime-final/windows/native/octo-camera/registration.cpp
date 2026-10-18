@@ -82,6 +82,29 @@ HRESULT UninstallCurrentUser() {
   return SUCCEEDED(hr) || hr == MF_E_NOT_FOUND ? S_OK : hr;
 }
 
+using RegistrationFn = HRESULT (STDAPICALLTYPE*)();
+
+static HRESULT CallDirectShowRegistration(const std::wstring& filterDll, const char* exportName) {
+  if (filterDll.empty()) return E_INVALIDARG;
+  std::error_code error;
+  const auto absolute = std::filesystem::absolute(filterDll, error);
+  if (error || !std::filesystem::is_regular_file(absolute, error)) return HRESULT_FROM_WIN32(ERROR_FILE_NOT_FOUND);
+  HMODULE module = LoadLibraryW(absolute.c_str());
+  if (!module) return HRESULT_FROM_WIN32(GetLastError());
+  const auto entry = reinterpret_cast<RegistrationFn>(GetProcAddress(module, exportName));
+  const HRESULT hr = entry ? entry() : HRESULT_FROM_WIN32(ERROR_PROC_NOT_FOUND);
+  FreeLibrary(module);
+  return hr;
+}
+
+HRESULT InstallDirectShow(const std::wstring& filterDll) {
+  return CallDirectShowRegistration(filterDll, "DllRegisterServer");
+}
+
+HRESULT UninstallDirectShow(const std::wstring& filterDll) {
+  return CallDirectShowRegistration(filterDll, "DllUnregisterServer");
+}
+
 HRESULT IsInstalled(bool& installed) {
   installed = false;
   HKEY key = nullptr;
