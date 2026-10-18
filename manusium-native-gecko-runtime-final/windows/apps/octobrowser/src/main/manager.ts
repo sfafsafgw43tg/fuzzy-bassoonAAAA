@@ -3060,15 +3060,23 @@ export class Manager {
     handle('mgr:native-camera-status', L, () => nativeCameraStatus());
     handle('mgr:native-camera-install', L, async () => {
       const result = await installNativeCamera();
-      if (result.installed && process.platform === 'win32' && Notification.isSupported()) {
+      if (result.installed && process.platform === 'win32') {
         const strings = DICTS[this.ctx.lang] ?? DICTS.en;
-        const notification = new Notification({
-          title: strings['android.nativeCamera.connectedTitle'],
-          body: strings['android.nativeCamera.connectedBody'],
-          silent: false,
-        });
-        notification.on('click', () => { this.launcher?.show(); this.launcher?.focus(); });
-        notification.show();
+        const title = strings['android.nativeCamera.connectedTitle'];
+        const body = strings['android.nativeCamera.connectedBody'];
+        if (Notification.isSupported()) {
+          const notification = new Notification({ title, body, silent: false });
+          notification.on('click', () => { this.launcher?.show(); this.launcher?.focus(); });
+          notification.show();
+        } else {
+          // Some Windows sessions disable Electron toasts until the app has an
+          // AppUserModelId. Never report a successful install silently there.
+          const messageOptions = {
+            type: 'info' as const, title, message: body, buttons: ['OK'], noLink: true,
+          };
+          if (this.launcher) void dialog.showMessageBox(this.launcher, messageOptions);
+          else void dialog.showMessageBox(messageOptions);
+        }
       }
       return result;
     });
