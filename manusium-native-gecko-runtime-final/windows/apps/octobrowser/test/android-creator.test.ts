@@ -526,6 +526,9 @@ describe('Camera Studio bundle and Devices launch action', () => {
     const devices = entry('virtual_devices.py');
     expect(app).toContain('class RealmeStudioApp');
     expect(app).toContain('def main():');
+    expect(app).toContain('auto_fit_preview');
+    expect(app).toContain('ImageOps.fit');
+    expect(app).toContain('text="Auto-fit"');
     expect(devices).toContain('pyvirtualcam');
     expect(devices).toContain('def list_dshow_cameras');
     expect(devices).toContain('def detect_vcam_backends');
