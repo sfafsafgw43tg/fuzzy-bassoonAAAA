@@ -71,8 +71,18 @@ int wmain(int argc, wchar_t** argv) {
       directShow = octo::camera::InstallDirectShow(directShowPath);
       if (IsAccessDenied(directShow)) directShow = RunElevatedDirectShow(L"register-directshow", directShowPath);
     }
-    if (mediaFoundation == apiMissing) hr = directShow;
-    else if (SUCCEEDED(mediaFoundation) && FAILED(directShow)) hr = directShow;
+    if (mediaFoundation == apiMissing) {
+      // Windows 10 has no MFCreateVirtualCamera. DirectShow is the supported
+      // backend there, so return its result and preserve both HRESULTs when it
+      // also fails instead of misleading the user with an MF-only message.
+      hr = directShow;
+      if (FAILED(directShow)) {
+        std::wcerr << L"Media Foundation unavailable (0x" << std::hex
+                   << static_cast<unsigned long>(mediaFoundation)
+                   << L"); DirectShow fallback failed (0x"
+                   << static_cast<unsigned long>(directShow) << L")\n";
+      }
+    } else if (SUCCEEDED(mediaFoundation) && FAILED(directShow)) hr = directShow;
     else hr = mediaFoundation;
   } else if (command == L"uninstall") {
     if (directShowPath.empty() && !sourcePath.empty()) directShowPath = FindSiblingDirectShow(sourcePath);
@@ -82,8 +92,18 @@ int wmain(int argc, wchar_t** argv) {
       directShow = octo::camera::UninstallDirectShow(directShowPath);
       if (IsAccessDenied(directShow)) directShow = RunElevatedDirectShow(L"unregister-directshow", directShowPath);
     }
-    if (mediaFoundation == apiMissing) hr = directShow;
-    else if (SUCCEEDED(mediaFoundation) && FAILED(directShow)) hr = directShow;
+    if (mediaFoundation == apiMissing) {
+      // Windows 10 has no MFCreateVirtualCamera. DirectShow is the supported
+      // backend there, so return its result and preserve both HRESULTs when it
+      // also fails instead of misleading the user with an MF-only message.
+      hr = directShow;
+      if (FAILED(directShow)) {
+        std::wcerr << L"Media Foundation unavailable (0x" << std::hex
+                   << static_cast<unsigned long>(mediaFoundation)
+                   << L"); DirectShow fallback failed (0x"
+                   << static_cast<unsigned long>(directShow) << L")\n";
+      }
+    } else if (SUCCEEDED(mediaFoundation) && FAILED(directShow)) hr = directShow;
     else hr = mediaFoundation;
   } else if (command == L"status") {
     bool installed = false;

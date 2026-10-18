@@ -9,6 +9,11 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Ship the camera components without a dependency on the installed VC++ runtime.
+# This is important for DirectShow: LoadLibrary is performed by the controller
+# during registration on clean Windows 10 machines.
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
 add_library(octo-camera-source SHARED
   camera_source.cpp
   camera_stream.cpp

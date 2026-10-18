@@ -9,6 +9,11 @@ set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# Ship the camera components without a dependency on the installed VC++ runtime.
+# This is important for DirectShow: LoadLibrary is performed by the controller
+# during registration on clean Windows 10 machines.
+set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+
 set(BASE ${CMAKE_CURRENT_SOURCE_DIR}/baseclasses)
 set(CORE ${CMAKE_CURRENT_SOURCE_DIR}/softcamcore)
 
