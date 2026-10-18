@@ -2119,7 +2119,14 @@ function Install-NativeCameraBundle {
     return $false
   }
   try {
-    $result = Invoke-Native $controller @('install', '--source', $source) $root
+    # Pass the DirectShow DLL explicitly. Do not rely on sibling discovery:
+    # packaged paths can contain junctions or a copied source DLL from an older
+    # build, which previously caused Windows 10 to retry MF and stop at 0x7f.
+    $result = Invoke-Native $controller @('install', '--source', $source, '--directshow', $directShow) $root
+    if ($result.code -ne 0 -and ([string]$result.text -match '(?i)0x8007007f|MFCreateVirtualCamera|Media Foundation unavailable')) {
+      Write-Log 'warn' 'Media Foundation is unavailable; retrying the DirectShow registration explicitly.'
+      $result = Invoke-Native $controller @('register-directshow', $directShow) $root
+    }
     if ($result.code -ne 0) {
       foreach ($line in @(([string]$result.text) -split "`r?`n" | Select-Object -Last 12)) { Write-Log 'error' $line }
       Warn (T 'cameraFailed' $result.code)
