@@ -59,6 +59,7 @@ import { parseSecondaryDisplay } from './android-displays';
  import { importAvdFolder, type CameraSource, androidCameraChoices, androidMediaCheck, repairAndroidMedia, emulatorWebcams, androidCameraChoicesCached, stopAndroidAvd, stopOwnedAndroidProcesses, androidLaunchPrefs, rememberAndroidLaunch, ANDROID_LOCALES, adbPath, androidSerialFor, openAndroidBrowser, androidChromeStatus, openAndroidChrome, installAndroidChrome, configureMediaCompanion, applyDeviceIdentity, grantAndroidMediaPermissions, reportAndroidProgress, setAndroidProgressSink, type AndroidProgress, acceptAndroidLicenses, androidPackageInstalled, createAndroidAvdFromSpec, quietBootAndroidAvd, installAndroidPackage, updateAvdSettings, type AvdSettingsInput, androidStudioStatusAsync, ANDROID_CATALOG_DEVICES, ANDROID_SYSTEM_IMAGES, androidDiskInfo, androidSdkCandidates, androidSystemImageInstalled, clearAndroidSdkRoot, installAndroidTools, setAndroidSdkRoot, createAndroidAvd, defaultAvdDirectory, deleteAndroidAvd, ensureMediaCompanionAsync, installAndroidSystemImage, launchAndroidAvd, listAndroidAvds, androidInstallRoot, androidInstallTarget, imageRunsHere, setAndroidInstallRoot, clearAndroidInstallRoot, availableSystemImageIds, androidToolLogPath, mediaCompanionStatusAsync, openAndroidAvdFolder, openAndroidStudio, requestMediaCompanionBroadcast, waitForMediaCompanionCamera, startMediaCompanion, stopMediaCompanion, startObsVirtualCamera, setMediaPluginEnabled, mediaPluginActive, startWebMediaCompanionAsync, applyAndroidLocation, applyRandomPolishAndroidLocation, type AndroidAvdCreateInput, type AndroidLaunchInput} from './android-studio';
 import { ANDROID_STORES, androidStore, androidStoreStates, changeAndroidStoreState, installAndroidStores, readMediaFolder, pushMediaToDevice } from './android-stores';
 import { addCustomImage, customCataloguePath, importSystemImageArchive, importSystemImageDirectory, inspectSystemImageDirectory, readCustomCatalogue, removeCustomImage, validCustomPackage } from './android-custom';
+import { customAndroidBuildGuide, customAndroidBuildPath, deleteCustomAndroidBuild, readCustomAndroidBuilds, saveCustomAndroidBuild, supportedCustomAndroidBuildTargets } from './android-custom-build';
 import { installMediaRequirement, vbCableInstalledAsync } from './media-requirements';
 import { execFile } from 'node:child_process';
 import { DOLPHIN_IMPORT_FIELDS, convertDolphinProfile, dolphinProfileSummaries, parseDolphinExport, type DolphinImportOptions } from './dolphin-import';
@@ -2729,6 +2730,13 @@ export class Manager {
       catch (error) { return { ok: false, image: null, message: error instanceof Error ? error.message : 'That image could not be added.' }; }
     });
     handle('mgr:android-custom-remove', L, (_e, packageName: string) => removeCustomImage(String(packageName ?? '')));
+    handle('mgr:android-builds', L, () => ({ ...readCustomAndroidBuilds(), path: customAndroidBuildPath(), targets: supportedCustomAndroidBuildTargets(), level: 2 }));
+    handle('mgr:android-build-save', L, (_e, input: Record<string, unknown>) => saveCustomAndroidBuild(input ?? {}));
+    handle('mgr:android-build-delete', L, (_e, id: string) => deleteCustomAndroidBuild(String(id ?? '')));
+    handle('mgr:android-build-guide', L, (_e, input: Record<string, unknown>) => {
+      const saved = saveCustomAndroidBuild(input ?? {});
+      return saved.ok ? { ok: true, guide: customAndroidBuildGuide(saved.config) } : saved;
+    });
     handle('mgr:android-custom-directory', L, async (_e, input: { path?: string }) => {
       setAndroidProgressSink((progress: AndroidProgress) => this.launcher?.webContents.send('mgr:android-progress', progress));
       try {

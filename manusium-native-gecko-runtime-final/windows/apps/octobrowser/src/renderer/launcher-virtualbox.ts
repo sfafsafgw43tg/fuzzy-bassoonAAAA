@@ -27,6 +27,7 @@ interface AndroidStatus { javaVersion?: number; javaHome?: string; searched: str
 interface AndroidResult { available: boolean; machines: AndroidMachine[] }
 interface ChromeCameraChoice { name: string; device: string; virtual: boolean; foreign?: boolean }
 interface ChromeCameraChoices { webcams: ChromeCameraChoice[]; emulatorAvailable: boolean; hostCameraCount?: number; problem?: string; detail?: string }
+interface CustomAndroidBuild { id: string; name: string; release: string; architecture: string; target: string; variant: string; notes: string; createdAt: string; updatedAt: string }
 interface AndroidLaunchPrefs {
   proxyId: string; cameraFront: CameraSource; cameraBack: CameraSource;
   cameraFrontDevice: string; cameraBackDevice: string; cameraDevice: string;
@@ -527,7 +528,7 @@ export async function renderVirtualBox(v: HTMLElement): Promise<void> {
     // when the older Virtual Android Browser beta toggle is disabled; the panel
     // reports its own Chrome/AVD readiness and does not launch anything until
     // the user presses its explicit button.
-    virtualBrowserHost.append(chromeAndroidPanel(machines));
+    virtualBrowserHost.append(chromeAndroidPanel(machines), customAndroidBuildPanel());
     if (machines.some((machine) => machine.incomplete)) {
       androidList.append(h('p', { class: 'hint warn vm-note', text: t('android.incompleteNote') }));
     }
@@ -632,6 +633,35 @@ function virtualAndroidBrowserPanel(machines: AndroidMachine[]): HTMLElement {
       h('div', {}, h('h2', { id: 'virtual-android-browser-title' }, t('android.virtualBrowser.title'), h('span', { class: 'pill warn', text: t('android.virtualBrowser.beta') })), status),
       h('div', { class: 'row' },
         h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.virtualBrowser.selectDevice') }), deviceSelect), open)));
+}
+
+function customAndroidBuildPanel(): HTMLElement {
+  const name = input('', { maxlength: '64', autocomplete: 'off', placeholder: t('android.build.namePlaceholder'), 'aria-label': t('android.build.name') });
+  const target = select<string>('aosp_cf_x86_64_only_phone-aosp_current-userdebug', [
+    ['aosp_cf_x86_64_only_phone-aosp_current-userdebug', 'AOSP Cuttlefish x86_64 phone · userdebug'],
+    ['sdk_phone_x86_64', 'AOSP Emulator x86_64'],
+  ], () => undefined);
+  const variant = select<string>('userdebug', [['user', 'user'], ['userdebug', 'userdebug'], ['eng', 'eng']], () => undefined);
+  const notes = h('textarea', { class: 'input', rows: '3', maxlength: '2000', placeholder: t('android.build.notesPlaceholder'), 'aria-label': t('android.build.notes') }) as HTMLTextAreaElement;
+  const save = h('button', { class: 'btn primary', type: 'button', 'aria-label': t('android.build.save') }, icon('save', 14), h('span', { text: t('android.build.save') })) as HTMLButtonElement;
+  const guide = h('button', { class: 'btn small', type: 'button', 'aria-label': t('android.build.guide') }, icon('book', 14), h('span', { text: t('android.build.guide') })) as HTMLButtonElement;
+  const status = h('p', { class: 'hint', 'aria-live': 'polite', text: t('android.build.level2') });
+  const list = h('div', { class: 'android-build-list', role: 'list' });
+  let configs: CustomAndroidBuild[] = [];
+  const paint = () => list.replaceChildren(...configs.map((config) => {
+    const remove = h('button', { class: 'btn small danger', type: 'button', 'aria-label': t('android.build.delete', { name: config.name }), text: t('common.delete') }) as HTMLButtonElement;
+    remove.onclick = async () => { if (await run(api.invoke<boolean>('mgr:android-build-delete', config.id))) { configs = configs.filter((item) => item.id !== config.id); paint(); status.textContent = t('android.build.deleted'); } };
+    const edit = h('button', { class: 'btn small', type: 'button', text: t('common.edit') }) as HTMLButtonElement;
+    edit.onclick = () => { (name as HTMLInputElement).value = config.name; (target as unknown as { value: string }).value = config.target; (variant as unknown as { value: string }).value = config.variant; notes.value = config.notes; save.dataset.id = config.id; };
+    return h('div', { class: 'card-specs android-build-item', role: 'listitem' }, h('div', { class: 'row between' }, h('strong', { text: config.name }), h('span', { class: 'pill', text: t('android.build.draft') })), h('p', { class: 'small muted', text: `${config.release} · ${config.architecture} · ${config.target} · ${config.variant}` }), config.notes ? h('p', { class: 'small muted', text: config.notes }) : h('span', {}), h('div', { class: 'row' }, edit, remove));
+  }));
+  const load = async () => { const result = await run(api.invoke<{ configs: CustomAndroidBuild[] }>('mgr:android-builds')); configs = result?.configs ?? []; paint(); };
+  const formInput = () => ({ id: save.dataset.id || '', name: (name as HTMLInputElement).value, target: valueOf(target), variant: valueOf(variant), notes: notes.value });
+  save.onclick = async () => { save.disabled = true; const result = await run(api.invoke<{ ok: boolean; config?: CustomAndroidBuild; message?: string }>('mgr:android-build-save', formInput())); save.disabled = false; if (!result?.ok || !result.config) { status.textContent = result?.message || t('android.build.invalid'); return; } configs = [result.config, ...configs.filter((item) => item.id !== result.config?.id)]; delete save.dataset.id; status.textContent = t('android.build.saved'); paint(); };
+  guide.onclick = async () => { const result = await run(api.invoke<{ ok: boolean; guide?: { commands: string[] }; message?: string }>('mgr:android-build-guide', formInput())); if (!result?.ok || !result.guide) { status.textContent = result?.message || t('android.build.invalid'); return; } const commands = result.guide.commands.join('\n'); status.textContent = t('android.build.guideReady'); if (navigator.clipboard?.writeText) void navigator.clipboard.writeText(commands); window.open('https://source.android.com/docs/setup/build/building', '_blank'); };
+  const panel = h('section', { class: 'vm-section android-custom-build', 'aria-labelledby': 'android-build-title' }, h('div', { class: 'vm-section-head' }, h('div', {}, h('h2', { id: 'android-build-title' }, t('android.build.title'), h('span', { class: 'pill warn', text: t('android.build.level') })), h('p', { class: 'hint', text: t('android.build.desc') }), status), h('div', { class: 'android-build-form' }, h('div', { class: 'row' }, h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.build.name') }), name), h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.build.target') }), target), h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.build.variant') }), variant)), h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.build.notes') }), notes), h('div', { class: 'row' }, save, guide))), h('h3', { class: 'spec-title', text: t('android.build.savedTitle') }), list);
+  void load();
+  return panel;
 }
 
 function chromeAndroidPanel(machines: AndroidMachine[]): HTMLElement {
