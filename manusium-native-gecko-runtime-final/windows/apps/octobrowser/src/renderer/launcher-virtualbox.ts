@@ -521,7 +521,11 @@ export async function renderVirtualBox(v: HTMLElement): Promise<void> {
     clear(androidList);
     const machines = result?.machines ?? [];
     clear(virtualBrowserHost);
-    if (S.init?.settings?.androidVirtualBrowserBeta === true) virtualBrowserHost.append(chromeAndroidPanel(machines));
+    // Chrome Android is its own lower Devices workspace. Keep it visible even
+    // when the older Virtual Android Browser beta toggle is disabled; the panel
+    // reports its own Chrome/AVD readiness and does not launch anything until
+    // the user presses its explicit button.
+    virtualBrowserHost.append(chromeAndroidPanel(machines));
     if (machines.some((machine) => machine.incomplete)) {
       androidList.append(h('p', { class: 'hint warn vm-note', text: t('android.incompleteNote') }));
     }
