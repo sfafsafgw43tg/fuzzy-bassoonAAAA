@@ -21,6 +21,6 @@
       "@octo/shell/*": ["packages/shell/src/*"]
     }
   },
-  "include": ["packages/**/*.ts", "apps/**/*.ts"],
+  "include": ["packages/**/*.ts", "apps/**/*.ts", "services/**/*.ts"],
   "exclude": ["node_modules", "**/dist/**"]
 }

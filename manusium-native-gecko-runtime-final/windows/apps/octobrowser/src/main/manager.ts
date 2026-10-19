@@ -56,11 +56,12 @@ import { androidNetworkStatus, clearAndroidProxy, setAllAndroidNetworkOff, setAn
 import type { QuietBootResult } from './android-quiet-boot';
 import { ScreenStream, execAdb, keyArgs, nextRotation, parseRotation, parseScreenAction, pngDimensions, rotationLockArgs, rotationReadArgs, rotationSetArgs, screencapArgs, tapArgs } from './android-screen';
 import { parseSecondaryDisplay } from './android-displays';
- import { importAvdFolder, type CameraSource, androidCameraChoices, androidMediaCheck, repairAndroidMedia, emulatorWebcams, androidCameraChoicesCached, stopAndroidAvd, stopOwnedAndroidProcesses, androidLaunchPrefs, rememberAndroidLaunch, ANDROID_LOCALES, adbPath, androidSerialFor, openAndroidBrowser, androidChromeStatus, openAndroidChrome, installAndroidChrome, configureMediaCompanion, applyDeviceIdentity, grantAndroidMediaPermissions, reportAndroidProgress, setAndroidProgressSink, type AndroidProgress, acceptAndroidLicenses, androidPackageInstalled, createAndroidAvdFromSpec, quietBootAndroidAvd, installAndroidPackage, updateAvdSettings, type AvdSettingsInput, androidStudioStatusAsync, ANDROID_CATALOG_DEVICES, ANDROID_SYSTEM_IMAGES, androidDiskInfo, androidSdkCandidates, androidSystemImageInstalled, clearAndroidSdkRoot, installAndroidTools, setAndroidSdkRoot, createAndroidAvd, defaultAvdDirectory, deleteAndroidAvd, ensureMediaCompanionAsync, installAndroidSystemImage, launchAndroidAvd, listAndroidAvds, androidInstallRoot, androidInstallTarget, imageRunsHere, setAndroidInstallRoot, clearAndroidInstallRoot, availableSystemImageIds, androidToolLogPath, mediaCompanionStatusAsync, openAndroidAvdFolder, openAndroidStudio, requestMediaCompanionBroadcast, waitForMediaCompanionCamera, startMediaCompanion, stopMediaCompanion, startObsVirtualCamera, setMediaPluginEnabled, mediaPluginActive, startWebMediaCompanionAsync, applyAndroidLocation, applyRandomPolishAndroidLocation, type AndroidAvdCreateInput, type AndroidLaunchInput} from './android-studio';
+ import { importAvdFolder, type CameraSource, androidCameraChoices, androidMediaCheck, repairAndroidMedia, emulatorWebcams, androidCameraChoicesCached, stopAndroidAvd, stopOwnedAndroidProcesses, androidLaunchPrefs, rememberAndroidLaunch, ANDROID_LOCALES, adbPath, androidSerialFor, openAndroidBrowser, androidChromeStatus, openAndroidChrome, installAndroidChrome, configureMediaCompanion, applyDeviceIdentity, grantAndroidMediaPermissions, reportAndroidProgress, setAndroidProgressSink, type AndroidProgress, acceptAndroidLicenses, androidPackageInstalled, createAndroidAvdFromSpec, quietBootAndroidAvd, installAndroidPackage, updateAvdSettings, type AvdSettingsInput, androidStudioStatusAsync, ANDROID_CATALOG_DEVICES, ANDROID_SYSTEM_IMAGES, androidDiskInfo, androidSdkCandidates, androidSystemImageInstalled, clearAndroidSdkRoot, installAndroidTools, setAndroidSdkRoot, createAndroidAvd, defaultAvdDirectory, deleteAndroidAvd, ensureMediaCompanionAsync, installAndroidSystemImage, launchAndroidAvd, listAndroidAvds, androidInstallRoot, androidInstallTarget, imageRunsHere, setAndroidInstallRoot, clearAndroidInstallRoot, availableSystemImageIds, availableSystemImagePackages, parseAndroidSystemImagePackage, installedAndroidSkins, androidToolLogPath, mediaCompanionStatusAsync, openAndroidAvdFolder, openAndroidStudio, requestMediaCompanionBroadcast, waitForMediaCompanionCamera, startMediaCompanion, stopMediaCompanion, startObsVirtualCamera, setMediaPluginEnabled, mediaPluginActive, startWebMediaCompanionAsync, applyAndroidLocation, applyRandomPolishAndroidLocation, type AndroidAvdCreateInput, type AndroidLaunchInput} from './android-studio';
 import { ANDROID_STORES, androidStore, androidStoreStates, changeAndroidStoreState, installAndroidStores, readMediaFolder, pushMediaToDevice } from './android-stores';
 import { addCustomImage, customCataloguePath, importSystemImageArchive, importSystemImageDirectory, inspectSystemImageDirectory, readCustomCatalogue, removeCustomImage, validCustomPackage } from './android-custom';
-import { customAndroidBuildGuide, customAndroidBuildPath, deleteCustomAndroidBuild, readCustomAndroidBuilds, saveCustomAndroidBuild, supportedCustomAndroidBuildTargets } from './android-custom-build';
+import { customAndroidBuildGuide, customAndroidBuildPath, deleteCustomAndroidBuild, exportCustomAndroidBuilds, readCustomAndroidBuilds, saveCustomAndroidBuild, supportedCustomAndroidBuildTargets, validateCustomAndroidBuild } from './android-custom-build';
 import { installMediaRequirement, vbCableInstalledAsync } from './media-requirements';
+import { androidBuildBackendState, cancelRemoteAndroidBuild, listRemoteAndroidBuilds, retryRemoteAndroidBuild, submitRemoteAndroidBuild } from './android-build-client';
 import { execFile } from 'node:child_process';
 import { DOLPHIN_IMPORT_FIELDS, convertDolphinProfile, dolphinProfileSummaries, parseDolphinExport, type DolphinImportOptions } from './dolphin-import';
 import { FirefoxBidi, NativeChromiumTabs, NativeEngineProcess, spawnNativeEngine } from '@octo/shell/native-engine';
@@ -2731,8 +2732,24 @@ export class Manager {
     });
     handle('mgr:android-custom-remove', L, (_e, packageName: string) => removeCustomImage(String(packageName ?? '')));
     handle('mgr:android-builds', L, () => ({ ...readCustomAndroidBuilds(), path: customAndroidBuildPath(), targets: supportedCustomAndroidBuildTargets(), level: 2 }));
+    handle('mgr:android-build-backend-state', L, () => androidBuildBackendState());
+    handle('mgr:android-build-remote-list', L, async () => { try { return { ok: true, ...(await listRemoteAndroidBuilds()) }; } catch (error) { return { ok: false, message: error instanceof Error ? error.message : 'BUILD_BACKEND_UNAVAILABLE' }; } });
+    handle('mgr:android-build-remote-submit', L, async (_e, input: Record<string, unknown>) => {
+      const local = validateCustomAndroidBuild(input as never);
+      if (!local.ok) return local;
+      try { return { ok: true, ...(await submitRemoteAndroidBuild(local.value, typeof input.sourceRevision === 'string' ? input.sourceRevision : undefined)) }; }
+      catch (error) { return { ok: false, message: error instanceof Error ? error.message : 'BUILD_BACKEND_UNAVAILABLE' }; }
+    });
+    handle('mgr:android-build-remote-cancel', L, async (_e, id: string) => { try { return { ok: true, ...(await cancelRemoteAndroidBuild(String(id ?? ''))) }; } catch (error) { return { ok: false, message: error instanceof Error ? error.message : 'BUILD_BACKEND_UNAVAILABLE' }; } });
+    handle('mgr:android-build-remote-retry', L, async (_e, id: string) => { try { return { ok: true, ...(await retryRemoteAndroidBuild(String(id ?? ''))) }; } catch (error) { return { ok: false, message: error instanceof Error ? error.message : 'BUILD_BACKEND_UNAVAILABLE' }; } });
     handle('mgr:android-build-save', L, (_e, input: Record<string, unknown>) => saveCustomAndroidBuild(input ?? {}));
     handle('mgr:android-build-delete', L, (_e, id: string) => deleteCustomAndroidBuild(String(id ?? '')));
+    handle('mgr:android-build-export', L, (_e, input: { format?: string; id?: string }) => {
+      const format = input?.format;
+      if (format !== 'json' && format !== 'yaml') return { ok: false, message: 'Unsupported export format.' };
+      if (input?.id !== undefined && !readCustomAndroidBuilds().configs.some((config) => config.id === input.id)) return { ok: false, message: 'android.build.planMissing' };
+      return { ok: true, format, content: exportCustomAndroidBuilds(format, input?.id) };
+    });
     handle('mgr:android-build-guide', L, (_e, input: Record<string, unknown>) => {
       const saved = saveCustomAndroidBuild(input ?? {});
       return saved.ok ? { ok: true, guide: customAndroidBuildGuide(saved.config) } : saved;
@@ -2942,6 +2959,7 @@ export class Manager {
       customPackage?: string;
       ramMb?: number; cpus?: number; diskGb?: number; cameraFront?: string; cameraBack?: string; microphoneEnabled?: boolean;
       width?: number; height?: number; dpi?: number; heapMb?: number; sdCardMb?: number;
+      skinPath?: string;
       gpuMode?: string; bootMode?: string; snapshots?: boolean;
       brand?: string; manufacturer?: string; model?: string; marketName?: string;
       device?: string; product?: string; mac?: string; imei?: string; androidId?: string;
@@ -3008,6 +3026,7 @@ export class Manager {
         cameraFront, cameraBack,
         cameraFrontDevice: String(input?.cameraFrontDevice ?? ''), cameraBackDevice: String(input?.cameraBackDevice ?? ''),
         cameraDevice: String(input?.cameraDevice ?? ''),
+        skinPath: String(input?.skinPath ?? ''),
         microphoneEnabled: input?.microphoneEnabled !== false,
         props: buildIdentity,
         telephone: String(input?.telephone ?? ''),
@@ -3049,6 +3068,21 @@ export class Manager {
     });
     handle('mgr:android-installed-images', L, () =>
       ANDROID_SYSTEM_IMAGES.filter((item) => androidSystemImageInstalled(item.id)).map((item) => item.id));
+    handle('mgr:android-api-packages', L, async () => {
+      try {
+        const result = await availableSystemImagePackages();
+        return { ...result, installed: result.packages.filter((item) => androidPackageInstalled(item)), error: '' };
+      } catch (error) {
+        return { trusted: false, packages: [], installed: [], error: error instanceof Error ? error.message.slice(0, 500) : 'The Android SDK package list could not be read.' };
+      }
+    });
+    handle('mgr:android-install-api-package', L, async (_e, packageName: string) => {
+      const clean = String(packageName ?? '').trim();
+      if (!parseAndroidSystemImagePackage(clean)) throw new Error('Invalid Android system image package');
+      await installAndroidPackage(clean);
+      return { installed: androidPackageInstalled(clean), packageName: clean };
+    });
+    handle('mgr:android-installed-skins', L, () => installedAndroidSkins());
     handle('mgr:android-install-target', L, () => androidInstallTarget());
     handle('mgr:android-set-install-dir', L, (_e, dir: string) => setAndroidInstallRoot(String(dir ?? '')));
     handle('mgr:android-clear-install-dir', L, () => clearAndroidInstallRoot());

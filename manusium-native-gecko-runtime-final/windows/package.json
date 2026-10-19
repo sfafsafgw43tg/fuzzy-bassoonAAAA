@@ -15,6 +15,9 @@
     "build": "node tools/build.mjs",
     "build:dev": "node tools/build.mjs --dev",
     "build:browser": "node tools/build.mjs octobrowser",
+    "build:android-build-platform": "tsc --target ES2022 --module commonjs --moduleResolution node --esModuleInterop --skipLibCheck --outDir services/android-build/dist services/android-build/src/*.ts",
+    "start:android-build-api": "npm run build:android-build-platform && node services/android-build/dist/services/android-build/src/api.js",
+    "start:android-build-worker": "npm run build:android-build-platform && node services/android-build/dist/services/android-build/src/worker-daemon.js",
     "build:detect": "node tools/build.mjs octodetect",
     "build:native-camera": "node tools/build-native-camera.mjs",
     "build:chromium:windows": "node tools/chromium-versions.mjs build",
@@ -91,6 +94,7 @@
     "hash-wasm": "^4.12.0",
     "socks": "^2.8.7",
     "tldts": "^7.4.15",
+    "yaml": "2.9.1",
     "yauzl": "^3.4.0"
   },
   "allowScripts": {

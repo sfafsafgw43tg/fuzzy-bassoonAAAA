@@ -107,6 +107,8 @@ interface Draft {
   locale: string;
   /** An SDK package the user added themselves, used instead of the variant. */
   customPackage: string;
+  /** Existing emulator skin folder/archive; blank means emulator default. */
+  skinPath: string;
   /** App stores / browsers to install the first time the device boots. */
   apps: string[];
   /** Manual APK choices for stores without a stable publisher download. */
@@ -264,6 +266,7 @@ export function androidCreateWizard(context: CreatorContext): void {
     cameraDevice: '',
     locale: '',
     customPackage: '',
+    skinPath: '',
     apps: [], appFiles: {},
     notify: true,
     // One target folder holds both the system-image download and the AVD's
@@ -759,6 +762,39 @@ export function androidCreateWizard(context: CreatorContext): void {
       grid.append(card);
     }
     host.append(grid);
+    const apiHost = h('section', { class: 'android-group' }, h('h3', { text: t('android.apiSelection.title') }));
+    const apiStatus = h('p', { class: 'hint', role: 'status', 'aria-live': 'polite', text: t('android.apiSelection.loading') });
+    const apiSlot = h('div', { class: 'grid2' });
+    const apiInstall = h('button', { class: 'btn small primary', type: 'button', text: t('android.apiSelection.install') }) as HTMLButtonElement;
+    apiInstall.disabled = true;
+    const apiRefresh = h('button', { class: 'btn small', type: 'button', text: t('android.apiSelection.refresh') });
+    const drawApi = async (): Promise<void> => {
+      const result = await api.invoke<{ trusted: boolean; packages: string[]; installed: string[]; error?: string }>('mgr:android-api-packages').catch(() => undefined);
+      apiSlot.replaceChildren();
+      if (!result?.packages?.length) { apiStatus.textContent = result?.error || t('android.apiSelection.unavailable'); apiInstall.disabled = true; return; }
+      const options = result.packages.map((pkg) => {
+        const match = /^system-images;android-(\d+);([^;]+);([^;]+)$/.exec(pkg);
+        const label = match ? `Android ${match[1]} · ${match[2]} · ${match[3]}${result.installed.includes(pkg) ? ` · ${t('android.alreadyDownloaded')}` : ''}` : pkg;
+        return [pkg, label] as [string, string];
+      });
+      if (draft.customPackage && !options.some(([pkg]) => pkg === draft.customPackage)) options.unshift([draft.customPackage, `${draft.customPackage} · ${t('android.custom.inUse', { pkg: draft.customPackage })}`]);
+      const selected = options.some(([pkg]) => pkg === draft.customPackage) ? draft.customPackage : (options.find(([pkg]) => result.installed.includes(pkg))?.[0] ?? options[0][0]);
+      const apiSelect = select<string>(selected, options, (value) => { draft.customPackage = value; apiInstall.disabled = result.installed.includes(value); });
+      draft.customPackage = selected;
+      apiInstall.disabled = result.installed.includes(selected);
+      apiInstall.onclick = async () => {
+        apiInstall.disabled = true; apiStatus.textContent = t('android.apiSelection.installing');
+        const installed = await run(api.invoke<{ installed: boolean; packageName: string }>('mgr:android-install-api-package', selected));
+        apiStatus.textContent = installed?.installed ? t('android.apiSelection.installed') : t('android.apiSelection.installFailed');
+        await drawApi();
+      };
+      apiSlot.append(h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.apiSelection.package') }), apiSelect));
+      apiStatus.textContent = result.trusted ? t('android.apiSelection.ready') : t('android.apiSelection.unverified');
+    };
+    apiRefresh.onclick = () => void drawApi();
+    apiHost.append(apiStatus, apiSlot, h('div', { class: 'row' }, apiInstall, apiRefresh));
+    host.append(apiHost);
+    void drawApi();
 
     // Fill in the real numbers per variant as soon as the catalogue answers.
     void Promise.all(VARIANTS.map(async (variant) => {
@@ -866,6 +902,29 @@ export function androidCreateWizard(context: CreatorContext): void {
     // Keep ROM selection visible: it is a first-class way to choose the image
     // used for this machine, not an advanced action hidden behind a fold.
     return h('details', { class: 'card-specs app-group', open: true }, h('summary', { text: t('android.custom.title') }), body);
+  }
+
+  function skinControl(): HTMLElement {
+    const host = h('section', { class: 'android-group' }, h('h3', { text: t('android.skin.title') }));
+    const status = h('p', { class: 'hint', role: 'status', 'aria-live': 'polite', text: t('android.skin.loading') });
+    const slot = h('div', { class: 'grid2' });
+    const browse = h('button', { class: 'btn small', type: 'button', text: t('android.skin.browse') });
+    const clearSkin = h('button', { class: 'btn small', type: 'button', text: t('android.skin.useDefault') });
+    const draw = async (): Promise<void> => {
+      const skins = await api.invoke<Array<{ name: string; path: string }>>('mgr:android-installed-skins').catch(() => []);
+      const options: Array<[string, string]> = [['', t('android.skin.default')], ...(skins ?? []).map((item) => [item.path, item.name] as [string, string])];
+      const chosen = select<string>(draft.skinPath, options, (value) => { draft.skinPath = value; status.textContent = value ? t('android.skin.selected', { name: options.find(([path]) => path === value)?.[1] ?? value }) : t('android.skin.defaultSelected'); });
+      slot.replaceChildren(h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.skin.installed') }), chosen));
+      status.textContent = skins?.length ? t('android.skin.ready') : t('android.skin.none');
+    };
+    browse.onclick = async () => {
+      const chosen = await run(api.invoke<string | null>('mgr:pick-folder'));
+      if (chosen) { draft.skinPath = chosen; status.textContent = t('android.skin.selected', { name: chosen }); await draw(); }
+    };
+    clearSkin.onclick = () => { draft.skinPath = ''; void draw(); };
+    host.append(status, slot, h('div', { class: 'row' }, browse, clearSkin), h('p', { class: 'hint', text: t('android.skin.hint') }));
+    void draw();
+    return host;
   }
 
   // ---------------------------------------------------------------- step 4: setup
@@ -1031,6 +1090,7 @@ export function androidCreateWizard(context: CreatorContext): void {
           numberField('android.width', draft.width, { min: '320', max: '4096' }, (value) => { draft.width = value; touched(); }),
           numberField('android.height', draft.height, { min: '480', max: '4096' }, (value) => { draft.height = value; touched(); }),
           numberField('android.dpi', draft.dpi, { min: '120', max: '640' }, (value) => { draft.dpi = value; touched(); }))),
+      skinControl(),
       group('android.group.media',
         cameras.element,
         toggle(draft.microphone, 'android.media.microphone', (value) => { draft.microphone = value; }),
@@ -1360,6 +1420,7 @@ export function androidCreateWizard(context: CreatorContext): void {
       cameraLimits,
       locale: draft.locale, apps: draft.apps, appFiles: draft.appFiles,
       customPackage: draft.customPackage,
+      skinPath: draft.skinPath,
       telephone: draft.telephone.trim(),
       brand: draft.brand,
       manufacturer: draft.manufacturer,

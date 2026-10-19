@@ -6,6 +6,7 @@ import {
   mediaCompanionStatus, setAndroidSdkRoot, studioAddonArchiveEntry, windowsToolCommand,
   folderWritable, defaultInstallRoot, androidInstallTarget, setAndroidInstallRoot, packageUnknown, javaMajor, javaVersionFound, brokenArchive, prependPath, meaningfulOutput, androidCliPackage, androidCliArgs, usesNewCli, androidToolLogPath, androidEmulatorLogPath, androidCameraLogPath, openCappedLog, CMDLINE_TOOLS_URLS, ensureCommandLineTools, androidPackageInstalled, clearAndroidInstallRoot, normaliseSdkRoot, rootForPackage, hostAbis, imageRunsHere, emulatorForPackage,
   parseAvdList, scanAvdFolders, writeAvdPointer, avdSearchDirectories, importAvdFolder, listAndroidAvds, parseWebcamList,
+  parseAndroidSystemImagePackage, parseSdkPackageNames, validateAndroidSkinPath,
   mediaBroadcastCommand, mediaCompanionCameraReadiness, normalizeAndroidLaunchPrefs,
   normalizeCameraRotation, normalizeCameraSources, normalizeNetworkSpeed, waitForMediaCompanionCamera, mediaConfig,
   androidCameraChoices,
@@ -49,6 +50,45 @@ describe('Android Studio local bridge', () => {
 
   it('does not invent cameras when an exact emulator binary or SDK root is unavailable', async () => {
     await expect(emulatorWebcamsFrom('', '')).resolves.toEqual({ webcams: [], problem: 'none', detail: '' });
+  });
+
+  it('strictly parses supported API, image-tag and ABI fields, including runtime-only API 37', () => {
+    expect(parseAndroidSystemImagePackage('system-images;android-36;google_apis_playstore;x86_64')).toMatchObject({ apiLevel: 36, tag: 'google_apis_playstore', abi: 'x86_64' });
+    expect(parseAndroidSystemImagePackage('system-images;android-37;google_apis;x86_64')).toMatchObject({ apiLevel: 37, tag: 'google_apis', abi: 'x86_64' });
+    expect(parseAndroidSystemImagePackage('system-images;android-36;google_apis;arm64-v8a')).toMatchObject({ apiLevel: 36, abi: 'arm64-v8a' });
+    expect(parseAndroidSystemImagePackage('system-images;android-999;google_apis;x86_64')).toBeUndefined();
+    expect(parseAndroidSystemImagePackage('system-images;android-36;google apis;x86_64')).toBeUndefined();
+    expect(parseAndroidSystemImagePackage('system-images;android-36;google_apis;wasm32')).toBeUndefined();
+    expect(parseAndroidSystemImagePackage('system-images;android-36;google_apis;x86_64/../../bad')).toBeUndefined();
+  });
+
+  it('normalizes SDK listings, removes duplicates, and ignores malformed prose or traversal-like values', () => {
+    expect(parseSdkPackageNames([
+      'system-images/android-36/google_apis/x86_64 | 1 | installed',
+      'system-images;android-36;google_apis;x86_64 | 1 | installed',
+      'Warning: unable to reach repository',
+      '../../outside | bad',
+      'not-a-package',
+    ].join('\n'))).toEqual(['system-images;android-36;google_apis;x86_64']);
+  });
+
+  it('validates real custom skin folders and rejects unsafe or malformed paths', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'octo-skin-'));
+    const layoutSkin = path.join(root, 'layout-skin');
+    const hardwareSkin = path.join(root, 'hardware-skin');
+    const malformed = path.join(root, 'malformed');
+    fs.mkdirSync(layoutSkin); fs.mkdirSync(hardwareSkin); fs.mkdirSync(malformed);
+    fs.writeFileSync(path.join(layoutSkin, 'layout'), 'layout');
+    fs.writeFileSync(path.join(hardwareSkin, 'hardware.ini'), 'hw');
+    const file = path.join(root, 'not-a-skin.txt'); fs.writeFileSync(file, 'x');
+    expect(validateAndroidSkinPath(layoutSkin)).toContain('layout-skin');
+    expect(validateAndroidSkinPath(hardwareSkin)).toContain('hardware-skin');
+    expect(() => validateAndroidSkinPath(malformed)).toThrow(/not an Android emulator skin/i);
+    expect(() => validateAndroidSkinPath(path.join(root, 'missing'))).toThrow(/does not exist/i);
+    expect(() => validateAndroidSkinPath(file)).toThrow(/skin folder or skin archive/i);
+    expect(() => validateAndroidSkinPath('../escape')).toThrow(/absolute local path/i);
+    expect(() => validateAndroidSkinPath(`${layoutSkin}\0unsafe`)).toThrow(/absolute local path/i);
+    fs.rmSync(root, { recursive: true, force: true });
   });
 
   it('offers many Android versions with transparent storage estimates', () => {

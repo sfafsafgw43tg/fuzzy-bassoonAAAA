@@ -1,6 +1,7 @@
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
+import YAML from 'yaml';
 
 export type CustomAndroidBuildVariant = 'user' | 'userdebug' | 'eng';
 export type CustomAndroidBuildTarget = 'aosp_cf_x86_64_only_phone-aosp_current-userdebug' | 'sdk_phone_x86_64';
@@ -17,7 +18,7 @@ export interface CustomAndroidBuildConfig {
   updatedAt: string;
 }
 
-export interface CustomAndroidBuildCatalogue { configs: CustomAndroidBuildConfig[] }
+export interface CustomAndroidBuildCatalogue { schema: 1; configs: CustomAndroidBuildConfig[] }
 
 const MAX_CONFIGS = 30;
 const NAME = /^[A-Za-z0-9][A-Za-z0-9 _-]{0,63}$/;
@@ -30,12 +31,16 @@ export function supportedCustomAndroidBuildTargets(): CustomAndroidBuildTarget[]
   return ['aosp_cf_x86_64_only_phone-aosp_current-userdebug', 'sdk_phone_x86_64'];
 }
 
+export function supportedCustomAndroidBuildVariants(target: CustomAndroidBuildTarget): CustomAndroidBuildVariant[] {
+  return target === 'aosp_cf_x86_64_only_phone-aosp_current-userdebug' ? ['userdebug'] : ['user', 'userdebug', 'eng'];
+}
+
 export function readCustomAndroidBuilds(): CustomAndroidBuildCatalogue {
   try {
-    const raw = JSON.parse(fs.readFileSync(filePath(), 'utf8').replace(/^\uFEFF/, '')) as { configs?: unknown };
+    const raw = JSON.parse(fs.readFileSync(filePath(), 'utf8').replace(/^\uFEFF/, '')) as { schema?: unknown; configs?: unknown };
     const configs = Array.isArray(raw.configs) ? raw.configs : [];
-    return { configs: configs.map((item) => normalizeConfig(item)).filter((item): item is CustomAndroidBuildConfig => item !== null).slice(0, MAX_CONFIGS) };
-  } catch { return { configs: [] }; }
+    return { schema: 1, configs: configs.map((item) => normalizeConfig(item)).filter((item): item is CustomAndroidBuildConfig => item !== null).slice(0, MAX_CONFIGS) };
+  } catch { return { schema: 1, configs: [] }; }
 }
 
 function normalizeConfig(input: unknown): CustomAndroidBuildConfig | null {
@@ -44,7 +49,7 @@ function normalizeConfig(input: unknown): CustomAndroidBuildConfig | null {
   const name = String(item.name ?? '').trim();
   const target = String(item.target ?? '') as CustomAndroidBuildTarget;
   const variant = String(item.variant ?? '') as CustomAndroidBuildVariant;
-  if (!NAME.test(name) || !supportedCustomAndroidBuildTargets().includes(target) || !['user', 'userdebug', 'eng'].includes(variant)) return null;
+  if (!NAME.test(name) || !supportedCustomAndroidBuildTargets().includes(target) || !supportedCustomAndroidBuildVariants(target).includes(variant)) return null;
   return {
     id: String(item.id || cryptoId(name)), name, release: 'android-latest-release', architecture: 'x86_64', target, variant,
     notes: String(item.notes ?? '').slice(0, NOTES_MAX), createdAt: String(item.createdAt || new Date().toISOString()), updatedAt: String(item.updatedAt || new Date().toISOString()),
@@ -61,7 +66,7 @@ export function validateCustomAndroidBuild(input: Partial<CustomAndroidBuildConf
   const target = String(input.target ?? '') as CustomAndroidBuildTarget;
   if (!supportedCustomAndroidBuildTargets().includes(target)) return { ok: false, message: 'That AOSP target is not supported by this version.' };
   const variant = String(input.variant ?? '') as CustomAndroidBuildVariant;
-  if (!['user', 'userdebug', 'eng'].includes(variant)) return { ok: false, message: 'Choose user, userdebug, or eng.' };
+  if (!supportedCustomAndroidBuildVariants(target).includes(variant)) return { ok: false, message: target === 'aosp_cf_x86_64_only_phone-aosp_current-userdebug' ? 'This Cuttlefish target is fixed to the userdebug variant.' : 'Choose user, userdebug, or eng.' };
   const now = new Date().toISOString();
   const current = readCustomAndroidBuilds().configs.find((item) => item.id === input.id);
   return { ok: true, value: { id: String(input.id || cryptoId(name)), name, release: 'android-latest-release', architecture: 'x86_64', target, variant, notes: String(input.notes ?? '').trim().slice(0, NOTES_MAX), createdAt: current?.createdAt || now, updatedAt: now } };
@@ -69,24 +74,35 @@ export function validateCustomAndroidBuild(input: Partial<CustomAndroidBuildConf
 
 export function saveCustomAndroidBuild(input: Partial<CustomAndroidBuildConfig>): { ok: true; config: CustomAndroidBuildConfig } | { ok: false; message: string } {
   const validated = validateCustomAndroidBuild(input);
-  if (!validated.ok) return validated;
+  if (validated.ok === false) return { ok: false, message: validated.message };
   const current = readCustomAndroidBuilds().configs;
   const configs = [validated.value, ...current.filter((item) => item.id !== validated.value.id)].slice(0, MAX_CONFIGS);
-  fs.mkdirSync(path.dirname(filePath()), { recursive: true });
-  fs.writeFileSync(filePath(), JSON.stringify({ configs }, null, 2) + '\n', { mode: 0o600 });
-  return { ok: true, config: validated.value };
+  try {
+    fs.mkdirSync(path.dirname(filePath()), { recursive: true });
+    fs.writeFileSync(filePath(), JSON.stringify({ schema: 1, configs }, null, 2) + '\n', { mode: 0o600 });
+    return { ok: true, config: validated.value };
+  } catch { return { ok: false, message: 'Could not save the configuration. Check that OctoSuite data storage is writable.' }; }
 }
 
 export function deleteCustomAndroidBuild(id: string): boolean {
   const current = readCustomAndroidBuilds().configs;
   const configs = current.filter((item) => item.id !== String(id ?? ''));
   if (configs.length === current.length) return false;
-  fs.writeFileSync(filePath(), JSON.stringify({ configs }, null, 2) + '\n', { mode: 0o600 });
-  return true;
+  try { fs.writeFileSync(filePath(), JSON.stringify({ schema: 1, configs }, null, 2) + '\n', { mode: 0o600 }); return true; } catch { return false; }
+}
+
+export type CustomAndroidBuildExportFormat = 'json' | 'yaml';
+
+export function exportCustomAndroidBuilds(format: CustomAndroidBuildExportFormat, id?: string): string {
+  const configs = readCustomAndroidBuilds().configs;
+  const selected = id ? configs.filter((config) => config.id === id) : configs;
+  const payload = { schema: 1, exportedAt: new Date().toISOString(), capabilityLevel: 2, configs: selected };
+  if (format === 'yaml') return YAML.stringify(payload, { sortMapEntries: false });
+  return JSON.stringify(payload, null, 2) + '\n';
 }
 
 export function customAndroidBuildGuide(config: CustomAndroidBuildConfig): { level: 2; commands: string[]; sources: string[] } {
-  const lunch = config.target === 'sdk_phone_x86_64' ? 'sdk_phone_x86_64' : `${config.target.replace(/-aosp_current-userdebug$/, '')}-aosp_current-${config.variant}`;
+  const lunch = config.target === 'sdk_phone_x86_64' ? `sdk_phone_x86_64-${config.variant}` : config.target;
   return {
     level: 2,
     commands: [

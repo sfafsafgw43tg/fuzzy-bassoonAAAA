@@ -637,33 +637,70 @@ function virtualAndroidBrowserPanel(machines: AndroidMachine[]): HTMLElement {
 
 function customAndroidBuildPanel(): HTMLElement {
   const name = input('', { maxlength: '64', autocomplete: 'off', placeholder: t('android.build.namePlaceholder'), 'aria-label': t('android.build.name') });
-  const target = select<string>('aosp_cf_x86_64_only_phone-aosp_current-userdebug', [
+  const target = h('select', { class: 'input', 'aria-label': t('android.build.target') }) as HTMLSelectElement;
+  const variant = h('select', { class: 'input', 'aria-label': t('android.build.variant') }) as HTMLSelectElement;
+  const targetOptions: Array<[string, string]> = [
     ['aosp_cf_x86_64_only_phone-aosp_current-userdebug', 'AOSP Cuttlefish x86_64 phone · userdebug'],
     ['sdk_phone_x86_64', 'AOSP Emulator x86_64'],
-  ], () => undefined);
-  const variant = select<string>('userdebug', [['user', 'user'], ['userdebug', 'userdebug'], ['eng', 'eng']], () => undefined);
+  ];
+  for (const [value, label] of targetOptions) target.append(h('option', { value, text: label }));
+  const refreshVariants = () => {
+    const values = target.value === 'aosp_cf_x86_64_only_phone-aosp_current-userdebug' ? ['userdebug'] : ['user', 'userdebug', 'eng'];
+    variant.replaceChildren(...values.map((value) => h('option', { value, text: value })));
+  };
+  target.onchange = refreshVariants;
+  refreshVariants();
   const notes = h('textarea', { class: 'input', rows: '3', maxlength: '2000', placeholder: t('android.build.notesPlaceholder'), 'aria-label': t('android.build.notes') }) as HTMLTextAreaElement;
   const save = h('button', { class: 'btn primary', type: 'button', 'aria-label': t('android.build.save') }, icon('save', 14), h('span', { text: t('android.build.save') })) as HTMLButtonElement;
   const guide = h('button', { class: 'btn small', type: 'button', 'aria-label': t('android.build.guide') }, icon('book', 14), h('span', { text: t('android.build.guide') })) as HTMLButtonElement;
+  const refreshJobs = h('button', { class: 'btn small', type: 'button', 'aria-label': t('android.build.refreshJobs') }, icon('refreshCircle', 14), h('span', { text: t('android.build.refreshJobs') })) as HTMLButtonElement;
+  const exportAllJson = h('button', { class: 'btn small', type: 'button', 'aria-label': t('android.build.exportJson') }, h('span', { text: t('android.build.exportJson') })) as HTMLButtonElement;
+  const exportAllYaml = h('button', { class: 'btn small', type: 'button', 'aria-label': t('android.build.exportYaml') }, h('span', { text: t('android.build.exportYaml') })) as HTMLButtonElement;
   const status = h('p', { class: 'hint', 'aria-live': 'polite', text: t('android.build.level2') });
+  const backendStatus = h('p', { class: 'hint', 'aria-live': 'polite', text: t('android.build.backendChecking') });
+  const remoteJobs = h('div', { class: 'android-build-remote-jobs', role: 'list', 'aria-label': t('android.build.remoteJobs') });
+  const commandBlock = h('pre', { class: 'android-build-commands', hidden: 'true', tabindex: '0', 'aria-label': t('android.build.commands') });
   const list = h('div', { class: 'android-build-list', role: 'list' });
   let configs: CustomAndroidBuild[] = [];
+  const download = (content: string, format: 'json' | 'yaml', id = 'catalogue') => {
+    const blob = new Blob([content], { type: format === 'json' ? 'application/json' : 'application/yaml' });
+    const url = URL.createObjectURL(blob);
+    const link = h('a', { href: url, download: `octosuite-android-builds-${id}.${format}` }) as HTMLAnchorElement;
+    link.click();
+    setTimeout(() => URL.revokeObjectURL(url), 0);
+  };
+  const exportPlan = async (config: CustomAndroidBuild, format: 'json' | 'yaml') => {
+    const result = await run(api.invoke<{ ok: boolean; content?: string; message?: string }>('mgr:android-build-export', { format, id: config.id }));
+    if (!result?.ok || result.content === undefined) { status.textContent = result?.message?.startsWith('android.') ? t(result.message) : t('android.build.exportFailed'); return; }
+    download(result.content, format, config.name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 32) || 'plan');
+    status.textContent = t('android.build.exported', { format: format.toUpperCase() });
+  };
   const paint = () => list.replaceChildren(...configs.map((config) => {
     const remove = h('button', { class: 'btn small danger', type: 'button', 'aria-label': t('android.build.delete', { name: config.name }), text: t('common.delete') }) as HTMLButtonElement;
-    remove.onclick = async () => { if (await run(api.invoke<boolean>('mgr:android-build-delete', config.id))) { configs = configs.filter((item) => item.id !== config.id); paint(); status.textContent = t('android.build.deleted'); } };
+    remove.onclick = async () => { if (await run(api.invoke<boolean>('mgr:android-build-delete', config.id))) { configs = configs.filter((item) => item.id !== config.id); paint(); status.textContent = t('android.build.deleted'); } else status.textContent = t('android.build.deleteFailed'); };
     const edit = h('button', { class: 'btn small', type: 'button', text: t('common.edit') }) as HTMLButtonElement;
-    edit.onclick = () => { (name as HTMLInputElement).value = config.name; (target as unknown as { value: string }).value = config.target; (variant as unknown as { value: string }).value = config.variant; notes.value = config.notes; save.dataset.id = config.id; };
-    return h('div', { class: 'card-specs android-build-item', role: 'listitem' }, h('div', { class: 'row between' }, h('strong', { text: config.name }), h('span', { class: 'pill', text: t('android.build.draft') })), h('p', { class: 'small muted', text: `${config.release} · ${config.architecture} · ${config.target} · ${config.variant}` }), config.notes ? h('p', { class: 'small muted', text: config.notes }) : h('span', {}), h('div', { class: 'row' }, edit, remove));
+    edit.onclick = () => { (name as HTMLInputElement).value = config.name; target.value = config.target; refreshVariants(); variant.value = config.variant; notes.value = config.notes; save.dataset.id = config.id; };
+    const submit = h('button', { class: 'btn small', type: 'button', 'aria-label': t('android.build.submit'), text: t('android.build.submit'), disabled: backendStatus.dataset.ready !== 'true' }) as HTMLButtonElement;
+    submit.onclick = async () => { submit.disabled = true; const result = await run(api.invoke<{ ok: boolean; job?: { id: string; status: string }; message?: string }>('mgr:android-build-remote-submit', formForPlan(config))); if (result?.ok && result.job) { status.textContent = t('android.build.submitted'); await loadJobs(); } else status.textContent = t('android.build.submitFailed'); submit.disabled = backendStatus.dataset.ready !== 'true'; };
+    const json = h('button', { class: 'btn small', type: 'button', 'aria-label': t('android.build.exportPlanJson', { name: config.name }), text: 'JSON' }) as HTMLButtonElement;
+    const yaml = h('button', { class: 'btn small', type: 'button', 'aria-label': t('android.build.exportPlanYaml', { name: config.name }), text: 'YAML' }) as HTMLButtonElement;
+    json.onclick = () => void exportPlan(config, 'json'); yaml.onclick = () => void exportPlan(config, 'yaml');
+    return h('div', { class: 'card-specs android-build-item', role: 'listitem' }, h('div', { class: 'row between' }, h('strong', { text: config.name }), h('span', { class: 'pill', text: t('android.build.draft') })), h('p', { class: 'small muted', text: `${config.release} · ${config.architecture} · ${config.target} · ${config.variant}` }), config.notes ? h('p', { class: 'small muted', text: config.notes }) : h('span', {}), h('div', { class: 'row' }, edit, submit, json, yaml, remove));
   }));
-  const load = async () => { const result = await run(api.invoke<{ configs: CustomAndroidBuild[] }>('mgr:android-builds')); configs = result?.configs ?? []; paint(); };
-  const formInput = () => ({ id: save.dataset.id || '', name: (name as HTMLInputElement).value, target: valueOf(target), variant: valueOf(variant), notes: notes.value });
+  const formInput = () => ({ id: save.dataset.id || '', name: (name as HTMLInputElement).value, target: target.value, variant: variant.value, notes: notes.value });
+  const formForPlan = (config: CustomAndroidBuild) => ({ id: config.id, name: config.name, target: config.target, variant: config.variant, notes: config.notes, release: config.release, architecture: config.architecture });
   save.onclick = async () => { save.disabled = true; const result = await run(api.invoke<{ ok: boolean; config?: CustomAndroidBuild; message?: string }>('mgr:android-build-save', formInput())); save.disabled = false; if (!result?.ok || !result.config) { status.textContent = result?.message || t('android.build.invalid'); return; } configs = [result.config, ...configs.filter((item) => item.id !== result.config?.id)]; delete save.dataset.id; status.textContent = t('android.build.saved'); paint(); };
-  guide.onclick = async () => { const result = await run(api.invoke<{ ok: boolean; guide?: { commands: string[] }; message?: string }>('mgr:android-build-guide', formInput())); if (!result?.ok || !result.guide) { status.textContent = result?.message || t('android.build.invalid'); return; } const commands = result.guide.commands.join('\n'); status.textContent = t('android.build.guideReady'); if (navigator.clipboard?.writeText) void navigator.clipboard.writeText(commands); window.open('https://source.android.com/docs/setup/build/building', '_blank'); };
-  const panel = h('section', { class: 'vm-section android-custom-build', 'aria-labelledby': 'android-build-title' }, h('div', { class: 'vm-section-head' }, h('div', {}, h('h2', { id: 'android-build-title' }, t('android.build.title'), h('span', { class: 'pill warn', text: t('android.build.level') })), h('p', { class: 'hint', text: t('android.build.desc') }), status), h('div', { class: 'android-build-form' }, h('div', { class: 'row' }, h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.build.name') }), name), h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.build.target') }), target), h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.build.variant') }), variant)), h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.build.notes') }), notes), h('div', { class: 'row' }, save, guide))), h('h3', { class: 'spec-title', text: t('android.build.savedTitle') }), list);
+  guide.onclick = async () => { const result = await run(api.invoke<{ ok: boolean; guide?: { commands: string[] }; message?: string }>('mgr:android-build-guide', formInput())); if (!result?.ok || !result.guide) { status.textContent = result?.message || t('android.build.invalid'); return; } const commands = result.guide.commands.join('\n'); commandBlock.textContent = commands; commandBlock.hidden = false; try { await navigator.clipboard.writeText(commands); status.textContent = t('android.build.guideReady'); } catch { status.textContent = t('android.build.copyFailed'); } window.open('https://source.android.com/docs/setup/build/building', '_blank'); };
+  const exportCatalogue = async (format: 'json' | 'yaml') => { const result = await run(api.invoke<{ ok: boolean; content?: string; message?: string }>('mgr:android-build-export', { format })); if (!result?.ok || result.content === undefined) { status.textContent = result?.message?.startsWith('android.') ? t(result.message) : t('android.build.exportFailed'); return; } download(result.content, format); status.textContent = t('android.build.exported', { format: format.toUpperCase() }); };
+  exportAllJson.onclick = () => void exportCatalogue('json'); exportAllYaml.onclick = () => void exportCatalogue('yaml');
+  const loadJobs = async () => { const result = await run(api.invoke<{ ok: boolean; jobs?: Array<{ id: string; status: string; progress?: number; errorCode?: string }> }>('mgr:android-build-remote-list')); if (!result?.ok || !result.jobs) { remoteJobs.replaceChildren(); return; } remoteJobs.replaceChildren(...result.jobs.map((job) => h('div', { class: 'card-specs', role: 'listitem' }, h('strong', { text: t('android.build.remoteJob', { id: job.id, status: job.status }) }), h('span', { class: 'small muted', text: job.progress === undefined ? '' : `${job.progress}%` })))); };
+  const loadBackend = async () => { const state = await run(api.invoke<string>('mgr:android-build-backend-state')); const ready = state === 'READY_FOR_SUBMISSION'; backendStatus.dataset.ready = String(ready); backendStatus.textContent = ready ? t('android.build.backendReady') : t('android.build.backendUnavailable'); refreshJobs.disabled = !ready; paint(); if (ready) await loadJobs(); };
+  refreshJobs.onclick = () => void loadJobs();
+  const load = async () => { const result = await run(api.invoke<{ configs: CustomAndroidBuild[] }>('mgr:android-builds')); configs = result?.configs ?? []; paint(); void loadBackend(); };
+  const panel = h('section', { class: 'vm-section android-custom-build', 'aria-labelledby': 'android-build-title' }, h('div', { class: 'vm-section-head' }, h('div', {}, h('h2', { id: 'android-build-title' }, t('android.build.title'), h('span', { class: 'pill warn', text: t('android.build.level') })), h('p', { class: 'hint', text: t('android.build.desc') }), status, backendStatus), h('div', { class: 'android-build-form' }, h('div', { class: 'row' }, h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.build.name') }), name), h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.build.target') }), target), h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.build.variant') }), variant)), h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.build.notes') }), notes), h('div', { class: 'row' }, save, guide, refreshJobs, exportAllJson, exportAllYaml), commandBlock)), h('h3', { class: 'spec-title', text: t('android.build.savedTitle') }), list, remoteJobs);
   void load();
   return panel;
 }
-
 function chromeAndroidPanel(machines: AndroidMachine[]): HTMLElement {
   let selected = machines.find((machine) => machine.running)?.name ?? machines[0]?.name ?? '';
   const options: Array<[string, string]> = machines.length

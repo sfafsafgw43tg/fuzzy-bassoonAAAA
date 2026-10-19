@@ -995,14 +995,35 @@ export async function availableSdkPackages(): Promise<string[]> {
   if (cli && (usesNewCli(raw) || !raw.includes(';'))) {
     raw = await runTool(cli, [`--sdk=${tools.root}`, 'sdk', 'list'], 10 * 60_000, tools.root, false).catch(() => raw);
   }
+  return parseSdkPackageNames(raw);
+}
+
+/** Normalize both sdkmanager and Android CLI listings without trusting prose or paths. */
+export function parseSdkPackageNames(output: string): string[] {
   const names = new Set<string>();
-  for (const line of raw.split(/\r?\n/)) {
+  for (const line of String(output ?? '').split(/\r?\n/)) {
     const raw = line.split('|')[0]?.trim() ?? '';
-    // Both spellings are normalised to the classic semicolon form.
     const name = /^[A-Za-z0-9/._-]+$/.test(raw) && raw.includes('/') ? raw.replace(/\//g, ';') : raw;
-    if (/^[A-Za-z0-9;._-]{3,120}$/.test(name) && name.includes(';')) names.add(name);
+    if (/^[A-Za-z0-9;._-]{3,120}$/.test(name) && name.includes(';') && name.split(';').every((part) => part !== '.' && part !== '..')) names.add(name);
   }
   return [...names];
+}
+
+export interface AndroidSystemImagePackage {
+  packageName: string;
+  apiLevel: number;
+  tag: string;
+  abi: AndroidAbi;
+}
+
+/** Parse only official system-image package syntax; never pass unparsed input to sdkmanager. */
+export function parseAndroidSystemImagePackage(value: string): AndroidSystemImagePackage | undefined {
+  const clean = String(value ?? '').trim();
+  const match = /^system-images;android-(\d{1,2});([A-Za-z0-9_-]{1,48});(x86_64|x86|arm64-v8a|armeabi-v7a)$/.exec(clean);
+  if (!match) return undefined;
+  const apiLevel = Number(match[1]);
+  if (!Number.isInteger(apiLevel) || apiLevel < 1 || apiLevel > 99) return undefined;
+  return { packageName: clean, apiLevel, tag: match[2], abi: match[3] as AndroidAbi };
 }
 
 export interface SystemImageAvailability {
@@ -1023,6 +1044,49 @@ export async function availableSystemImageIds(): Promise<SystemImageAvailability
   const ids = ANDROID_SYSTEM_IMAGES.filter((item) => offered.has(item.packageName)).map((item) => item.id);
   const sane = packages.length >= 20 && packages.some((name) => name.startsWith('system-images;'));
   return { trusted: sane && ids.length > 0, ids, packages: packages.length };
+}
+
+/** Exact system-image package IDs reported by the local SDK repository. */
+export async function availableSystemImagePackages(): Promise<{ trusted: boolean; packages: string[] }> {
+  const packages = await availableSdkPackages();
+  const images = packages.filter((name) => Boolean(parseAndroidSystemImagePackage(name)));
+  return { trusted: packages.length >= 20 && images.length > 0, packages: [...new Set(images)].sort() };
+}
+
+/**
+ * Return skin definitions that are actually present in known SDK roots. A
+ * choice is never presented as installed merely because it has a familiar
+ * Pixel name; the emulator must be able to resolve it locally.
+ */
+export function installedAndroidSkins(): Array<{ name: string; path: string }> {
+  const result: Array<{ name: string; path: string }> = [];
+  for (const root of knownRoots()) {
+    const candidates = [path.join(root, 'skins'), path.join(root, 'emulator', 'skins')];
+    for (const parent of candidates) {
+      let entries: fs.Dirent[] = [];
+      try { entries = fs.readdirSync(parent, { withFileTypes: true }); } catch { continue; }
+      for (const entry of entries) {
+        if (!entry.isDirectory() || !/^[A-Za-z0-9_.-]{1,80}$/.test(entry.name)) continue;
+        const skinPath = path.join(parent, entry.name);
+        if (fs.existsSync(path.join(skinPath, 'layout')) || fs.existsSync(path.join(skinPath, ['hardware', 'ini'].join('.')))) {
+          result.push({ name: entry.name, path: skinPath });
+        }
+      }
+    }
+  }
+  return [...new Map(result.map((item) => [item.name, item])).values()].sort((a, b) => a.name.localeCompare(b.name));
+}
+
+export function validateAndroidSkinPath(raw: string): string {
+  const clean = String(raw ?? '').trim();
+  if (!clean) return '';
+  if (!ABSOLUTE(clean) || /[\r\n\0]/.test(clean)) throw new Error('The Android skin path must be an absolute local path.');
+  if (!fs.existsSync(clean)) throw new Error('The selected Android skin path does not exist.');
+  const stat = fs.statSync(clean);
+  if (stat.isDirectory()) {
+    if (!fs.existsSync(path.join(clean, 'layout')) && !fs.existsSync(path.join(clean, ['hardware', 'ini'].join('.')))) throw new Error('The selected folder is not an Android emulator skin.');
+  } else if (!/\.(zip|skin)$/i.test(clean)) throw new Error('Select an Android skin folder or skin archive.');
+  return clean.replace(/\\/g, '/');
 }
 
 /**
@@ -4822,6 +4886,8 @@ export interface SpecCreateInput {
   cameraDevice?: string;
   /** What a tested host camera actually produced, per facing. */
   cameraLimits?: { front?: CameraResolution; back?: CameraResolution };
+  /** Empty uses the emulator default skin; otherwise an existing skin folder/archive. */
+  skinPath?: string;
   props: DeviceIdentity;
   /** The emulated phone number (telephony), optional. Stored beside config.ini, passed as -phone-number. */
   telephone?: string;
@@ -4925,6 +4991,7 @@ export async function createAndroidAvdFromSpec(input: SpecCreateInput): Promise<
     input.cameraFront, input.cameraBack, input.cameraFrontDevice ?? '', input.cameraBackDevice ?? '', webcams,
     [], input.cameraDevice ?? '',
   );
+  const skinPath = validateAndroidSkinPath(input.skinPath ?? '');
   writeConfigValues(avdPath, {
     ...mediaConfig(resolvedCameras.front, resolvedCameras.back, input.microphoneEnabled,
       resolvedCameras.frontDevice, resolvedCameras.backDevice, cameraLimitsFor(avdPath, input.cameraLimits)),
@@ -4959,6 +5026,8 @@ export async function createAndroidAvdFromSpec(input: SpecCreateInput): Promise<
     'octobrowser.simCountry': input.props.simCountry ?? '',
     'octobrowser.identityApplied': '',
     'octobrowser.telephony': telephone,
+    'skin.path': skinPath,
+    'skin.name': skinPath ? path.basename(skinPath, path.extname(skinPath)) : '',
   });
   rememberAvdDirectory(path.dirname(avdPath));
   writeAvdPointer(name, avdPath, api);
@@ -4975,6 +5044,7 @@ export interface AvdSettingsInput {
   cameraFront?: CameraSource; cameraBack?: CameraSource; microphoneEnabled?: boolean;
   cameraFrontDevice?: string; cameraBackDevice?: string;
   cameraDevice?: string;
+  skinPath?: string;
   /** Resolution measured while testing a host camera, per facing. */
   cameraLimits?: { front?: CameraResolution; back?: CameraResolution };
   networkSpeed?: NetworkSpeed; locale?: string; timezone?: string;
@@ -5060,6 +5130,16 @@ export async function updateAvdSettings(name: string, input: AvdSettingsInput): 
   if (input.networkSpeed) set('runtime.network.speed', input.networkSpeed, 'network');
   if (input.locale) set('octobrowser.locale', input.locale.slice(0, 32), 'locale');
   if (input.timezone) set('octobrowser.timezone', input.timezone.slice(0, 64), 'timezone');
+  if (input.skinPath !== undefined) {
+    const skinPath = validateAndroidSkinPath(input.skinPath);
+    if (skinPath) {
+      set('skin.path', skinPath, 'skin');
+      set('skin.name', path.basename(skinPath, path.extname(skinPath)), 'skinName');
+    } else {
+      set('skin.path', '', 'skin');
+      set('skin.name', '', 'skinName');
+    }
+  }
   if (input.cameraFront || input.cameraBack || typeof input.microphoneEnabled === 'boolean' || input.cameraDevice || input.cameraFrontDevice || input.cameraBackDevice) {
     const selected = normalizeCameraSources(input.cameraFront ?? avd.cameraFront, input.cameraBack ?? avd.cameraBack);
     const microphone = input.microphoneEnabled ?? avd.microphoneEnabled;

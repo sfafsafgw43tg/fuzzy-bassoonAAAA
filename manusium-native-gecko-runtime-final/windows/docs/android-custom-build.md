@@ -1,27 +1,23 @@
 # Custom Android Build capability
 
-## Capability level
+## Capability levels
 
-OctoSuite implements **Level 2: configuration plus setup guidance**.
+OctoSuite preserves **Level 1** local plan configuration and **Level 2** verified setup guidance and JSON/YAML export. It now also contains an optional authenticated **Level 3 development backend path** and a real Linux worker implementation. The Windows Electron process remains an orchestrator and is never treated as an AOSP worker.
 
-The Devices tab can validate, save, edit, and delete local AOSP build plans. It can also copy the setup commands for the selected target and open the official AOSP build documentation. It does not submit a job, run a remote worker, create artifacts, or claim that a build has completed.
+The Devices tab enables remote submission controls only when the Electron main process has both `OCTO_BUILD_API_URL` and `OCTO_BUILD_API_TOKEN`. Without those values, local plans, guidance, and exports remain fully usable and no job is created.
 
-There is no AOSP build queue, authenticated build backend, Linux worker, artifact store, or validated artifact download path in this repository. A Windows Electron process cannot be treated as an AOSP build worker.
+Level 4 is not claimed unless a supported Linux worker passes capability checks, executes AOSP, produces an emulator archive, validates and stores it, and an authorized download is tested. See [android-build-platform.md](android-build-platform.md) for setup and exact blockers.
 
 ## Supported configuration
-
-The current UI intentionally supports only the following verified values:
 
 - Release manifest: `android-latest-release`.
 - Architecture: `x86_64`.
 - Target: `aosp_cf_x86_64_only_phone-aosp_current-userdebug` or `sdk_phone_x86_64`.
-- Variant: `user`, `userdebug`, or `eng`.
+- Variant: `user`, `userdebug`, or `eng` where supported.
 
-A saved plan is stored locally at `.octobrowser/custom-android-builds.json` with restrictive file permissions. It is a plan, not a submitted job.
+Plans are stored locally at `.octobrowser/custom-android-builds.json` with restrictive file permissions. A plan is not a job until an authenticated backend accepts it and persists a queue record.
 
 ## Guidance
-
-The copied guidance is:
 
 ```bash
 repo init -u https://android.googlesource.com/platform/manifest -b android-latest-release
@@ -32,12 +28,10 @@ m -j32
 m emu_img_zip
 ```
 
-Run these commands on a supported 64-bit Linux AOSP workstation. The final `emu_img_zip` output must be validated and then installed through the Android SDK before it can be used as a custom emulator image.
+These commands require a supported 64-bit Linux AOSP environment. On Windows, use a controlled WSL2 or Docker Linux environment, or an authenticated remote worker. The app never executes user-provided commands.
 
 ## Sources checked on 2026-10-19
 
-- [AOSP build instructions](https://source.android.com/docs/setup/build/building): `android-latest-release`, `envsetup.sh`, `lunch`, build variants, `m`, and target selection.
-- [AOSP setup requirements](https://source.android.com/docs/setup/start): 64-bit x86 Linux, glibc 2.17+, 400 GB free disk space, 64 GB RAM, required packages, Git, OpenJDK, Python 3, and Repo.
-- [AOSP emulator images](https://source.android.com/docs/setup/create/avd): AVD system-image workflow, x86_64 image examples, and `emu_img_zip` packaging.
-
-The guidance deliberately does not promise that the current Windows host can compile AOSP or that saving a plan creates an Android image.
+- [AOSP build instructions](https://source.android.com/docs/setup/build/building)
+- [AOSP setup requirements](https://source.android.com/docs/setup/start)
+- [AOSP emulator images](https://source.android.com/docs/setup/create/avd)
