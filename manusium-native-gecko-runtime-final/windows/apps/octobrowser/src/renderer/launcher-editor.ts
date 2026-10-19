@@ -35,6 +35,7 @@ import { parseProxy } from '@octo/core/proxy';
 import { presetFor } from '@octo/core/privacy';
 import { chromiumUserAgent } from '@octo/core/user-agent';
 import { browserEngineFor, NEW_PROFILE_ENGINE, type BrowserEngine } from '@octo/core/inkbrowser';
+import { BROWSER_INTEGRATIONS, isBrowserIntegrationId, type BrowserIntegrationId } from '@octo/core/browser-integrations';
 import { DEFAULT_ENGINE_PRIVACY, sanitizeEnginePrivacy, type EnginePrivacySettings } from '@octo/core/engine-privacy';
 import { DEFAULT_NATIVE_CHROMIUM_CONFIG } from '@octo/core/chromium-config';
 import { ANDROID_VERSIONS, IOS_VERSIONS, mobileEmulationFor, MOBILE_DEVICES } from '@octo/core/mobile';
@@ -53,6 +54,7 @@ type Sandbox = Profile['sandbox'];
 type BrowserShell = Profile['browserShell'];
 interface Draft {
   name: string; kind: Kind; engine: BrowserEngine | ''; chromiumRuntime?: string; status: string; tags: string[]; folder: string; profileDirectory?: string; notes: string; startPages: string[];
+  browserIntegration?: BrowserIntegrationId; browserExecutablePath?: string;
   homePage: string; searchEngine?: string; theme: 'dark' | 'light'; browserShell: BrowserShell; baseChromeLook: boolean; ordinaryBrowser: boolean; appMode: boolean; smartPaste: boolean; keepHistory: boolean; savePasswords: boolean; restoreSession: boolean; deleteOnClose: boolean;
   protection: { level: Level; overrides: Record<string, unknown> }; dns: Profile['dns']; sandbox: Sandbox; mobile: Profile['mobile']; addons: string[]; vstudioWebOnLaunch: boolean;
   mediaCapture: Profile['mediaCapture']; enginePrivacy: EnginePrivacySettings; nativeChromium: Profile['nativeChromium'];
@@ -170,7 +172,7 @@ function kindDefaults(kind: Kind, addons: string[]): Pick<Draft, 'protection' | 
 function newDraft(): Draft {
   const folder = S.folder && S.folder !== '__none' ? S.folder : '';
   return {
-    name: '', kind: 'antidetect', engine: NEW_PROFILE_ENGINE, chromiumRuntime: '155.0.8059.39', status: '', tags: [], folder, profileDirectory: '', notes: '', startPages: [CHROMIUM_DEFAULT_START_PAGE], homePage: CHROMIUM_DEFAULT_START_PAGE, searchEngine: 'duckduckgo-noai', theme: 'dark', browserShell: 'chrome', baseChromeLook: true, ordinaryBrowser: false, appMode: false, smartPaste: true,
+    name: '', kind: 'antidetect', engine: NEW_PROFILE_ENGINE, chromiumRuntime: '155.0.8059.39', status: '', tags: [], folder, profileDirectory: '', notes: '', startPages: [CHROMIUM_DEFAULT_START_PAGE], browserIntegration: undefined, browserExecutablePath: '', homePage: CHROMIUM_DEFAULT_START_PAGE, searchEngine: 'duckduckgo-noai', theme: 'dark', browserShell: 'chrome', baseChromeLook: true, ordinaryBrowser: false, appMode: false, smartPaste: true,
     dns: { mode: 'inherit', dohTemplate: '' },
     ...kindDefaults('antidetect', S.init.addons.filter((a) => a.kind !== 'external-app').map((a) => a.id)),
     vstudioWebOnLaunch: false,
@@ -191,7 +193,7 @@ function draftFrom(p: Profile): Draft {
   }
   const c = structuredClone(p);
   return {
-    name: c.name, kind: c.kind, engine: browserEngineFor(c.engine), chromiumRuntime: c.chromiumRuntime, status: c.status ?? '', tags: c.tags ?? [], folder: c.folder ?? '', profileDirectory: c.profileDirectory ?? '', notes: c.notes ?? '', startPages: c.startPages ?? [],
+    name: c.name, kind: c.kind, engine: browserEngineFor(c.engine), chromiumRuntime: c.chromiumRuntime, browserIntegration: isBrowserIntegrationId(c.browserIntegration) ? c.browserIntegration : undefined, browserExecutablePath: c.browserExecutablePath ?? '', status: c.status ?? '', tags: c.tags ?? [], folder: c.folder ?? '', profileDirectory: c.profileDirectory ?? '', notes: c.notes ?? '', startPages: c.startPages ?? [],
     homePage: c.homePage === 'octo://newtab' ? '' : c.homePage, searchEngine: c.searchEngine ?? '', theme: c.theme, browserShell: c.browserShell, baseChromeLook: c.baseChromeLook === true, ordinaryBrowser: c.ordinaryBrowser === true, appMode: c.appMode === true, smartPaste: c.smartPaste !== false, keepHistory: c.keepHistory, savePasswords: c.savePasswords === true, restoreSession: c.restoreSession, deleteOnClose: c.deleteOnClose,
     protection: { level: c.protection.level, overrides: c.protection.overrides ?? {} }, dns: c.dns, sandbox: c.sandbox, mobile: c.mobile ?? { device: 'none', orientation: 'portrait' }, addons: c.addons,
     vstudioWebOnLaunch: c.vstudioWebOnLaunch === true,
@@ -329,7 +331,7 @@ export function openEditor(p: Profile | null): void {
       busy = true;
       save.disabled = true;
       const patch: Record<string, unknown> = {
-        engine: d.engine || NEW_PROFILE_ENGINE, chromiumRuntime: d.chromiumRuntime, status: d.status, tags: d.tags, folder: d.folder.trim(), profileDirectory: d.profileDirectory?.trim() || undefined, notes: d.notes, startPages: d.startPages,
+        engine: d.engine || NEW_PROFILE_ENGINE, chromiumRuntime: d.chromiumRuntime, browserIntegration: d.browserIntegration, browserExecutablePath: d.browserExecutablePath?.trim() || undefined, status: d.status, tags: d.tags, folder: d.folder.trim(), profileDirectory: d.profileDirectory?.trim() || undefined, notes: d.notes, startPages: d.startPages,
         homePage: d.homePage.trim() || 'octo://newtab', searchEngine: d.searchEngine || undefined, theme: d.theme, browserShell: d.browserShell, baseChromeLook: d.baseChromeLook, ordinaryBrowser: d.ordinaryBrowser, appMode: d.appMode, smartPaste: d.smartPaste, keepHistory: d.keepHistory, savePasswords: d.savePasswords, restoreSession: d.restoreSession,
         deleteOnClose: d.deleteOnClose, protection: d.protection, dns: d.dns, sandbox: d.sandbox, mobile: d.mobile, addons: d.addons,
         vstudioWebOnLaunch: d.vstudioWebOnLaunch,
@@ -479,6 +481,44 @@ function general(b: HTMLElement, d: Draft, creating: boolean, p: Profile | null,
     baseGrid.append(card);
   }
   b.append(section(t('profile.base'), baseGrid, h('p', { class: 'hint', text: t('profile.baseHint') })));
+
+  // External privacy projects are deliberately separate from the embedded
+  // engines above. Selecting one stores it on this profile; the manager only
+  // launches entries whose adapter and executable are verified.
+  const integrationGrid = h('div', { class: 'browser-integration-grid', role: 'radiogroup', 'aria-label': t('browserIntegration.title') });
+  const integrationStatuses = new Map((S.init.browserIntegrations ?? []).map((entry) => [entry.id, entry]));
+  for (const entry of BROWSER_INTEGRATIONS) {
+    const status = integrationStatuses.get(entry.id);
+    const selected = d.browserIntegration === entry.id;
+    const canLaunch = entry.capabilities.launch && entry.classification === 'browser';
+    const card = h('article', { class: `browser-integration-card${selected ? ' on' : ''}` },
+      h('button', { type: 'button', class: 'browser-integration-select', role: 'radio', 'aria-checked': String(selected) },
+        h('span', { class: 'kc-ic shell-mark' }, entry.classification === 'browser' ? 'B' : entry.classification === 'extension' ? 'E' : 'A'),
+        h('span', { class: 'kc-t' }, h('b', { text: entry.name }), h('span', { class: 'kc-desc', text: `${entry.classification} · ${entry.engine}` }))),
+      h('p', { class: 'hint', text: entry.limitation }),
+      h('div', { class: 'browser-integration-meta' },
+        h('span', { class: `pill ${status?.installed ? 'ok' : 'unknown'}`, text: status?.installed ? t('browserIntegration.installed') : t('browserIntegration.notInstalled') }),
+        status?.version ? h('span', { class: 'small muted', text: `${t('browserIntegration.version')}: ${status.version}` }) : null,
+        h('span', { class: 'small muted', text: `${t('browserIntegration.license')}: ${entry.license}` })),
+      h('div', { class: 'row wrap' },
+        h('button', { class: 'btn small', type: 'button', text: t('browserIntegration.project') }),
+        canLaunch ? h('button', { class: 'btn small', type: 'button', text: t('browserIntegration.chooseExecutable') }) : null,
+        canLaunch && selected ? h('span', { class: 'small muted', text: d.browserExecutablePath || status?.executablePath || t('browserIntegration.autoDetect') }) : null),
+      !canLaunch ? h('p', { class: 'note', text: t('browserIntegration.nonBrowserWarning') }) : null,
+    );
+    const selectButton = card.querySelector('.browser-integration-select') as HTMLButtonElement;
+    selectButton.onclick = () => { d.browserIntegration = selected ? undefined : entry.id; if (!d.browserIntegration) d.browserExecutablePath = ''; draw(); };
+    const buttons = card.querySelectorAll('button');
+    const projectButton = buttons[1] as HTMLButtonElement | undefined;
+    if (projectButton && projectButton.textContent === t('browserIntegration.project')) projectButton.onclick = () => { void api.invoke('mgr:open-browser-integration-url', entry.officialUrl); };
+    const chooseButton = canLaunch ? (buttons[2] as HTMLButtonElement | undefined) : undefined;
+    if (chooseButton && chooseButton.textContent === t('browserIntegration.chooseExecutable')) chooseButton.onclick = async () => {
+      const selectedPath = await api.invoke<string>('mgr:browser-pick-executable');
+      if (selectedPath) { d.browserExecutablePath = selectedPath; draw(); }
+    };
+    integrationGrid.append(card);
+  }
+  b.append(section(t('browserIntegration.title'), integrationGrid, h('p', { class: 'hint', text: t('browserIntegration.hint') })));
 
   // Start pages
   const pages = h('div', { class: 'pages' });

@@ -177,7 +177,8 @@ export async function startProfile(p: Profile): Promise<void> {
   progress?.phase('Preparing isolated profile data…');
   const local = S.profiles.find((entry) => entry.id === p.id);
   const optimisticStart = Boolean(local && !local.running);
-  if (local && optimisticStart) {
+  const externalProfile = Boolean(p.browserIntegration);
+  if (local && optimisticStart && !externalProfile) {
     local.running = true;
     local.ready = false;
     local.stopping = false;
@@ -193,17 +194,21 @@ export async function startProfile(p: Profile): Promise<void> {
     if (local && optimisticStart) { local.running = false; local.ready = false; S.render(); }
     return;
   }
-  progress?.phase(r.status === 'started' || r.status === 'focused' || r.status === 'inkbrowser-launched' ? 'Chromium is ready.' : 'Finishing startup…');
-  const failed = !['started', 'focused', 'wsb-launched', 'tor-launched', 'inkbrowser-launched', 'firefox-launched'].includes(r.status);
-  if (failed && local && optimisticStart) { local.running = false; local.ready = false; S.render(); }
+  progress?.phase(r.status === 'started' || r.status === 'focused' || r.status === 'inkbrowser-launched' || r.status === 'browser-integration-launched' ? 'Browser is ready.' : 'Finishing startup…');
+  const failed = !['started', 'focused', 'wsb-launched', 'tor-launched', 'inkbrowser-launched', 'firefox-launched', 'browser-integration-launched'].includes(r.status);
+  if (failed && local && optimisticStart && !externalProfile) { local.running = false; local.ready = false; S.render(); }
   switch (r.status) {
-    case 'started': case 'focused': case 'wsb-launched': case 'tor-launched': case 'inkbrowser-launched': case 'firefox-launched': break;
+    case 'started': case 'focused': case 'wsb-launched': case 'tor-launched': case 'inkbrowser-launched': case 'firefox-launched': case 'browser-integration-launched': break;
     case 'need-passphrase': case 'wrong-passphrase': void preLaunch(p); break;
     case 'tor-missing': torMissing(); break;
     case 'wsb-unavailable': wsbUnavailable(p); break;
     case 'inkbrowser-missing': case 'inkbrowser-conflict': toast(inkbrowserLaunchMessage(r.status, r.detail), 'err'); break;
     case 'firefox-engine-unavailable': toast(`${t('launch.status.firefox-engine-unavailable')} (${r.detail ?? 'runtime-unavailable'})`, 'err'); break;
     case 'firefox-launch-failed': toast(t('launch.status.firefox-launch-failed'), 'err'); break;
+    case 'browser-integration-missing': toast(t('launch.status.browser-integration-missing'), 'err'); break;
+    case 'browser-integration-unsupported': toast(t('launch.status.browser-integration-unsupported'), 'err'); break;
+    case 'browser-integration-unavailable': toast(t('launch.status.browser-integration-unavailable'), 'err'); break;
+    case 'browser-integration-launch-failed': toast(t('launch.status.browser-integration-launch-failed'), 'err'); break;
     default: toast(r.status, 'err');
   }
   progress?.done();
