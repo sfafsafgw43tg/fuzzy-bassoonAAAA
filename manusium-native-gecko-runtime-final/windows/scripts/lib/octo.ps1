@@ -1871,10 +1871,54 @@ function Test-NativeCameraToolchain {
   return ($result.code -eq 0 -and [bool](@($result.text -split "`r?`n" | Where-Object { $_.Trim() -and (Test-Path -LiteralPath $_.Trim()) }).Count))
 }
 
+function Install-NativeCameraToolchain {
+  # winget often reports Build Tools as already installed even when the C++
+  # workload is absent. Use the installed Visual Studio setup program's
+  # supported modify command instead of rerunning the bootstrapper.
+  $vswhereCandidates = @(
+    (Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'),
+    (Join-Path $env:ProgramFiles 'Microsoft Visual Studio\Installer\vswhere.exe')
+  )
+  $vswhere = $vswhereCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+  $setupCandidates = @(
+    (Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\setup.exe'),
+    (Join-Path $env:ProgramFiles 'Microsoft Visual Studio\Installer\setup.exe')
+  )
+  $setup = $setupCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+  if (-not $vswhere -or -not $setup) {
+    Write-Log 'warn' 'Visual Studio setup.exe or vswhere.exe was not found; automatic workload modification is unavailable.'
+    return $false
+  }
+  $pathResult = Invoke-Native $vswhere @('-latest', '-products', '*', '-property', 'installationPath') $null -Quiet
+  $installPath = ($pathResult.text -split "`r?`n" | Where-Object { $_.Trim() -and (Test-Path -LiteralPath $_.Trim()) } | Select-Object -First 1)
+  if (-not $installPath) {
+    Write-Log 'warn' 'Visual Studio installation path could not be detected for workload modification.'
+    return $false
+  }
+  $args = @('modify', '--installPath', $installPath.Trim(), '--add',
+    'Microsoft.VisualStudio.Workload.NativeDesktop', '--add',
+    'Microsoft.VisualStudio.Component.VC.ATLMFC', '--includeRecommended',
+    '--passive', '--norestart')
+  try {
+    $admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
+    if ($admin) {
+      $result = Start-Process -FilePath $setup -ArgumentList $args -Wait -PassThru -NoNewWindow
+    } else {
+      $result = Start-Process -FilePath $setup -ArgumentList $args -Wait -PassThru -Verb RunAs
+    }
+    Write-Log 'info' "Visual Studio workload modify exit code $($result.ExitCode)"
+    Update-SessionPath
+    return (Test-NativeCameraToolchain)
+  } catch {
+    Write-Log 'warn' "Visual Studio workload modification failed: $($_.Exception.Message)"
+    return $false
+  }
+}
+
 $MediaPrereqs = @(
   @{ Id = 'Python.Python.3.12'; Name = 'Python 3'; Site = 'https://www.python.org/downloads/'; DirectUrl = 'https://www.python.org/ftp/python/3.12.7/python-3.12.7-amd64.exe'; InstallerType = 'inno'; DirectArgs = @('/quiet', 'InstallAllUsers=0', 'PrependPath=1'); Test = { [bool](Get-Command 'python' -ErrorAction SilentlyContinue) -or [bool](Get-Command 'python3' -ErrorAction SilentlyContinue) } }
   @{ Id = 'Kitware.CMake'; Name = 'CMake'; Site = 'https://cmake.org/download/'; Cmd = 'cmake'; DirectUrl = 'https://github.com/Kitware/CMake/releases/download/v3.31.6/cmake-3.31.6-windows-x86_64.msi'; InstallerType = 'msi'; Test = { [bool](Resolve-Tool 'cmake') } }
-  @{ Id = 'Microsoft.VisualStudio.2022.BuildTools'; Name = 'Visual Studio C++ build tools and Windows SDK'; Site = 'https://visualstudio.microsoft.com/visual-cpp-build-tools/'; DirectUrl = 'https://aka.ms/vs/17/release/vs_BuildTools.exe'; InstallerType = 'exe'; DirectArgs = @('--quiet', '--wait', '--norestart', '--add', 'Microsoft.VisualStudio.Workload.NativeDesktop', '--add', 'Microsoft.VisualStudio.Component.VC.ATLMFC', '--includeRecommended'); Test = { Test-NativeCameraToolchain } }
+  @{ Id = 'Microsoft.VisualStudio.2022.BuildTools'; Name = 'Visual Studio C++ build tools and Windows SDK'; Site = 'https://visualstudio.microsoft.com/visual-cpp-build-tools/'; DirectUrl = 'https://aka.ms/vs/17/release/vs_BuildTools.exe'; InstallerType = 'exe'; DirectArgs = @('--quiet', '--wait', '--norestart', '--add', 'Microsoft.VisualStudio.Workload.NativeDesktop', '--add', 'Microsoft.VisualStudio.Component.VC.ATLMFC', '--includeRecommended'); Fallback = { Install-NativeCameraToolchain }; Test = { Test-NativeCameraToolchain } }
   @{ Id = 'OBSProject.OBSStudio'; Name = 'OBS Studio (virtual camera)'; Site = 'https://obsproject.com/'; DirectUrl = 'https://github.com/obsproject/obs-studio/releases/download/30.2.3/OBS-Studio-30.2.3-Windows-Installer.exe'; InstallerType = 'inno'; DirectArgs = @('/S'); Test = { Test-PathAny @("$env:ProgramFiles\obs-studio", "${env:ProgramFiles(x86)}\obs-studio") } }
   @{ Id = 'VB-Audio.Cable'; Name = 'VB-CABLE (virtual microphone)'; Site = 'https://vb-audio.com/Cable/'; Fallback = { Install-VbCable }; Test = { Test-VbCableInstalled } }
 )
