@@ -2481,7 +2481,7 @@ export class Manager {
       const win = this.launcher;
       if (win && !win.isDestroyed()) win.webContents.send('mgr:android-screen', payload);
     };
-    handle('mgr:init', L, () => ({
+    handle('mgr:init', L, async () => ({
       lang: ctx.lang,
       dicts: DICTS,
       version: SUITE_VERSION,
@@ -2498,7 +2498,7 @@ export class Manager {
         || engineResourceRoots().some((resourcesPath) => !!discoverFirefoxRuntime(resourcesPath, path.join(ctx.layout.engine, 'runtimes', 'gecko'))),
       inkbrowserInstalled: Boolean(bundledChromiumExecutable() || (!app.isPackaged && findInkBrowser())),
       chromiumRuntimes: listInstalled(path.join(ctx.layout.engine, 'runtimes', 'chromium'), process.platform, process.arch, engineResourceRoots()),
-      browserIntegrations: detectBrowserIntegrations(),
+      browserIntegrations: await detectBrowserIntegrations(),
       settings: ctx.settings.load(),
       searchEngines: Object.keys(SEARCH_ENGINES),
       update: this.updates.getStatus(),
