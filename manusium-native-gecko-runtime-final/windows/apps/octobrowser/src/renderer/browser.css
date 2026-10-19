@@ -1417,3 +1417,8 @@ body.vm-mode *::after {
 :root[data-browser-shell="octo"] .window-controls { align-items: stretch; }
 :root[data-browser-shell="octo"] #windowClose { position: static; width: 38px; height: 38px; border-radius: 0; background: transparent; box-shadow: none; }
 :root[data-browser-shell="octo"] #windowClose:hover { background: #505050; color: #fff; transform: none; }
+
+/* Android AVD host-camera preview: this is a local source preview, not a fake guest frame. */
+.android-camera-preview { display: block; width: 100%; max-width: 640px; max-height: 300px; aspect-ratio: 16 / 9; object-fit: contain; border: 1px solid var(--line); border-radius: 8px; background: #000; margin-top: 8px; }
+.android-camera-preview[hidden] { display: none; }
+.chrome-camera-preview { max-width: 720px; }

@@ -720,9 +720,21 @@ function chromeAndroidPanel(machines: AndroidMachine[]): HTMLElement {
   const browserCameras = h('p', { class: 'small muted', 'aria-live': 'polite', text: t('android.chrome.browserCameraChecking') });
   const cameraSelect = select<string>('', [['', t('android.chrome.cameraNone')]], () => undefined);
   const cameraRefresh = h('button', { class: 'btn small', 'aria-label': t('android.chrome.cameraRefresh') }, icon('refreshCircle', 14), h('span', { text: t('android.chrome.cameraRefresh') })) as HTMLButtonElement;
+  const previewButton = h('button', { class: 'btn small', 'aria-label': t('android.chrome.previewCamera') }, icon('monitor', 14), h('span', { text: t('android.chrome.previewCamera') })) as HTMLButtonElement;
+  const previewVideo = h('video', { class: 'android-camera-preview chrome-camera-preview', autoplay: '', muted: '', playsinline: '', hidden: 'true', 'aria-label': t('android.chrome.previewCamera') }) as HTMLVideoElement;
+  const previewStatus = h('p', { class: 'small muted', 'aria-live': 'polite', text: t('android.chrome.previewHint') });
   const obs = h('button', { class: 'btn small', 'aria-label': t('android.chrome.startObs') }, icon('camera', 14), h('span', { text: t('android.chrome.startObs') })) as HTMLButtonElement;
   const applyCamera = h('button', { class: 'btn small', 'aria-label': t('android.chrome.applyCamera') }, icon('check', 14), h('span', { text: t('android.chrome.applyCamera') })) as HTMLButtonElement;
   const version = h('span', { class: 'pill', text: t('android.chrome.notChecked') });
+  let cameraChoices: ChromeCameraChoices | undefined;
+  let previewStream: MediaStream | undefined;
+  const stopPreview = (): void => {
+    previewStream?.getTracks().forEach((track) => track.stop());
+    previewStream = undefined;
+    previewVideo.srcObject = null;
+    previewVideo.hidden = true;
+    previewButton.textContent = t('android.chrome.previewCamera');
+  };
   const setStatus = (text: string, ok = false) => { status.textContent = text; status.classList.toggle('ok', ok); status.classList.toggle('warn', !ok); };
   const setCameraStatus = (text: string, ok = false) => { cameraStatus.textContent = text; cameraStatus.classList.toggle('ok', ok); cameraStatus.classList.toggle('warn', !ok); };
   async function browserCameraLabels(): Promise<string[]> {
@@ -755,6 +767,7 @@ function chromeAndroidPanel(machines: AndroidMachine[]): HTMLElement {
       run(api.invoke<ChromeCameraChoices>('mgr:android-camera-choices')),
       browserCameraLabels(),
     ]);
+    cameraChoices = result ?? undefined;
     const normalize = (value: string) => value.toLocaleLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
     const browserKeys = browserLabels.map(normalize);
     cameraSelect.replaceChildren(...(result?.webcams?.length
@@ -778,6 +791,34 @@ function chromeAndroidPanel(machines: AndroidMachine[]): HTMLElement {
     }
     cameraRefresh.disabled = false;
   }
+  async function togglePreview(): Promise<void> {
+    if (previewStream) { stopPreview(); return; }
+    const route = cameraChoices?.webcams?.find((item) => item.name === cameraSelect.value);
+    if (!route) { previewStatus.textContent = t('android.chrome.previewOff'); return; }
+    previewButton.disabled = true;
+    try {
+      let devices = await navigator.mediaDevices.enumerateDevices();
+      if (devices.every((device) => !device.label)) {
+        const reveal = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        reveal.getTracks().forEach((track) => track.stop());
+        await new Promise((resolve) => window.setTimeout(resolve, 250));
+        devices = await navigator.mediaDevices.enumerateDevices();
+      }
+      const normalize = (value: string) => value.toLocaleLowerCase().replace(/[^a-z0-9]+/g, ' ').trim();
+      const match = devices.find((device) => device.kind === 'videoinput' && route.device
+        && (normalize(device.label) === normalize(route.device) || normalize(device.label).includes(normalize(route.device)) || normalize(route.device).includes(normalize(device.label))));
+      if (!match) { previewStatus.textContent = t('android.chrome.previewUnavailable'); return; }
+      previewStream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: match.deviceId } }, audio: false });
+      previewVideo.srcObject = previewStream;
+      previewVideo.hidden = false;
+      await previewVideo.play().catch(() => undefined);
+      previewButton.textContent = t('android.chrome.stopPreview');
+      previewStatus.textContent = t('android.chrome.previewLive', { name: match.label || route.name });
+    } catch {
+      stopPreview();
+      previewStatus.textContent = t('android.chrome.previewFailed');
+    } finally { previewButton.disabled = false; }
+  }
   open.onclick = async () => {
     if (!selected) return;
     open.disabled = true;
@@ -795,7 +836,8 @@ function chromeAndroidPanel(machines: AndroidMachine[]): HTMLElement {
     install.disabled = false;
     await refresh();
   };
-  cameraRefresh.onclick = () => void refreshCameras();
+  cameraRefresh.onclick = () => { stopPreview(); void refreshCameras(); };
+  previewButton.onclick = () => void togglePreview();
   obs.onclick = async () => {
     obs.disabled = true;
     const result = await run(api.invoke<{ started: boolean; camera: string; reason: string }>('mgr:android-start-obs'));
@@ -823,5 +865,6 @@ function chromeAndroidPanel(machines: AndroidMachine[]): HTMLElement {
         h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.chrome.selectDevice') }), deviceSelect),
         h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.chrome.url') }), url), version, refreshButton, install, open),
       h('div', { class: 'row chrome-camera-controls' },
-        h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.chrome.cameraSelect') }), cameraSelect), cameraRefresh, obs, applyCamera), cameraStatus, browserCameras));
+        h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.chrome.cameraSelect') }), cameraSelect), cameraRefresh, previewButton, obs, applyCamera),
+      previewVideo, previewStatus, cameraStatus, browserCameras));
 }

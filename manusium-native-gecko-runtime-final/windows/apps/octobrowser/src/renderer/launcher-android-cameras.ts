@@ -279,6 +279,53 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
   const backSlot = h('div', { class: 'vbox-live-host' });
   const frontSlot = h('div', { class: 'vbox-live-host' });
   const statusSlot = h('div', { class: 'camera-scan-status', role: 'status' });
+  const previewVideo = h('video', { class: 'android-camera-preview', autoplay: '', muted: '', playsinline: '', hidden: 'true', 'aria-label': t('android.camera.preview') }) as HTMLVideoElement;
+  const previewButton = h('button', { type: 'button', class: 'btn small', text: t('android.camera.preview') }) as HTMLButtonElement;
+  const previewStatus = h('p', { class: 'hint', 'aria-live': 'polite', text: t('android.camera.previewHint') });
+  let previewStream: MediaStream | undefined;
+  const stopPreview = (): void => {
+    previewStream?.getTracks().forEach((track) => track.stop());
+    previewStream = undefined;
+    previewVideo.srcObject = null;
+    previewVideo.hidden = true;
+    previewButton.textContent = t('android.camera.preview');
+  };
+  const startPreview = async (): Promise<void> => {
+    stopPreview();
+    const endpoint = selection.backDevice || selection.frontDevice;
+    if (!endpoint || selection.back === 'none' && selection.front === 'none') {
+      previewStatus.textContent = t('android.camera.previewOff');
+      return;
+    }
+    previewButton.disabled = true;
+    try {
+      let devices = await videoInputs();
+      if (devices.every((device) => !device.label)) {
+        const reveal = await navigator.mediaDevices.getUserMedia({ video: true, audio: false });
+        reveal.getTracks().forEach((track) => track.stop());
+        await delay(250);
+        devices = await videoInputs();
+      }
+      const emulator = listed.find((item) => item.name === endpoint);
+      const match = emulator ? pickCameraForEmulator(devices, emulator) : undefined;
+      if (!match) {
+        previewStatus.textContent = t('android.camera.previewUnavailable');
+        return;
+      }
+      previewStream = await navigator.mediaDevices.getUserMedia({ video: { deviceId: { exact: match.deviceId } }, audio: false });
+      previewVideo.srcObject = previewStream;
+      previewVideo.hidden = false;
+      await previewVideo.play().catch(() => undefined);
+      previewButton.textContent = t('android.camera.stopPreview');
+      previewStatus.textContent = t('android.camera.previewLive', { name: match.label || endpoint });
+    } catch (error) {
+      stopPreview();
+      previewStatus.textContent = t('android.camera.previewFailed', { reason: classifyCameraFailure(error as { name?: unknown; message?: unknown }) });
+    } finally {
+      previewButton.disabled = false;
+    }
+  };
+  previewButton.onclick = () => { if (previewStream) stopPreview(); else void startPreview(); };
   const obsButton = h('button', { type: 'button', class: 'btn small', text: t('android.camera.startObs') }) as HTMLButtonElement;
   obsButton.onclick = async () => { obsButton.disabled = true; await run(api.invoke<{ ok: boolean; message: string }>('mgr:android-start-obs'), 'android.camera.obsResult'); obsButton.disabled = false; await scan(true); };
   const refreshButton = h('button', { type: 'button', class: 'btn small' },
@@ -320,7 +367,9 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
   const element = h('div', { class: 'camera-picker' },
     manager,
     h('div', { class: 'grid2' }, backSlot, frontSlot),
-    h('div', { class: 'camera-picker-foot' }, refreshButton, obsButton),
+    h('div', { class: 'camera-picker-foot' }, refreshButton, obsButton, previewButton),
+    previewVideo,
+    previewStatus,
     statusSlot);
 
   const emit = (): void => {
@@ -358,6 +407,7 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
   }
 
   function choose(facing: CameraFacing, id: string): void {
+    stopPreview();
     if (id === 'emulated') { setSource(facing, 'emulated'); paintLenses(); paintStatus(); emit(); return; }
     if (id && !/^webcam\d+$/.test(id)) return;
     setSource(facing, id ? 'webcam' : 'none', id);
@@ -514,6 +564,7 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
     window.clearInterval(poll); clearTimeout(deviceSettle);
     navigator.mediaDevices?.removeEventListener?.('devicechange', onDeviceChange);
     observer.disconnect(); unsubscribe();
+    stopPreview();
     cameraTests.setEnabled(false);
   }
 
