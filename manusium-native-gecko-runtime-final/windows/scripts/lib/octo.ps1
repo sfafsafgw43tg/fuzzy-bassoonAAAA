@@ -1895,20 +1895,29 @@ function Install-NativeCameraToolchain {
     Write-Log 'warn' 'Visual Studio installation path could not be detected for workload modification.'
     return $false
   }
-  $args = @('modify', '--installPath', $installPath.Trim(), '--add',
+  $baseArgs = @('modify', '--installPath', $installPath.Trim(), '--add',
     'Microsoft.VisualStudio.Workload.NativeDesktop', '--add',
-    'Microsoft.VisualStudio.Component.VC.ATLMFC', '--includeRecommended',
-    '--passive', '--norestart')
+    'Microsoft.VisualStudio.Component.VC.Tools.x86.x64', '--add',
+    'Microsoft.VisualStudio.Component.VC.ATLMFC', '--add',
+    'Microsoft.VisualStudio.Component.Windows10SDK.19041', '--includeRecommended',
+    '--norestart')
+  $attempts = @(
+    ($baseArgs + @('--quiet', '--wait')),
+    ($baseArgs + @('--passive'))
+  )
   try {
     $admin = ([Security.Principal.WindowsPrincipal][Security.Principal.WindowsIdentity]::GetCurrent()).IsInRole([Security.Principal.WindowsBuiltInRole]::Administrator)
-    if ($admin) {
-      $result = Start-Process -FilePath $setup -ArgumentList $args -Wait -PassThru -NoNewWindow
-    } else {
-      $result = Start-Process -FilePath $setup -ArgumentList $args -Wait -PassThru -Verb RunAs
+    foreach ($args in $attempts) {
+      if ($admin) {
+        $result = Start-Process -FilePath $setup -ArgumentList $args -Wait -PassThru -NoNewWindow
+      } else {
+        $result = Start-Process -FilePath $setup -ArgumentList $args -Wait -PassThru -Verb RunAs
+      }
+      Write-Log 'info' "Visual Studio workload modify exit code $($result.ExitCode) args=$($args -join ' ')"
+      Update-SessionPath
+      if (Test-NativeCameraToolchain) { return $true }
     }
-    Write-Log 'info' "Visual Studio workload modify exit code $($result.ExitCode)"
-    Update-SessionPath
-    return (Test-NativeCameraToolchain)
+    return $false
   } catch {
     Write-Log 'warn' "Visual Studio workload modification failed: $($_.Exception.Message)"
     return $false
