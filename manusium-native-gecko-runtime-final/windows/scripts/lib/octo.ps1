@@ -2570,6 +2570,7 @@ function Get-SetupSteps {
         # GitHub release asset. It must never compile Chromium on the user's PC.
         Assert-NotRunning @('octobrowser', 'octodetect')
         $nativeAvailable = $false
+        $nativeCameraBuilt = $false
         $fetch = Invoke-NpmResult @('run', 'fetch:chromium:windows')
         if ($fetch.code -eq 0) {
           $nativeAvailable = $true
@@ -2594,7 +2595,8 @@ function Get-SetupSteps {
         if ($cameraBuild.code -ne 0) {
           foreach ($line in @(([string]$cameraBuild.text) -split "`r?`n" | Where-Object { $_ -and $_.Trim() } | Select-Object -Last 20)) { Write-Log 'error' $line }
           Warn 'Windows virtual camera compilation failed. The installer downloaded prerequisites but could not build the camera. Close Visual Studio/OctoSuite and retry setup; see the log for the CMake error.'
-          return $false
+        } else {
+          $nativeCameraBuilt = $true
         }
         # Strictly verify a downloaded runtime. When no release exists, package
         # Electron only and record that native Chromium is unavailable.
@@ -2623,7 +2625,12 @@ function Get-SetupSteps {
           }
           Say 'Electron Builder fallback completed; continuing with the Electron compatibility app.' 'Yellow'
         }
-        if (-not (Install-NativeCameraBundle)) { return $false }
+        if ($nativeCameraBuilt -and -not (Install-NativeCameraBundle)) {
+          # The prebuilt applications remain usable without a registered camera.
+          # Do not report the camera as installed; the Devices tab can retry it
+          # after the user closes conflicting processes or fixes permissions.
+          Warn 'Windows virtual camera registration did not complete. The prebuilt applications are ready, but camera capture is unavailable until registration succeeds.'
+        }
         if ($nativeAvailable) {
           $nativeAvailable = Test-AllChromiumRuntimes (Join-Path $InstallRoot 'resources')
           if (-not $nativeAvailable) { Warn 'The prebuilt InkBrowser runtime did not pass the final installer check.'; return $false }
