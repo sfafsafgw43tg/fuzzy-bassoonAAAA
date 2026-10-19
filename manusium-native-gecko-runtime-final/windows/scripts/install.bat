@@ -2,7 +2,7 @@
 rem scripts\install.bat
 rem Verifies (SHA-256, Authenticode, Ed25519 manifest) and runs OctoSuite-Setup-*.exe. Option: -Source <folder>.
 rem In a release install it validates the bundled prebuilt Chromium runtime and installs the
-rem application. It never installs Visual Studio or compiles Chromium on the user machine.
+rem application. It installs the required Windows camera/media/Android toolchain and never compiles Chromium on the user machine.
 rem Source setup requires staged InkBrowser runtimes and packages branded Octo executables.
 rem
 rem Thin wrapper: all logic is in lib\octo.ps1 (Windows PowerShell 5.1, built into Windows 10/11).

@@ -208,7 +208,7 @@ $Messages = @{
     shortcutDone      = 'Desktop shortcut created: {0}'
     shortcutFailed    = 'The desktop shortcut could not be created ({0}). Start Octo.su with scripts\open.bat instead.'
     shortcutNoDesktop = 'No Desktop folder was found, so no shortcut was created.'
-    stepPrereqs       = 'Node.js and git'
+    stepPrereqs       = 'Core, camera, media, and Android prerequisites'
     stepMedia         = 'vStudio plugins (Python, OBS virtual camera, VB-CABLE)'
     stepAndroid       = 'Android Studio and Java 17'
     stepSdk           = 'Android SDK command-line tools, adb and the emulator'
@@ -447,7 +447,7 @@ $Messages = @{
     shortcutDone      = 'Utworzono skrót na pulpicie: {0}'
     shortcutFailed    = 'Nie udało się utworzyć skrótu na pulpicie ({0}). Uruchamiaj Octo.su przez scripts\open.bat.'
     shortcutNoDesktop = 'Nie znaleziono folderu Pulpit, więc skrót nie powstał.'
-    stepPrereqs       = 'Node.js i git'
+    stepPrereqs       = 'Podstawowe, kamera, multimedia i Android'
     stepMedia         = 'Wtyczki vStudio (Python, kamera wirtualna OBS, VB-CABLE)'
     stepAndroid       = 'Android Studio i Java 17'
     stepSdk           = 'Narzędzia wiersza poleceń Android SDK, adb i emulator'
@@ -1315,6 +1315,7 @@ $ToolHints = @{
   'node' = @('nodejs\node.exe')
   'npm'  = @('nodejs\npm.cmd')
   'git'  = @('Git\cmd\git.exe', 'Git\bin\git.exe')
+  'cmake' = @('CMake\bin\cmake.exe')
 }
 $ToolRoots = @(
   "$env:ProgramFiles\nodejs",
@@ -1357,6 +1358,7 @@ function Update-SessionPath {
     "$env:APPDATA\npm",
     "$env:ProgramFiles\Git\cmd",
     "$env:ProgramFiles\Git\bin",
+    "$env:ProgramFiles\CMake\bin",
     "${env:ProgramFiles(x86)}\Git\cmd",
     "${env:ProgramFiles(x86)}\Git\bin",
     "$env:ProgramW6432\Git\cmd",
@@ -1847,10 +1849,34 @@ function Test-VbCableInstalled {
   return ($endpoint.code -eq 0)
 }
 
+function Test-NativeCameraToolchain {
+  $cmake = Resolve-Tool 'cmake'
+  if (-not $cmake) { return $false }
+  $vswhereCandidates = @(
+    (Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'),
+    (Join-Path $env:ProgramFiles 'Microsoft Visual Studio\Installer\vswhere.exe')
+  )
+  $vswhere = $vswhereCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
+  if (-not $vswhere) { return $false }
+  $args = @('-latest', '-products', '*', '-requires',
+    'Microsoft.VisualStudio.Component.VC.Tools.x86.x64',
+    '-requiresAny',
+    'Microsoft.VisualStudio.Component.Windows10SDK.19041',
+    'Microsoft.VisualStudio.Component.Windows10SDK.20348',
+    'Microsoft.VisualStudio.Component.Windows11SDK.22000',
+    'Microsoft.VisualStudio.Component.Windows11SDK.22621',
+    'Microsoft.VisualStudio.Component.Windows11SDK.26100',
+    '-property', 'installationPath')
+  $result = Invoke-Native $vswhere $args $null -Quiet
+  return ($result.code -eq 0 -and [bool](@($result.text -split "`r?`n" | Where-Object { $_.Trim() -and (Test-Path -LiteralPath $_.Trim()) }).Count))
+}
+
 $MediaPrereqs = @(
-  @{ Id = 'Python.Python.3.12';     Name = 'Python 3';       Site = 'https://www.python.org/downloads/';    DirectUrl = 'https://www.python.org/ftp/python/3.12.7/python-3.12.7-amd64.exe'; InstallerType = 'inno'; DirectArgs = @('/quiet', 'InstallAllUsers=0', 'PrependPath=1'); Test = { [bool](Get-Command 'python' -ErrorAction SilentlyContinue) -or [bool](Get-Command 'python3' -ErrorAction SilentlyContinue) } }
-  @{ Id = 'OBSProject.OBSStudio';   Name = 'OBS Studio (virtual camera)'; Site = 'https://obsproject.com/'; DirectUrl = 'https://github.com/obsproject/obs-studio/releases/download/30.2.3/OBS-Studio-30.2.3-Windows-Installer.exe'; InstallerType = 'inno'; DirectArgs = @('/S'); Test = { Test-PathAny @("$env:ProgramFiles\obs-studio", "${env:ProgramFiles(x86)}\obs-studio") } }
-  @{ Id = 'VB-Audio.Cable';         Name = 'VB-CABLE (virtual microphone)'; Site = 'https://vb-audio.com/Cable/'; Fallback = { Install-VbCable }; Test = { Test-VbCableInstalled } }
+  @{ Id = 'Python.Python.3.12'; Name = 'Python 3'; Site = 'https://www.python.org/downloads/'; DirectUrl = 'https://www.python.org/ftp/python/3.12.7/python-3.12.7-amd64.exe'; InstallerType = 'inno'; DirectArgs = @('/quiet', 'InstallAllUsers=0', 'PrependPath=1'); Test = { [bool](Get-Command 'python' -ErrorAction SilentlyContinue) -or [bool](Get-Command 'python3' -ErrorAction SilentlyContinue) } }
+  @{ Id = 'Kitware.CMake'; Name = 'CMake'; Site = 'https://cmake.org/download/'; Cmd = 'cmake'; DirectUrl = 'https://github.com/Kitware/CMake/releases/download/v3.31.6/cmake-3.31.6-windows-x86_64.msi'; InstallerType = 'msi'; Test = { [bool](Resolve-Tool 'cmake') } }
+  @{ Id = 'Microsoft.VisualStudio.2022.BuildTools'; Name = 'Visual Studio C++ build tools and Windows SDK'; Site = 'https://visualstudio.microsoft.com/visual-cpp-build-tools/'; DirectUrl = 'https://aka.ms/vs/17/release/vs_BuildTools.exe'; InstallerType = 'exe'; DirectArgs = @('--quiet', '--wait', '--norestart', '--add', 'Microsoft.VisualStudio.Workload.NativeDesktop', '--add', 'Microsoft.VisualStudio.Component.VC.ATLMFC', '--includeRecommended'); Test = { Test-NativeCameraToolchain } }
+  @{ Id = 'OBSProject.OBSStudio'; Name = 'OBS Studio (virtual camera)'; Site = 'https://obsproject.com/'; DirectUrl = 'https://github.com/obsproject/obs-studio/releases/download/30.2.3/OBS-Studio-30.2.3-Windows-Installer.exe'; InstallerType = 'inno'; DirectArgs = @('/S'); Test = { Test-PathAny @("$env:ProgramFiles\obs-studio", "${env:ProgramFiles(x86)}\obs-studio") } }
+  @{ Id = 'VB-Audio.Cable'; Name = 'VB-CABLE (virtual microphone)'; Site = 'https://vb-audio.com/Cable/'; Fallback = { Install-VbCable }; Test = { Test-VbCableInstalled } }
 )
 
 $AndroidPrereqs = @(
@@ -1929,7 +1955,7 @@ function Test-AndroidStudioPresent {
 # Downloads from vendor hosts the tooling really needs. The
 # allow-list is exact: anything else is refused, the same rule Invoke-Download
 # applies to our own release host.
-$VendorHosts = @('dl.google.com', 'download.vb-audio.com', 'vb-audio.com', 'nodejs.org', 'github.com', 'git-scm.com', 'www.python.org', 'obsproject.com')
+$VendorHosts = @('aka.ms', 'dl.google.com', 'download.vb-audio.com', 'vb-audio.com', 'nodejs.org', 'github.com', 'git-scm.com', 'www.python.org', 'obsproject.com')
 
 function Invoke-VendorDownload([string]$url, [string]$dest) {
   try { $host_ = ([uri]$url).Host } catch { return $false }
@@ -2468,8 +2494,13 @@ function Test-AllChromiumRuntimes([string]$resourcesRoot) {
 function Get-SetupSteps {
   return @(
     @{ Key = 'stepPrereqs'; Required = $true; Fatal = $true; Action = {
-        if (Test-GitCheckout) { return (ConvertTo-StepResult (Install-Prerequisites -GitRequired)) }
-        return (ConvertTo-StepResult (Install-Prerequisites))
+        $coreOk = if (Test-GitCheckout) { Install-Prerequisites -GitRequired } else { Install-Prerequisites }
+        if (-not $coreOk) { return (ConvertTo-StepResult $false) }
+        # These tables were previously only exposed from the Devices UI, which
+        # left a clean install without the tools needed by step 3.
+        if (-not (Install-MediaPrerequisites)) { return (ConvertTo-StepResult $false) }
+        if (-not (Install-AndroidPrerequisites)) { return (ConvertTo-StepResult $false) }
+        return (ConvertTo-StepResult $true)
       } }
     @{ Key = 'stepDeps'; Required = $true; Fatal = $true; Action = { return (Invoke-EnsureDependencies) } }
     @{ Key = 'stepBuild'; Required = $true; Fatal = $true; Action = {
@@ -2500,8 +2531,9 @@ function Get-SetupSteps {
         # A missing native toolchain must not prevent the browser from working.
         $cameraBuild = Invoke-NpmResult @('run', 'build:native-camera')
         if ($cameraBuild.code -ne 0) {
-          Warn 'Windows virtual camera was not compiled. Install Visual Studio C++ desktop tools, Windows SDK 10.0.22621+, and CMake, then rerun setup.'
-          foreach ($line in @(([string]$cameraBuild.text) -split "`r?`n" | Select-Object -Last 12)) { Write-Log 'warn' $line }
+          foreach ($line in @(([string]$cameraBuild.text) -split "`r?`n" | Where-Object { $_ -and $_.Trim() } | Select-Object -Last 20)) { Write-Log 'error' $line }
+          Warn 'Windows virtual camera compilation failed. The installer downloaded prerequisites but could not build the camera. Close Visual Studio/OctoSuite and retry setup; see the log for the CMake error.'
+          return $false
         }
         # Strictly verify a downloaded runtime. When no release exists, package
         # Electron only and record that native Chromium is unavailable.
@@ -2612,7 +2644,7 @@ function Invoke-FirstInstall {
     $ok = $false
     try { $ok = [bool](& $step.Action) } catch { Warn $_.Exception.Message; $ok = $false }
     if (-not $ok) {
-      if ($step.Key -eq 'stepPrereqs') { Fail (T 'prereqManual' 'Node.js / git') }
+      if ($step.Key -eq 'stepPrereqs') { Fail (T 'prereqManual' 'core, camera, media, or Android prerequisites') }
       # A fatal step stops the run. A failed required step fails the setup; a failed optional
       # step only leaves warnings. Success is shown only when neither happened.
       if ($step.Required) { $requiredFailed = $true } else { $optionalFailed = $true }

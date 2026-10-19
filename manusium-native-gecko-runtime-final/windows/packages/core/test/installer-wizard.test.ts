@@ -327,7 +327,7 @@ describe('steps and the console installer', () => {
     expect(buildBlock).toContain("Invoke-Npm @('run', 'icons')");
     expect(buildBlock).toContain("Invoke-Npm @('run', 'build')");
     expect(buildBlock).toContain("mode = if ($nativeAvailable) { 'prebuilt-inkbrowser' } else { 'prebuilt-electron' }");
-    expect(buildBlock).not.toContain('package:local:windows');
+    expect(buildBlock).toContain('package:local:windows');
   });
 
   it('the Chromium installer steps keep their order', () => {
