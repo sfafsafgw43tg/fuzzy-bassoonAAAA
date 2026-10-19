@@ -1894,9 +1894,13 @@ function browser(b: HTMLElement, d: Draft, draw: () => void, summary: () => void
   const identityChoices: Array<[string, string] | [string, string, boolean]> = d.engine === 'firefox'
     ? [['firefox', t('identity.firefox')], ['firefox-esr', t('identity.firefoxEsr')]]
     : [['chrome', t('identity.chrome')], ['chromium', t('identity.chromium')], ['edge', t('identity.edge')],
-      ['brave', t('identity.brave')], ['opera', t('identity.opera')], ['vivaldi', t('identity.vivaldi')],
+      ['opera', t('identity.opera')], ['vivaldi', t('identity.vivaldi')],
       ['samsung-internet', t('identity.samsung'), true], ['safari', t('identity.safari'), true]];
-  const identitySelect = select(d.fp?.browserIdentity ?? (d.engine === 'firefox' ? 'firefox' : 'chrome'), identityChoices,
+  // Brave is supported by the identity engine for imported profiles, but it is
+  // not a selectable/default Octo runtime. Existing Brave profiles are shown as
+  // Chrome so Octo never appears to launch or identify itself as Brave.
+  const selectedIdentity = d.fp?.browserIdentity === 'brave' ? 'chrome' : (d.fp?.browserIdentity ?? (d.engine === 'firefox' ? 'firefox' : 'chrome'));
+  const identitySelect = select(selectedIdentity, identityChoices,
     (value) => { if (d.fp) d.fp.browserIdentity = value; });
   const identityHint = h('p', { class: 'hint', text: t('identity.chromiumOnlyHint') });
 
