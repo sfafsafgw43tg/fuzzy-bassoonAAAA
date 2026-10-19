@@ -1858,17 +1858,25 @@ function Test-NativeCameraToolchain {
   )
   $vswhere = $vswhereCandidates | Where-Object { Test-Path -LiteralPath $_ } | Select-Object -First 1
   if (-not $vswhere) { return $false }
-  $args = @('-latest', '-products', '*', '-requires',
-    'Microsoft.VisualStudio.Component.VC.Tools.x86.x64',
-    '-requiresAny',
+
+  # Keep the checks separate. Combining -requires and -requiresAny makes
+  # vswhere treat the SDK IDs as malformed arguments on some installer builds.
+  $vc = Invoke-Native $vswhere @('-latest', '-products', '*', '-requires',
+    'Microsoft.VisualStudio.Component.VC.Tools.x86.x64', '-property', 'installationPath') $null -Quiet
+  $vcPath = ($vc.text -split "`r?`n" | Where-Object { $_.Trim() -and (Test-Path -LiteralPath $_.Trim()) } | Select-Object -First 1)
+  if ($vc.code -ne 0 -or -not $vcPath) { return $false }
+
+  foreach ($sdk in @(
     'Microsoft.VisualStudio.Component.Windows10SDK.19041',
     'Microsoft.VisualStudio.Component.Windows10SDK.20348',
     'Microsoft.VisualStudio.Component.Windows11SDK.22000',
     'Microsoft.VisualStudio.Component.Windows11SDK.22621',
-    'Microsoft.VisualStudio.Component.Windows11SDK.26100',
-    '-property', 'installationPath')
-  $result = Invoke-Native $vswhere $args $null -Quiet
-  return ($result.code -eq 0 -and [bool](@($result.text -split "`r?`n" | Where-Object { $_.Trim() -and (Test-Path -LiteralPath $_.Trim()) }).Count))
+    'Microsoft.VisualStudio.Component.Windows11SDK.26100')) {
+    $sdkResult = Invoke-Native $vswhere @('-latest', '-products', '*', '-requires', $sdk, '-property', 'installationPath') $null -Quiet
+    $sdkPath = ($sdkResult.text -split "`r?`n" | Where-Object { $_.Trim() -and (Test-Path -LiteralPath $_.Trim()) } | Select-Object -First 1)
+    if ($sdkResult.code -eq 0 -and $sdkPath) { return $true }
+  }
+  return $false
 }
 
 function Install-NativeCameraToolchain {
