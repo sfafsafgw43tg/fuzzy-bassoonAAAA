@@ -14,12 +14,8 @@ if not exist "%OCTO_PS%" set "OCTO_PS=powershell.exe"
 set "OCTO_ELEVATED_ARG="
 for %%A in (%*) do if /I "%%~A"=="-Elevated" set "OCTO_ELEVATED_ARG=1"
 if not defined OCTO_ELEVATED_ARG (
-  net session >nul 2>&1
-  if errorlevel 1 (
-    call :octo_elevate %*
-    call set "OCTO_ELEVATE_RC=%%ERRORLEVEL%%"
-    goto :octo_elevated_exit
-  )
+  fltmc >nul 2>&1
+  if errorlevel 1 goto :octo_request_elevation
 )
 set "OCTO_WANTS_CONSOLE="
 echo %* | find /i "-nogui" >nul 2>&1 && set "OCTO_WANTS_CONSOLE=1"
@@ -46,10 +42,10 @@ if defined OCTO_CP chcp %OCTO_CP% >nul 2>&1
 if not defined OCTO_NOPAUSE pause
 endlocal & exit /b %OCTO_RC%
 
-:octo_elevated_exit
-endlocal & exit /b %OCTO_ELEVATE_RC%
-
-:octo_elevate
+:octo_request_elevation
 if "%~1"=="" (set "OCTO_ELEVATE_ARGS=__OCTO_NO_ARGS__") else (set "OCTO_ELEVATE_ARGS=%*")
 "%OCTO_PS%" -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0lib\elevate-installer.ps1" -BatchPath "%~f0" -WorkingDirectory "%~dp0" %OCTO_ELEVATE_ARGS%
-exit /b %ERRORLEVEL%
+set "OCTO_ELEVATE_RC=%ERRORLEVEL%"
+if not "%OCTO_ELEVATE_RC%"=="0" echo Administrator elevation failed or was cancelled. Exit code: %OCTO_ELEVATE_RC%
+if not defined OCTO_NOPAUSE pause
+endlocal & exit /b %OCTO_ELEVATE_RC%
