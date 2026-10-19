@@ -1,4 +1,4 @@
-# scripts/lib/elevate-installer.ps1
+﻿# scripts/lib/elevate-installer.ps1
 #
 # Elevates the complete installer once, rather than asking separately for Visual Studio,
 # VB-CABLE, or other privileged prerequisites. Windows still displays its normal UAC prompt;
@@ -35,8 +35,18 @@ function ConvertTo-WindowsArgument([string]$value) {
 $childArguments = @('-Elevated') + @($Arguments | Where-Object { $_ -ne $null -and $_ -ne '__OCTO_NO_ARGS__' })
 $argumentLine = (($childArguments | ForEach-Object { ConvertTo-WindowsArgument ([string]$_) }) -join ' ')
 try {
-  $commandLine = '/d /c call ' + (ConvertTo-WindowsArgument $BatchPath) + ' ' + $argumentLine
-  $child = Start-Process -FilePath $env:ComSpec -ArgumentList $commandLine -WorkingDirectory $WorkingDirectory -Verb RunAs -Wait -PassThru
+  # Use ProcessStartInfo so PowerShell does not re-tokenize the quoted batch path.
+  # This is important for installs under paths such as "C:\Program Files\...".
+  $commandLine = '/d /s /c call ' + (ConvertTo-WindowsArgument $BatchPath) + ' ' + $argumentLine
+  $start = New-Object System.Diagnostics.ProcessStartInfo
+  $start.FileName = $env:ComSpec
+  $start.Arguments = $commandLine
+  $start.WorkingDirectory = $WorkingDirectory
+  $start.Verb = 'runas'
+  $start.UseShellExecute = $true
+  $child = [Diagnostics.Process]::Start($start)
+  if ($null -eq $child) { throw 'Windows did not create the elevated installer process.' }
+  $child.WaitForExit()
   exit $child.ExitCode
 } catch {
   Write-Error ("The one-time administrator elevation was cancelled or failed: {0}" -f $_.Exception.Message)
