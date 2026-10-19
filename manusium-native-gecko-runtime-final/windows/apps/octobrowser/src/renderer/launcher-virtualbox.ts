@@ -25,6 +25,8 @@ interface MediaCompanion { plugin: string; ready?: boolean; requirements?: Array
 interface AndroidMachine { name: string; path: string; target: string; running: boolean; deviceLabel: string; resolution: string; ramMb: number; dataPartition: string; cameraFront: CameraSource; cameraBack: CameraSource; cameraFrontDevice: string; cameraBackDevice: string; cameraDevice: string; microphoneEnabled: boolean; networkSpeed: NetworkSpeed; incomplete: boolean; diskBytes: number; identity?: DeviceIdentity }
 interface AndroidStatus { javaVersion?: number; javaHome?: string; searched: string[]; missing: '' | 'sdk' | 'cmdline-tools' | 'emulator'; manualSdkRoot: boolean; available: boolean; sdkRoot: string; studioAppPath: string; avdManagerAvailable: boolean; emulatorAvailable: boolean; adbAvailable: boolean; defaultDirectory: string; mediaCompanion: MediaCompanion; devices: AndroidDevice[]; systems: AndroidSystem[] }
 interface AndroidResult { available: boolean; machines: AndroidMachine[] }
+interface ChromeCameraChoice { name: string; device: string; virtual: boolean; foreign?: boolean }
+interface ChromeCameraChoices { webcams: ChromeCameraChoice[]; emulatorAvailable: boolean; hostCameraCount?: number; problem?: string; detail?: string }
 interface AndroidLaunchPrefs {
   proxyId: string; cameraFront: CameraSource; cameraBack: CameraSource;
   cameraFrontDevice: string; cameraBackDevice: string; cameraDevice: string;
@@ -643,11 +645,18 @@ function chromeAndroidPanel(machines: AndroidMachine[]): HTMLElement {
   });
   const url = input('https://noai.duckduckgo.com/', { type: 'url', autocomplete: 'url', spellcheck: 'false', 'aria-label': t('android.chrome.url') });
   const open = h('button', { class: 'btn primary', 'aria-label': t('android.chrome.open') }, icon('globe', 14), h('span', { text: t('android.chrome.open') })) as HTMLButtonElement;
+  const install = h('button', { class: 'btn small', 'aria-label': t('android.chrome.install') }, icon('download', 14), h('span', { text: t('android.chrome.install') })) as HTMLButtonElement;
   const refreshButton = h('button', { class: 'btn small', 'aria-label': t('android.chrome.refresh') }, icon('refreshCircle', 14), h('span', { text: t('android.chrome.refresh') })) as HTMLButtonElement;
   const status = h('p', { class: 'hint', 'aria-live': 'polite', text: t('android.chrome.checking') });
   const camera = h('p', { class: 'small muted', 'aria-live': 'polite', text: t('android.chrome.cameraHint') });
+  const cameraStatus = h('p', { class: 'small muted', 'aria-live': 'polite', text: t('android.chrome.cameraChecking') });
+  const cameraSelect = select<string>('', [['', t('android.chrome.cameraNone')]], () => undefined);
+  const cameraRefresh = h('button', { class: 'btn small', 'aria-label': t('android.chrome.cameraRefresh') }, icon('refreshCircle', 14), h('span', { text: t('android.chrome.cameraRefresh') })) as HTMLButtonElement;
+  const obs = h('button', { class: 'btn small', 'aria-label': t('android.chrome.startObs') }, icon('camera', 14), h('span', { text: t('android.chrome.startObs') })) as HTMLButtonElement;
+  const applyCamera = h('button', { class: 'btn small', 'aria-label': t('android.chrome.applyCamera') }, icon('check', 14), h('span', { text: t('android.chrome.applyCamera') })) as HTMLButtonElement;
   const version = h('span', { class: 'pill', text: t('android.chrome.notChecked') });
   const setStatus = (text: string, ok = false) => { status.textContent = text; status.classList.toggle('ok', ok); status.classList.toggle('warn', !ok); };
+  const setCameraStatus = (text: string, ok = false) => { cameraStatus.textContent = text; cameraStatus.classList.toggle('ok', ok); cameraStatus.classList.toggle('warn', !ok); };
   async function refresh(): Promise<void> {
     open.disabled = true;
     if (!selected) { setStatus(t('android.chrome.none')); version.textContent = t('android.chrome.notInstalled'); return; }
@@ -657,6 +666,19 @@ function chromeAndroidPanel(machines: AndroidMachine[]): HTMLElement {
     setStatus(result?.reason || t('android.chrome.unavailable'), result?.installed === true);
     camera.textContent = result?.installed ? t('android.chrome.cameraHint') : t('android.chrome.installHint');
   }
+  async function refreshCameras(): Promise<void> {
+    cameraRefresh.disabled = true;
+    const result = await run(api.invoke<ChromeCameraChoices>('mgr:android-camera-choices'));
+    cameraSelect.replaceChildren(...(result?.webcams?.length
+      ? result.webcams.map((item) => new Option(`${item.virtual ? 'Virtual · ' : ''}${item.device || item.name}`, item.name))
+      : [new Option(t('android.chrome.cameraNone'), '')]));
+    const first = result?.webcams?.[0]?.name ?? '';
+    cameraSelect.value = first;
+    obs.disabled = !result?.emulatorAvailable;
+    applyCamera.disabled = !first || !selected;
+    setCameraStatus(result?.webcams?.length ? t('android.chrome.cameraDetected', { count: String(result.webcams.length) }) : (result?.detail || t('android.chrome.cameraUnavailable')), Boolean(result?.webcams?.length));
+    cameraRefresh.disabled = false;
+  }
   open.onclick = async () => {
     if (!selected) return;
     open.disabled = true;
@@ -665,12 +687,42 @@ function chromeAndroidPanel(machines: AndroidMachine[]): HTMLElement {
     else { setStatus(result?.reason || t('android.chrome.failed')); toast(t('android.chrome.failed'), 'err', status.textContent); }
     await refresh();
   };
+  install.onclick = async () => {
+    if (!selected) return;
+    install.disabled = true;
+    const result = await run(api.invoke<{ opened: boolean; reason: string }>('mgr:android-install-chrome', selected));
+    if (result?.opened) toast(t('android.chrome.installOpened'), 'ok');
+    else toast(t('android.chrome.installFailed'), 'err', result?.reason);
+    install.disabled = false;
+    await refresh();
+  };
+  cameraRefresh.onclick = () => void refreshCameras();
+  obs.onclick = async () => {
+    obs.disabled = true;
+    const result = await run(api.invoke<{ started: boolean; camera: string; reason: string }>('mgr:android-start-obs'));
+    toast(result?.started ? t('android.chrome.obsStarted') : t('android.chrome.obsFailed'), result?.started ? 'ok' : 'err', result?.reason);
+    obs.disabled = false;
+    await refreshCameras();
+  };
+  applyCamera.onclick = async () => {
+    if (!selected || !cameraSelect.value) return;
+    applyCamera.disabled = true;
+    const changed = await run(api.invoke<string[]>('mgr:android-settings', selected, {
+      cameraFront: 'none', cameraBack: 'webcam', cameraFrontDevice: '', cameraBackDevice: cameraSelect.value,
+      cameraDevice: cameraSelect.value, microphoneEnabled: true,
+    }));
+    toast(Array.isArray(changed) ? t('android.chrome.cameraApplied') : t('android.chrome.cameraFailed'), Array.isArray(changed) ? 'ok' : 'err');
+    applyCamera.disabled = false;
+  };
   refreshButton.onclick = () => void refresh();
   void refresh();
+  void refreshCameras();
   return h('section', { class: 'vm-section android-chrome-section', 'aria-labelledby': 'android-chrome-title' },
     h('div', { class: 'vm-section-head' },
       h('div', {}, h('h2', { id: 'android-chrome-title' }, t('android.chrome.title'), h('span', { class: 'pill warn', text: t('android.chrome.beta') })), h('p', { class: 'hint', text: t('android.chrome.desc') }), status, camera),
       h('div', { class: 'row' },
         h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.chrome.selectDevice') }), deviceSelect),
-        h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.chrome.url') }), url), version, refreshButton, open)));
+        h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.chrome.url') }), url), version, refreshButton, install, open),
+      h('div', { class: 'row chrome-camera-controls' },
+        h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.chrome.cameraSelect') }), cameraSelect), cameraRefresh, obs, applyCamera), cameraStatus));
 }

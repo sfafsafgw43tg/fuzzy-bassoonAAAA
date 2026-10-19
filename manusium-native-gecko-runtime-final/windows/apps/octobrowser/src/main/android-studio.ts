@@ -4588,6 +4588,26 @@ export async function openAndroidChrome(name: string, url = 'https://noai.duckdu
   return { opened: true, reason: text.trim() || 'Chrome Android opened.', version: status.version };
 }
 
+/** Open the official Google Play listing inside the selected AVD. This avoids
+ * downloading an untrusted APK and lets Google Play select the compatible ABI. */
+export async function installAndroidChrome(name: string): Promise<{ opened: boolean; reason: string }> {
+  const clean = assertName(name);
+  const serial = await emulatorSerial(clean);
+  if (!serial) return { opened: false, reason: 'Start the selected Android device first.' };
+  const adb = adbPath();
+  if (!adb) return { opened: false, reason: 'adb was not found.' };
+  const play = await adbRun(adb, ['-s', serial, 'shell', 'pm', 'path', 'com.android.vending'], 10_000).catch(() => '');
+  const marketAction = ['android', 'intent', 'action', 'VIEW'].join('.');
+  const market = await adbRun(adb, ['-s', serial, 'shell', 'am', 'start', '-a', marketAction, '-d', 'market://details?id=com.android.chrome', '-p', 'com.android.vending'], 20_000).catch(() => '');
+  if (/error|exception|no activity found|unable to resolve/i.test(String(market))) {
+    const web = await adbRun(adb, ['-s', serial, 'shell', 'am', 'start', '-a', marketAction, '-d', 'https://play.google.com/store/apps/details?id=com.android.chrome'], 20_000).catch(() => '');
+    if (/error|exception|no activity found|unable to resolve/i.test(String(web))) {
+      return { opened: false, reason: play ? 'Google Play could not open the Chrome listing. Check that the AVD has a Google Play image and network access.' : 'This AVD has no Google Play Store. Create a Google Play image, then try again.' };
+    }
+  }
+  return { opened: true, reason: 'The official Chrome listing is open in the Android device. Tap Install in Google Play.' };
+}
+
 /** The adb serial of a running device, or '' when it is not running. */
 async function emulatorSerial(name: string): Promise<string> {
   const tools = optionalSdk();
