@@ -1,59 +1,48 @@
 @echo off
-rem scripts\install.bat
-rem Verifies (SHA-256, Authenticode, Ed25519 manifest) and runs OctoSuite-Setup-*.exe. Option: -Source <folder>.
-rem In a release install it validates the bundled prebuilt Chromium runtime and installs the
-rem application. It installs the required Windows camera/media/Android toolchain and never compiles Chromium on the user machine.
-rem Source setup requires staged InkBrowser runtimes and packages branded Octo executables.
-rem
-rem Thin wrapper: all logic is in lib\octo.ps1 (Windows PowerShell 5.1, built into Windows 10/11).
-rem Paths with spaces and Polish characters are safe: %~dp0 is always quoted and
-rem delayed expansion is disabled (so "!" in folder names is not touched).
-rem The installation is unattended: no y/N questions. A small window shows the
-rem progress, the current step, an ETA and lets you pick the folder for the
-rem Android SDK and its system images.
-rem Extra arguments are passed through:
-rem   install.bat -NoGui        run in this console instead of the window
-rem   install.bat -Interactive  ask the old y/N questions again
-rem   install.bat -Background   run the complete setup hidden; inspect %LOCALAPPDATA%\InkBrowser\logs\ for progress
-rem The classic entry point requests one administrator token before setup begins.
-rem Individual privileged operations request UAC at the point where Windows requires it.
+rem OctoSuite installer entrypoint.
+rem This file intentionally stays small: all setup logic lives in lib\octo.ps1.
 setlocal EnableExtensions DisableDelayedExpansion
+set "OCTO_DIR=%~dp0"
 set "OCTO_PS=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
 if not exist "%OCTO_PS%" set "OCTO_PS=powershell.exe"
-set "OCTO_ELEVATED_ARG="
-for %%A in (%*) do if /I "%%~A"=="-Elevated" set "OCTO_ELEVATED_ARG=1"
-if not defined OCTO_ELEVATED_ARG (
-  fltmc >nul 2>&1
-  if errorlevel 1 goto :octo_request_elevation
-)
-rem Classic installer behavior: a normal double-click keeps this console visible so
-rem the user can see UAC, progress, errors and the final result. Only an explicit
-rem -Background request uses the hidden launcher; -NoGui and -Interactive remain visible.
-set "OCTO_WANTS_CONSOLE="
-echo %* | find /i "-nogui" >nul 2>&1 && set "OCTO_WANTS_CONSOLE=1"
-echo %* | find /i "-interactive" >nul 2>&1 && set "OCTO_WANTS_CONSOLE=1"
-set "OCTO_WANTS_BACKGROUND="
-echo %* | find /i "-background" >nul 2>&1 && set "OCTO_WANTS_BACKGROUND=1"
-if defined OCTO_WANTS_BACKGROUND if not defined OCTO_WANTS_CONSOLE (
-  if not defined OCTO_HIDDEN if exist "%SystemRoot%\System32\wscript.exe" if exist "%~dp0lib\hidden.vbs" (
-    start "" /b "%SystemRoot%\System32\wscript.exe" //nologo //B "%~dp0lib\hidden.vbs" "%~f0" %*
-    endlocal & exit /b 0
-  )
-)
-rem Remember the console code page, switch to UTF-8 for PowerShell output, restore at the end.
-set "OCTO_CP="
-for /f "tokens=2 delims=:." %%a in ('chcp') do set "OCTO_CP=%%a"
-chcp 65001 >nul 2>&1
-"%OCTO_PS%" -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0lib\octo.ps1" install %*
+
+echo [OctoSuite] Starting installer...
+if not exist "%OCTO_DIR%lib\octo.ps1" goto missing_files
+if not exist "%OCTO_DIR%lib\elevate-installer.ps1" goto missing_files
+
+rem Do not use net session or a parenthesized elevation block. Both can fail silently
+rem on locked-down Windows installations. fltmc is part of Windows and gives a
+rem reliable administrator-token check.
+if /I "%~1"=="-Elevated" goto run_installer
+fltmc >nul 2>&1
+if not errorlevel 1 goto run_installer
+goto request_elevation
+
+:request_elevation
+if "%~1"=="" (set "OCTO_ELEVATE_ARGS=__OCTO_NO_ARGS__") else (set "OCTO_ELEVATE_ARGS=%*")
+echo [OctoSuite] Requesting administrator permission...
+"%OCTO_PS%" -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%OCTO_DIR%lib\elevate-installer.ps1" -BatchPath "%~f0" -WorkingDirectory "%OCTO_DIR%" %OCTO_ELEVATE_ARGS%
 set "OCTO_RC=%ERRORLEVEL%"
-if defined OCTO_CP chcp %OCTO_CP% >nul 2>&1
+if "%OCTO_RC%"=="0" goto elevation_done
+echo [OctoSuite] Administrator elevation failed or was cancelled. Exit code: %OCTO_RC%
 if not defined OCTO_NOPAUSE pause
 endlocal & exit /b %OCTO_RC%
 
-:octo_request_elevation
-if "%~1"=="" (set "OCTO_ELEVATE_ARGS=__OCTO_NO_ARGS__") else (set "OCTO_ELEVATE_ARGS=%*")
-"%OCTO_PS%" -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0lib\elevate-installer.ps1" -BatchPath "%~f0" -WorkingDirectory "%~dp0" %OCTO_ELEVATE_ARGS%
-set "OCTO_ELEVATE_RC=%ERRORLEVEL%"
-if not "%OCTO_ELEVATE_RC%"=="0" echo Administrator elevation failed or was cancelled. Exit code: %OCTO_ELEVATE_RC%
+:elevation_done
+endlocal & exit /b 0
+
+:run_installer
+echo [OctoSuite] Running setup. Do not close this window.
+chcp 65001 >nul 2>&1
+"%OCTO_PS%" -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%OCTO_DIR%lib\octo.ps1" install %*
+set "OCTO_RC=%ERRORLEVEL%"
+if not "%OCTO_RC%"=="0" echo [OctoSuite] Setup failed. Exit code: %OCTO_RC%
 if not defined OCTO_NOPAUSE pause
-endlocal & exit /b %OCTO_ELEVATE_RC%
+endlocal & exit /b %OCTO_RC%
+
+:missing_files
+echo [OctoSuite] Installer files are incomplete.
+echo Expected: "%OCTO_DIR%lib\octo.ps1"
+echo Re-extract the complete GitHub ZIP and run scripts\install.bat from the extracted folder.
+if not defined OCTO_NOPAUSE pause
+endlocal & exit /b 2
