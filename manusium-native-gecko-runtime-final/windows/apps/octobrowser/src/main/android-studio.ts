@@ -4551,6 +4551,43 @@ export async function openAndroidBrowser(name: string, url = 'https://noai.duckd
   return { opened: true, reason: text.trim() };
 }
 
+/** Check the real Chrome package on a running AVD; do not confuse the generic
+ * Android browser intent with Chrome being installed. */
+export async function androidChromeStatus(name: string): Promise<{ running: boolean; installed: boolean; version: string; reason: string }> {
+  const clean = assertName(name);
+  const serial = await emulatorSerial(clean);
+  if (!serial) return { running: false, installed: false, version: '', reason: 'Start the selected Android device first.' };
+  const adb = adbPath();
+  if (!adb) return { running: true, installed: false, version: '', reason: 'adb was not found.' };
+  const output = await adbRun(adb, ['-s', serial, 'shell', 'pm', 'path', 'com.android.chrome'], 10_000)
+    .catch((error: unknown) => error instanceof Error ? error.message : String(error));
+  if (!/^package:/m.test(String(output))) {
+    return { running: true, installed: false, version: '', reason: 'Google Chrome is not installed in this AVD. Use a Google Play image or install Chrome in Android Studio first.' };
+  }
+  const versionOutput = await adbRun(adb, ['-s', serial, 'shell', 'dumpsys', 'package', 'com.android.chrome'], 10_000)
+    .catch(() => '');
+  const match = /versionName=([^\s]+)/.exec(String(versionOutput));
+  return { running: true, installed: true, version: match?.[1] ?? '', reason: 'Google Chrome is installed and ready.' };
+}
+
+/** Launch the installed Chrome package explicitly, with a normal VIEW intent. */
+export async function openAndroidChrome(name: string, url = 'https://noai.duckduckgo.com/'): Promise<{ opened: boolean; reason: string; version?: string }> {
+  const clean = assertName(name);
+  const status = await androidChromeStatus(clean);
+  if (!status.installed) return { opened: false, reason: status.reason };
+  const serial = await emulatorSerial(clean);
+  const adb = adbPath();
+  const target = /^https?:\/\//i.test(url) ? url : 'https://noai.duckduckgo.com/';
+  const viewAction = ['android', 'intent', 'action', 'VIEW'].join('.');
+  const output = await adbRun(adb, ['-s', serial, 'shell', 'am', 'start', '-a', viewAction, '-d', target, '-p', 'com.android.chrome'], 30_000)
+    .catch((error: unknown) => error instanceof Error ? error.message : String(error));
+  const text = String(output);
+  if (/error|exception|no activity found|unable to resolve/i.test(text)) {
+    return { opened: false, reason: 'Chrome is installed but did not accept the launch request. Open Chrome once in the AVD, then try again.', version: status.version };
+  }
+  return { opened: true, reason: text.trim() || 'Chrome Android opened.', version: status.version };
+}
+
 /** The adb serial of a running device, or '' when it is not running. */
 async function emulatorSerial(name: string): Promise<string> {
   const tools = optionalSdk();

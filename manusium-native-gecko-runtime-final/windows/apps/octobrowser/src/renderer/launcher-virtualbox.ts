@@ -460,7 +460,7 @@ export async function renderVirtualBox(v: HTMLElement): Promise<void> {
       h('div', { class: 'vm-section-head' },
         h('div', {}, h('h2', { text: t('android.sectionTitle') }), h('p', { class: 'hint', text: t('android.desc') })),
         h('div', { class: 'row' }, openStudio, cameraStudio, nativeCamera, removeNativeCamera, androidCreate, androidImport, androidRefresh)),
-      engines, installHost, setupHost, netHost, virtualBrowserHost, androidList));
+      engines, installHost, setupHost, netHost, androidList, virtualBrowserHost));
 
   let status: AndroidStatus | undefined;
   let catalog: unknown;
@@ -521,7 +521,7 @@ export async function renderVirtualBox(v: HTMLElement): Promise<void> {
     clear(androidList);
     const machines = result?.machines ?? [];
     clear(virtualBrowserHost);
-    if (S.init?.settings?.androidVirtualBrowserBeta === true) virtualBrowserHost.append(virtualAndroidBrowserPanel(machines));
+    virtualBrowserHost.append(chromeAndroidPanel(machines));
     if (machines.some((machine) => machine.incomplete)) {
       androidList.append(h('p', { class: 'hint warn vm-note', text: t('android.incompleteNote') }));
     }
@@ -626,4 +626,47 @@ function virtualAndroidBrowserPanel(machines: AndroidMachine[]): HTMLElement {
       h('div', {}, h('h2', { id: 'virtual-android-browser-title' }, t('android.virtualBrowser.title'), h('span', { class: 'pill warn', text: t('android.virtualBrowser.beta') })), status),
       h('div', { class: 'row' },
         h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.virtualBrowser.selectDevice') }), deviceSelect), open)));
+}
+
+function chromeAndroidPanel(machines: AndroidMachine[]): HTMLElement {
+  let selected = machines.find((machine) => machine.running)?.name ?? machines[0]?.name ?? '';
+  const options: Array<[string, string]> = machines.length
+    ? machines.map((machine): [string, string] => [machine.name, `${machine.deviceLabel || machine.name}${machine.running ? ' · ' + t('android.running') : ''}`])
+    : [['', t('android.chrome.none')]];
+  const deviceSelect = select<string>(selected, options, (value) => {
+    selected = value;
+    void refresh();
+  });
+  const url = input('https://noai.duckduckgo.com/', { type: 'url', autocomplete: 'url', spellcheck: 'false', 'aria-label': t('android.chrome.url') });
+  const open = h('button', { class: 'btn primary', 'aria-label': t('android.chrome.open') }, icon('globe', 14), h('span', { text: t('android.chrome.open') })) as HTMLButtonElement;
+  const refreshButton = h('button', { class: 'btn small', 'aria-label': t('android.chrome.refresh') }, icon('refreshCircle', 14), h('span', { text: t('android.chrome.refresh') })) as HTMLButtonElement;
+  const status = h('p', { class: 'hint', 'aria-live': 'polite', text: t('android.chrome.checking') });
+  const camera = h('p', { class: 'small muted', 'aria-live': 'polite', text: t('android.chrome.cameraHint') });
+  const version = h('span', { class: 'pill', text: t('android.chrome.notChecked') });
+  const setStatus = (text: string, ok = false) => { status.textContent = text; status.classList.toggle('ok', ok); status.classList.toggle('warn', !ok); };
+  async function refresh(): Promise<void> {
+    open.disabled = true;
+    if (!selected) { setStatus(t('android.chrome.none')); version.textContent = t('android.chrome.notInstalled'); return; }
+    const result = await run(api.invoke<{ running: boolean; installed: boolean; version: string; reason: string }>('mgr:android-chrome-status', selected));
+    open.disabled = !(result?.installed === true);
+    version.textContent = result?.installed ? `${t('android.chrome.ready')} ${result.version || ''}`.trim() : t('android.chrome.notInstalled');
+    setStatus(result?.reason || t('android.chrome.unavailable'), result?.installed === true);
+    camera.textContent = result?.installed ? t('android.chrome.cameraHint') : t('android.chrome.installHint');
+  }
+  open.onclick = async () => {
+    if (!selected) return;
+    open.disabled = true;
+    const result = await run(api.invoke<{ opened: boolean; reason: string; version?: string }>('mgr:android-open-chrome', selected, (url as HTMLInputElement).value));
+    if (result?.opened) { setStatus(t('android.chrome.opened'), true); toast(t('android.chrome.opened'), 'ok'); }
+    else { setStatus(result?.reason || t('android.chrome.failed')); toast(t('android.chrome.failed'), 'err', status.textContent); }
+    await refresh();
+  };
+  refreshButton.onclick = () => void refresh();
+  void refresh();
+  return h('section', { class: 'vm-section android-chrome-section', 'aria-labelledby': 'android-chrome-title' },
+    h('div', { class: 'vm-section-head' },
+      h('div', {}, h('h2', { id: 'android-chrome-title' }, t('android.chrome.title'), h('span', { class: 'pill warn', text: t('android.chrome.beta') })), status, camera),
+      h('div', { class: 'row' },
+        h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.chrome.selectDevice') }), deviceSelect),
+        h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.chrome.url') }), url), version, refreshButton, open)));
 }
