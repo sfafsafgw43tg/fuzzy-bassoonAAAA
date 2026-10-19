@@ -1,16 +1,18 @@
 @echo off
-rem install.bat
-rem Installs OctoSuite. Two cases, detected automatically:
-rem   * a release installer next to the scripts -> verify (SHA-256, Ed25519, Authenticode) and run it;
-rem   * source checkout -> requires prebuilt InkBrowser runtimes, installs dependencies,
-rem                        then packages branded Octo applications and creates the shortcut.
-rem Native Chromium compilation is developer/CI-only. Missing runtimes fail setup.
-rem Convenience forwarder for the repository root - all logic lives in scripts\install.bat.
-rem Use install.bat -Background for a complete hidden setup; progress is written to the installer log.
+rem OctoSuite root installer launcher.
 setlocal EnableExtensions DisableDelayedExpansion
-if not exist "%~dp0scripts\install.bat" (
-  echo Missing file: %~dp0scripts\install.bat
-  exit /b 1
-)
-call "%~dp0scripts\install.bat" %*
-endlocal & exit /b %ERRORLEVEL%
+set "OCTO_ROOT=%~dp0"
+title OctoSuite Installer
+echo [OctoSuite] Launching installer...
+if not exist "%OCTO_ROOT%scripts\install.bat" goto missing
+call "%OCTO_ROOT%scripts\install.bat" %*
+set "OCTO_RC=%ERRORLEVEL%"
+echo [OctoSuite] Installer finished with exit code %OCTO_RC%.
+if not defined OCTO_NOPAUSE pause
+endlocal & exit /b %OCTO_RC%
+
+:missing
+echo [OctoSuite] Missing scripts\install.bat.
+echo Re-extract the complete ZIP before running the installer.
+if not defined OCTO_NOPAUSE pause
+endlocal & exit /b 2
