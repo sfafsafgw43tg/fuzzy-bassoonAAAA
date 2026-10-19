@@ -521,7 +521,7 @@ export async function renderVirtualBox(v: HTMLElement): Promise<void> {
     clear(androidList);
     const machines = result?.machines ?? [];
     clear(virtualBrowserHost);
-    virtualBrowserHost.append(chromeAndroidPanel(machines));
+    if (S.init?.settings?.androidVirtualBrowserBeta === true) virtualBrowserHost.append(chromeAndroidPanel(machines));
     if (machines.some((machine) => machine.incomplete)) {
       androidList.append(h('p', { class: 'hint warn vm-note', text: t('android.incompleteNote') }));
     }
@@ -665,7 +665,7 @@ function chromeAndroidPanel(machines: AndroidMachine[]): HTMLElement {
   void refresh();
   return h('section', { class: 'vm-section android-chrome-section', 'aria-labelledby': 'android-chrome-title' },
     h('div', { class: 'vm-section-head' },
-      h('div', {}, h('h2', { id: 'android-chrome-title' }, t('android.chrome.title'), h('span', { class: 'pill warn', text: t('android.chrome.beta') })), status, camera),
+      h('div', {}, h('h2', { id: 'android-chrome-title' }, t('android.chrome.title'), h('span', { class: 'pill warn', text: t('android.chrome.beta') })), h('p', { class: 'hint', text: t('android.chrome.desc') }), status, camera),
       h('div', { class: 'row' },
         h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.chrome.selectDevice') }), deviceSelect),
         h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.chrome.url') }), url), version, refreshButton, open)));
