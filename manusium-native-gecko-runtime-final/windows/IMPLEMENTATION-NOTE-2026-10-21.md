@@ -153,6 +153,34 @@ Branch:
 arena/c10966b9-fuzzy-bassoonaaaa
 ```
 
+## WebGL availability and spoofing fix
+
+The first real-Electron WebGL check exposed two separate issues:
+
+1. The temporary test harness did not provide the `octo:get-tab-config` IPC response, so that test correctly fell back to host values. It was not a valid spoofing test.
+2. In the sandbox, Chromium blocklisted the available GPU and returned no WebGL context. A page-level overlay cannot spoof a context that does not exist.
+
+The production code now addresses the real application path:
+
+- Fingerprint-enabled profiles with WebGL enabled receive `ignore-gpu-blocklist` before Chromium starts.
+- The global graphics block no longer disables the WebGL context for a profile that explicitly uses WebGL fingerprinting.
+- `window.ts` and `prepare.ts` now agree about when WebGL must remain available.
+- Profiles with WebGL set to off, or without fingerprint WebGL enabled, retain the existing blocking behavior.
+- The overlay continues to control standard `VENDOR` and `RENDERER`, `WEBGL_debug_renderer_info`, capability limits, shader precision, supported extensions, and deterministic readback changes.
+
+The correctly wired real-Electron verification renderer then returned:
+
+```text
+standardVendor:   Google Inc. (NVIDIA)
+standardRenderer: ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0)
+unmaskedVendor:   Google Inc. (NVIDIA)
+unmaskedRenderer: ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0)
+MAX_TEXTURE_SIZE: 16384
+MAX_VIEWPORT_DIMS: 16384 x 16384
+```
+
+The supplied `siejqa/spoofHeadless` project was also reviewed. It is an old Firefox WebExtension that replaces selected WebGL APIs and does not solve Chromium/Electron GPU context creation or modern WebGL2 consistency. It was not imported because the existing native Electron preload has broader and more coherent coverage.
+
 ## Important verification limitation
 
 A real Electron renderer was launched with the rebuilt production `preload-tab.js`, and the official CreepJS page was opened for testing. The CreepJS control renderer completed normally. The fingerprint-enabled page loaded, but the full page-level audit did not return through the sandbox CDP evaluation window quickly enough for the complete visible report to be captured reliably.

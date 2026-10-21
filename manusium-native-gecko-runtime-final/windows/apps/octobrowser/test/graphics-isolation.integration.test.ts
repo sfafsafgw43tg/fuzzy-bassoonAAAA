@@ -111,6 +111,14 @@ it('does not let the app-level graphics block force Basic Render Driver for enab
   expect(source).toContain("fingerprint.webgpu === 'off' || fingerprint.webgpu === 'disable'");
 });
 
+it('keeps a WebGL context available when an enabled fingerprint profile needs the overlay', () => {
+  const source = readFileSync(path.resolve(__dirname, '..', 'src', 'main', 'main.ts'), 'utf8');
+  expect(source).toContain("fingerprintUsesWebgl && s.webgl === 'allow'");
+  expect(source).toContain("switches.push(['ignore-gpu-blocklist'])");
+  const windowSource = readFileSync(path.resolve(__dirname, '..', 'src', 'main', 'window.ts'), 'utf8');
+  expect(windowSource).toContain("p.fingerprint?.enabled === true && p.fingerprint.webgl !== 'off'");
+});
+
 describe.skipIf(!enabled)('local Electron graphics isolation observation', () => {
   it('observes block/native/block across fresh processes without CDP attachment', async () => {
     const nativeBefore = await observe('native');

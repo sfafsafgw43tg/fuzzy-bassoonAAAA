@@ -157,7 +157,8 @@ export class BrowserWindowController {
         ? path.join(rt.distDir, 'assets', 'profile-running.png') : iconPath(rt.distDir),
       autoHideMenuBar: true,
     });
-    const graphicsBlocked = rt.settings.load().privacyRuntime?.graphicsExposure === 'block';
+    const graphicsBlocked = rt.settings.load().privacyRuntime?.graphicsExposure === 'block'
+      && !(p.fingerprint?.enabled === true && p.fingerprint.webgl !== 'off');
     this.chrome = new WebContentsView({
       webPreferences: {
         ...SAFE_WEB_PREFERENCES,
@@ -356,7 +357,8 @@ export class BrowserWindowController {
 
   private createView(t: Tab, adopt?: WebContents): void {
     const s = this.rt.controller.privacy;
-    const graphicsBlocked = this.rt.settings.load().privacyRuntime?.graphicsExposure === 'block';
+    const graphicsBlocked = this.rt.settings.load().privacyRuntime?.graphicsExposure === 'block'
+      && !(this.rt.profile.fingerprint?.enabled === true && this.rt.profile.fingerprint.webgl !== 'off');
     const partition = typeof this.rt.sessionPartitionName === 'function'
       ? this.rt.sessionPartitionName() : profilePartition(this.rt.profile.id);
     const view = adopt ? new WebContentsView({ webContents: adopt } as Electron.WebContentsViewConstructorOptions) : new WebContentsView({
