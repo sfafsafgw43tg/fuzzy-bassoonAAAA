@@ -835,6 +835,7 @@ function Test-VirtualMachineHardware {
 # ------------------------------------------------------------------ commands
 function Invoke-Open([string]$appId) {
   Update-SessionPath
+  if (-not (Repair-ElectronSandboxAcl)) { return }
   $exe = Get-AppExe $appId
   $a = $Apps[$appId]
   if (Test-Path -LiteralPath $exe) {
@@ -2502,6 +2503,30 @@ function Invoke-EnsureDependencies {
   return $true
 }
 
+function Repair-ElectronSandboxAcl {
+  if ($env:OS -ne 'Windows_NT') { return $true }
+  $dist = Join-Path $InstallRoot 'node_modules\electron\dist'
+  $electron = Join-Path $dist 'electron.exe'
+  if (-not (Test-Path -LiteralPath $electron -PathType Leaf)) { return $true }
+
+  # Electron sandboxed child processes require ALL APPLICATION PACKAGES
+  # read/execute access. A copied npm cache can carry a restrictive ACL and
+  # then fail with 0x80000003 before the launcher can create a window.
+  $aclText = (& icacls.exe $dist 2>&1 | Out-String)
+  if ($aclText -match 'S-1-15-2-1|ALL APPLICATION PACKAGES') { return $true }
+  try {
+    $result = Start-Process -FilePath 'icacls.exe' -ArgumentList @($dist, '/grant', '*S-1-15-2-1:(OI)(CI)(RX)', '/T', '/C') -WorkingDirectory $InstallRoot -Verb RunAs -Wait -PassThru
+    if ($result.ExitCode -ne 0) { throw "icacls exited with code $($result.ExitCode)" }
+    $verified = (& icacls.exe $dist 2>&1 | Out-String)
+    if ($verified -notmatch 'S-1-15-2-1|ALL APPLICATION PACKAGES') { throw 'The Electron sandbox ACL was not present after repair.' }
+    Write-Log 'info' "Repaired Electron sandbox ACL: $dist"
+    return $true
+  } catch {
+    Warn "Electron cannot start because its sandbox ACL is missing. Run setup as administrator and repair '$dist'. $($_.Exception.Message)"
+    return $false
+  }
+}
+
 # Validate one staged native runtime without trusting its filename alone. Chromium on
 # Windows must explicitly identify itself as a modified source build; a renamed vendor
 # archive is not accepted. Both engines must carry a manifest hash matching the file.
@@ -2563,7 +2588,10 @@ function Get-SetupSteps {
         if (-not (Install-AndroidPrerequisites)) { return (ConvertTo-StepResult $false) }
         return (ConvertTo-StepResult $true)
       } }
-    @{ Key = 'stepDeps'; Required = $true; Fatal = $true; Action = { return (Invoke-EnsureDependencies) } }
+    @{ Key = 'stepDeps'; Required = $true; Fatal = $true; Action = {
+        if (-not (Invoke-EnsureDependencies)) { return $false }
+        return (Repair-ElectronSandboxAcl)
+      } }
     @{ Key = 'stepBuild'; Required = $true; Fatal = $true; Action = {
         # Normal setup uses the prebuilt Electron distribution installed by npm
         # and acquires the separately built InkBrowser runtime from the signed
