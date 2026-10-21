@@ -469,10 +469,10 @@ export function pageShim(c: PageConfig, eventName: string): void {
     }
 
     // ---- WebGL / WebGPU profile overlays ---------------------------------
-    // Keep native rendering for enabled profiles, but never let the host GPU
-    // identity escape through the standard VENDOR/RENDERER parameters. The
-    // debug extension is only one disclosure path; sites also read the
-    // standard parameters and WebGPU adapter information.
+    // Keep native rendering for enabled profiles, but apply one coherent,
+    // selected-GPU metadata profile to the standard and debug identity,
+    // common limits, shader precision and readback bytes. The debug extension
+    // is only one disclosure path; sites also read standard parameters.
     if (fp.webgl === 'off') {
       const blockContext = (self: unknown, args: unknown[], orig: (...a: unknown[]) => unknown): unknown => {
         const kind = String(args[0] ?? '').toLowerCase();
@@ -485,6 +485,16 @@ export function pageShim(c: PageConfig, eventName: string): void {
     if (fp.webgl !== 'off') {
       const exposedVendor = fp.webglVendor || 'WebGL Vendor';
       const exposedRenderer = fp.webglRenderer || 'WebGL Renderer';
+      const gpuName = `${exposedVendor} ${exposedRenderer}`.toLowerCase();
+      const gpuTier = /rtx|rx [569]|rx 6|rx 7|m[2-4]|iris xe|radeon pro/.test(gpuName) ? 'high'
+        : /gtx|uhd|iris|vega|m1|m2/.test(gpuName) ? 'mid' : 'low';
+      const gpuCaps = gpuTier === 'high'
+        ? { texture: 16384, cube: 16384, viewport: 16384, units: 16, varyings: 30, vertexUniforms: 1024, fragmentUniforms: 1024 }
+        : gpuTier === 'mid'
+          ? { texture: 8192, cube: 8192, viewport: 8192, units: 16, varyings: 15, vertexUniforms: 512, fragmentUniforms: 512 }
+          : { texture: 4096, cube: 4096, viewport: 4096, units: 8, varyings: 8, vertexUniforms: 256, fragmentUniforms: 256 };
+      let gpuSalt = 0;
+      for (let i = 0; i < gpuName.length; i++) gpuSalt = Math.imul(gpuSalt ^ gpuName.charCodeAt(i), 16777619);
       const patchWebGL = (Ctor: unknown): void => {
         const P = (Ctor as { prototype?: object } | undefined)?.prototype;
         if (!P) return;
@@ -499,6 +509,22 @@ export function pageShim(c: PageConfig, eventName: string): void {
           }
           if (p === 0x9245 && fp.webglVendor) return fp.webglVendor;
           if (p === 0x9246 && fp.webglRenderer) return fp.webglRenderer;
+          if (fp.webgl === 'noise' || fp.webglVendor || fp.webglRenderer) {
+            if (p === 0x0D33) return gpuCaps.texture; // MAX_TEXTURE_SIZE
+            if (p === 0x8513) return gpuCaps.cube; // MAX_CUBE_MAP_TEXTURE_SIZE
+            if (p === 0x0D3A) return new Int32Array([gpuCaps.viewport, gpuCaps.viewport]); // MAX_VIEWPORT_DIMS
+            if (p === 0x8872) return gpuCaps.units; // MAX_TEXTURE_IMAGE_UNITS
+            if (p === 0x8B4D) return gpuCaps.vertexUniforms; // MAX_VERTEX_UNIFORM_VECTORS
+            if (p === 0x8B4B) return gpuCaps.fragmentUniforms; // MAX_FRAGMENT_UNIFORM_VECTORS
+            if (p === 0x8DFC) return gpuCaps.varyings; // MAX_VARYING_VECTORS
+          }
+          return orig(...args);
+        });
+        method(P, 'getShaderPrecisionFormat', (_self, args, orig) => {
+          const precisionType = Number(args[1]);
+          if ((fp.webgl === 'noise' || fp.webglVendor || fp.webglRenderer) && precisionType === 0x8DF0) {
+            return { rangeMin: 127, rangeMax: 127, precision: 23 };
+          }
           return orig(...args);
         });
         method(P, 'getSupportedExtensions', (_self, _args, orig) => {
@@ -523,7 +549,7 @@ export function pageShim(c: PageConfig, eventName: string): void {
           }
           return ext;
         });
-        if (fp.webgl === 'noise') {
+        if (fp.webgl === 'noise' || fp.webglVendor || fp.webglRenderer) {
           method(P, 'readPixels', (_self, args, orig) => {
             const result = orig(...args);
             // WebGL readbacks are fingerprintable independently of the adapter
@@ -534,7 +560,7 @@ export function pageShim(c: PageConfig, eventName: string): void {
               if (!candidate || !ArrayBuffer.isView(candidate) || candidate instanceof DataView) continue;
               const view = candidate as unknown as { buffer: ArrayBuffer; byteOffset: number; byteLength: number };
               const bytes = new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
-              for (let j = 0; j < bytes.length; j += 37) bytes[j] ^= hash(j, bytes.length) & 1;
+              for (let j = 0; j < bytes.length; j += 37) bytes[j] ^= hash(j ^ gpuSalt, bytes.length) & 1;
               break;
             }
             return result;
@@ -576,12 +602,34 @@ export function pageShim(c: PageConfig, eventName: string): void {
       const patch = (ctor: unknown): void => {
         const P = (ctor as { prototype?: object } | undefined)?.prototype;
         if (!P) return;
+        const gpuName = `${config.vendor} ${config.renderer}`.toLowerCase();
+        const high = /rtx|rx [569]|rx 6|rx 7|m[2-4]|iris xe|radeon pro/.test(gpuName);
+        const mid = /gtx|uhd|iris|vega|m1|m2/.test(gpuName);
+        const texture = high ? 16384 : mid ? 8192 : 4096;
+        const units = high || mid ? 16 : 8;
+        const uniforms = high ? 1024 : mid ? 512 : 256;
+        const varyings = high ? 30 : mid ? 15 : 8;
+        let gpuSalt = 0;
+        for (let i = 0; i < gpuName.length; i++) gpuSalt = Math.imul(gpuSalt ^ gpuName.charCodeAt(i), 16777619);
         replace(P, 'getParameter', (_self, args, orig) => {
           const parameter = Number(args[0]);
           if ((config.webgl === 'noise' || config.vendor) && (parameter === 0x1f00 || parameter === 0x9245)) return config.vendor;
           if ((config.webgl === 'noise' || config.renderer) && (parameter === 0x1f01 || parameter === 0x9246)) return config.renderer;
           if (parameter === 0x9245 && config.vendor) return config.vendor;
           if (parameter === 0x9246 && config.renderer) return config.renderer;
+          if (config.webgl === 'noise' || config.vendor || config.renderer) {
+            if (parameter === 0x0D33 || parameter === 0x8513) return texture;
+            if (parameter === 0x0D3A) return new Int32Array([texture, texture]);
+            if (parameter === 0x8872) return units;
+            if (parameter === 0x8B4D || parameter === 0x8B4B) return uniforms;
+            if (parameter === 0x8DFC) return varyings;
+          }
+          return orig(...args);
+        });
+        replace(P, 'getShaderPrecisionFormat', (_self, args, orig) => {
+          if ((config.webgl === 'noise' || config.vendor || config.renderer) && Number(args[1]) === 0x8DF0) {
+            return { rangeMin: 127, rangeMax: 127, precision: 23 };
+          }
           return orig(...args);
         });
         replace(P, 'getSupportedExtensions', (_self, _args, orig) => {
@@ -598,7 +646,7 @@ export function pageShim(c: PageConfig, eventName: string): void {
             return Reflect.get(target, property);
           } });
         });
-        if (config.webgl === 'noise') {
+        if (config.webgl === 'noise' || config.vendor || config.renderer) {
           replace(P, 'readPixels', (_self, args, orig) => {
             const result = orig(...args);
             for (let i = args.length - 1; i >= 0; i--) {
@@ -606,7 +654,7 @@ export function pageShim(c: PageConfig, eventName: string): void {
               if (!candidate || !ArrayBuffer.isView(candidate) || candidate instanceof DataView) continue;
               const view = candidate as unknown as { buffer: ArrayBuffer; byteOffset: number; byteLength: number };
               const bytes = new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
-              for (let j = 0; j < bytes.length; j += 37) bytes[j] ^= hashWorker(j, bytes.length) & 1;
+              for (let j = 0; j < bytes.length; j += 37) bytes[j] ^= hashWorker(j ^ gpuSalt, bytes.length) & 1;
               break;
             }
             return result;

@@ -163,8 +163,11 @@ describe('pageShim Graphics Card Emulation', () => {
     expect(ctx.getParameter(0x9245)).toBe('Google Inc. (NVIDIA)');
     expect(ctx.getParameter(0x9246)).toBe('ANGLE (NVIDIA, NVIDIA GeForce RTX 3060 Direct3D11 vs_5_0 ps_5_0, D3D11-31.0.15.5176)');
 
-    // Native WebGL limits still pass through without synthetic overrides.
-    expect(ctx.getParameter(0x0D33)).toBe(8192); // Native MAX_TEXTURE_SIZE preserved
+    // Selected GPU metadata also supplies a coherent high-tier capability
+    // profile instead of leaking a contradictory host limit.
+    expect(ctx.getParameter(0x0D33)).toBe(16384); // MAX_TEXTURE_SIZE
+    expect(Array.from(ctx.getParameter(0x0D3A) as Int32Array)).toEqual([16384, 16384]);
+    expect(ctx.getParameter(0x8872)).toBe(16); // MAX_TEXTURE_IMAGE_UNITS
 
     // Native shader precision format preserved
     const floatPrecision = ctx.getShaderPrecisionFormat(0x8B30, 0x8DF2);
