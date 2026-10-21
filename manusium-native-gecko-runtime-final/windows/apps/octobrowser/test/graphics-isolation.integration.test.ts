@@ -83,6 +83,15 @@ it('uses the WebGL profile overlay while preserving native WebGPU', () => {
   expect(source).toContain("p === 0x9245");
 });
 
+it('patches worker-created OffscreenCanvas contexts and SharedWorker bootstraps', () => {
+  const source = readFileSync(path.resolve(__dirname, '..', 'src', 'preload', 'page-shim.ts'), 'utf8');
+  expect(source).toContain('const patchContext = (context: unknown)');
+  expect(source).toContain("replace(offscreen, 'getContext'");
+  expect(source).toContain('const nativeSharedWorker');
+  expect(source).toContain('new Proxy(nativeSharedWorker');
+  expect(source).toContain('hashWorker(j ^ gpuSalt');
+});
+
 it('covers Canvas exports and all common AudioBuffer/Analyser readback APIs', () => {
   const source = readFileSync(path.resolve(__dirname, '..', 'src', 'preload', 'page-shim.ts'), 'utf8');
   for (const name of ['toDataURL', 'toBlob', 'convertToBlob', 'transferToImageBitmap', 'getImageData']) {

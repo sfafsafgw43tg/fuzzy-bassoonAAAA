@@ -788,15 +788,89 @@ export function pageShim(c: PageConfig, eventName: string): void {
           });
         }
       };
+      const patchContext = (context: unknown): unknown => {
+        if (!context || (typeof context !== 'object' && typeof context !== 'function')) return context;
+        const object = context as Record<string, unknown>;
+        const gpuName = `${config.vendor} ${config.renderer}`.toLowerCase();
+        const high = /rtx|rx [569]|rx 6|rx 7|m[2-4]|iris xe|radeon pro/.test(gpuName);
+        const mid = /gtx|uhd|iris|vega|m1|m2/.test(gpuName);
+        const texture = high ? 16384 : mid ? 8192 : 4096;
+        const units = high || mid ? 16 : 8;
+        const uniforms = high ? 1024 : 512;
+        const varyings = high ? 30 : mid ? 15 : 8;
+        let gpuSalt = 0;
+        for (let i = 0; i < gpuName.length; i++) gpuSalt = Math.imul(gpuSalt ^ gpuName.charCodeAt(i), 16777619);
+        const wrapInstance = (name: string, impl: (args: unknown[], orig: (...a: unknown[]) => unknown) => unknown): void => {
+          const original = object[name];
+          if (typeof original !== 'function') return;
+          const wrapped = (...args: unknown[]) => impl(args, (...next) => Reflect.apply(original as (...a: unknown[]) => unknown, context, next));
+          try { Object.defineProperty(object, name, { configurable: true, writable: true, value: wrapped }); } catch { /* protected context */ }
+        };
+        wrapInstance('getParameter', (args, orig) => {
+          const parameter = Number(args[0]);
+          if ((config.webgl === 'noise' || config.vendor) && (parameter === 0x1f00 || parameter === 0x9245)) return config.vendor;
+          if ((config.webgl === 'noise' || config.renderer) && (parameter === 0x1f01 || parameter === 0x9246)) return config.renderer;
+          if (config.webgl === 'noise' || config.vendor || config.renderer) {
+            if (parameter === 0x0D33 || parameter === 0x8513) return texture;
+            if (parameter === 0x0D3A) return new Int32Array([texture, texture]);
+            if (parameter === 0x8872) return units;
+            if (parameter === 0x8B4D || parameter === 0x8B4B) return uniforms;
+            if (parameter === 0x8DFC) return varyings;
+          }
+          return orig(...args);
+        });
+        wrapInstance('getShaderPrecisionFormat', (args, orig) => {
+          if ((config.webgl === 'noise' || config.vendor || config.renderer) && Number(args[1]) === 0x8DF0) return { rangeMin: 127, rangeMax: 127, precision: 23 };
+          return orig(...args);
+        });
+        wrapInstance('getSupportedExtensions', (_args, orig) => {
+          const list = orig() as unknown;
+          if (!Array.isArray(list) || !(config.webgl === 'noise' || config.vendor || config.renderer)) return list;
+          return list.includes('WEBGL_debug_renderer_info') ? list : [...list, 'WEBGL_debug_renderer_info'];
+        });
+        wrapInstance('getExtension', (args, orig) => {
+          const extension = orig(...args) as Record<string, unknown> | null;
+          if (String(args[0]) !== 'WEBGL_debug_renderer_info' || !extension) return extension;
+          return new Proxy(extension, { get(target, property) {
+            if (property === 'UNMASKED_VENDOR_WEBGL') return 0x9245;
+            if (property === 'UNMASKED_RENDERER_WEBGL') return 0x9246;
+            return Reflect.get(target, property);
+          } });
+        });
+        if (config.webgl === 'noise' || config.vendor || config.renderer) {
+          wrapInstance('readPixels', (args, orig) => {
+            const result = orig(...args);
+            for (let i = args.length - 1; i >= 0; i--) {
+              const candidate = args[i];
+              if (!candidate || !ArrayBuffer.isView(candidate) || candidate instanceof DataView) continue;
+              const view = candidate as unknown as { buffer: ArrayBuffer; byteOffset: number; byteLength: number };
+              const bytes = new Uint8Array(view.buffer, view.byteOffset, view.byteLength);
+              for (let j = 0; j < bytes.length; j += 37) bytes[j] ^= hashWorker(j ^ gpuSalt, bytes.length) & 1;
+              break;
+            }
+            return result;
+          });
+        }
+        return context;
+      };
+      const offscreen = (G.OffscreenCanvas as { prototype?: object } | undefined)?.prototype;
       if (config.webgl === 'off') {
-        const offscreen = (G.OffscreenCanvas as { prototype?: object } | undefined)?.prototype;
         replace(offscreen, 'getContext', (_self, args, orig) => {
           const kind = String(args[0] ?? '').toLowerCase();
           return ['webgl', 'webgl2', 'experimental-webgl', 'experimental-webgl2'].includes(kind) ? null : orig(...args);
         });
-      } else {
+      } else if (!offscreen) {
         patch(G.WebGLRenderingContext);
         patch(G.WebGL2RenderingContext);
+      }
+      if (offscreen && config.webgl !== 'off') {
+        replace(offscreen, 'getContext', (_self, args, orig) => {
+          const context = orig(...args);
+          const kind = String(args[0] ?? '').toLowerCase();
+          return ['webgl', 'webgl2', 'experimental-webgl', 'experimental-webgl2'].includes(kind)
+            ? patchContext(context)
+            : context;
+        });
       }
       if (config.webgpu === 'off' || config.webgpu === 'disable') {
         try { Object.defineProperty(G.navigator, 'gpu', { configurable: true, get: () => undefined }); } catch { /* protected property */ }
