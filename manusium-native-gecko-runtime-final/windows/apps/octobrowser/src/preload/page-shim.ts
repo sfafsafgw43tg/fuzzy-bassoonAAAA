@@ -398,6 +398,17 @@ export function pageShim(c: PageConfig, eventName: string): void {
       // user's native window or claim that the physical monitor changed.
       getter(window, 'innerWidth', (_s, orig) => { orig(); return viewport.width; });
       getter(window, 'innerHeight', (_s, orig) => { orig(); return viewport.height; });
+      getter(window, 'outerWidth', (_s, orig) => { orig(); return viewport.width; });
+      getter(window, 'outerHeight', (_s, orig) => { orig(); return viewport.height; });
+      const EP = proto('Element');
+      getter(EP, 'clientWidth', (self, orig) => {
+        const value = Number(orig());
+        return self === document.documentElement ? viewport.width : value;
+      });
+      getter(EP, 'clientHeight', (self, orig) => {
+        const value = Number(orig());
+        return self === document.documentElement ? viewport.height : value;
+      });
       const VV = proto('VisualViewport');
       fixed(VV, 'width', viewport.width);
       fixed(VV, 'height', viewport.height);
@@ -406,6 +417,24 @@ export function pageShim(c: PageConfig, eventName: string): void {
       }
       getter(window, 'screenX', (_s, orig) => Math.max(0, Math.min(Number(orig()), sc.width - 100)));
       getter(window, 'screenY', (_s, orig) => Math.max(0, Math.min(Number(orig()), sc.height - 100)));
+      method(proto('Window'), 'matchMedia', (self, args, orig) => {
+        const query = String(args[0] ?? '');
+        const native = orig(...args) as MediaQueryList;
+        const normalized = query.toLowerCase().replace(/\s+/g, ' ');
+        let matches: boolean | null = null;
+        const portraitQuery = /\(\s*orientation\s*:\s*portrait\s*\)/.test(normalized);
+        const landscapeQuery = /\(\s*orientation\s*:\s*landscape\s*\)/.test(normalized);
+        if (portraitQuery || landscapeQuery) matches = landscapeQuery ? !portrait : portrait;
+        const widthMatch = normalized.match(/\(\s*(?:width|device-width)\s*:\s*(\d+)px\s*\)/);
+        const heightMatch = normalized.match(/\(\s*(?:height|device-height)\s*:\s*(\d+)px\s*\)/);
+        if (widthMatch) matches = (matches === null || matches) && Number(widthMatch[1]) === viewport.width;
+        if (heightMatch) matches = (matches === null || matches) && Number(heightMatch[1]) === viewport.height;
+        if (matches !== null) {
+          try { dP(native, 'matches', { configurable: true, enumerable: true, value: matches }); } catch { /* protected MQL */ }
+        }
+        void self;
+        return native;
+      });
     }
 
     // ---- battery emulation ----
@@ -1024,7 +1053,10 @@ export function pageShim(c: PageConfig, eventName: string): void {
       };
       const adjust = (r: DOMRect, index = 0) => {
         const shift = offsetFor(r, index);
-        return DR ? new DR(r.x + shift, r.y + shift, r.width + shift, r.height + shift) : r;
+        // Never perturb width/height: changing geometry breaks viewport probes
+        // and makes equivalent rect measurements disagree. Only position gets a
+        // tiny deterministic offset, while zero-sized viewport rects stay zero.
+        return DR ? new DR(r.x + shift, r.y + shift, r.width, r.height) : r;
       };
       for (const P of [proto('Element'), proto('Range'), proto('SVGGraphicsElement')].filter(Boolean) as object[]) {
         method(P, 'getBoundingClientRect', (_self, args, orig) => adjust(orig(...args) as DOMRect));
