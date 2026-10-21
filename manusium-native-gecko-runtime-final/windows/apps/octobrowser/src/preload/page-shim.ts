@@ -936,15 +936,24 @@ export function pageShim(c: PageConfig, eventName: string): void {
 
     // ---- client rects / fonts noise (sub-pixel, layout-safe) ----
     if (fp.clientRects === 'noise') {
-      const shift = ((hash(1, 2) & 0xffff) / 0xffff - 0.5) * 2e-4;
       const DR = W.DOMRect as typeof DOMRect;
-      const adjust = (r: DOMRect) => (DR ? new DR(r.x + shift, r.y + shift, r.width + shift, r.height + shift) : r);
+      const offsetFor = (rect: DOMRect, index = 0): number => {
+        // Key the perturbation by the original geometry, not object identity.
+        // Equivalent element/range probes must produce the same values even
+        // when each API call returns a different DOMRect object.
+        const geometry = [rect.x, rect.y, rect.width, rect.height].map((v) => Math.round(v * 10000));
+        return ((hash(geometry[0] ^ geometry[2] ^ index, geometry[1] ^ geometry[3]) & 0xffff) / 0xffff - 0.5) * 2e-4;
+      };
+      const adjust = (r: DOMRect, index = 0) => {
+        const shift = offsetFor(r, index);
+        return DR ? new DR(r.x + shift, r.y + shift, r.width + shift, r.height + shift) : r;
+      };
       for (const P of [proto('Element'), proto('Range'), proto('SVGGraphicsElement')].filter(Boolean) as object[]) {
-        method(P, 'getBoundingClientRect', (_s, args, orig) => adjust(orig(...args) as DOMRect));
-        method(P, 'getClientRects', (_s, args, orig) => {
+        method(P, 'getBoundingClientRect', (_self, args, orig) => adjust(orig(...args) as DOMRect));
+        method(P, 'getClientRects', (_self, args, orig) => {
           const list = orig(...args) as DOMRectList;
           if (!list) return list;
-          const arr = Array.from(list, adjust);
+          const arr = Array.from(list, (rect, index) => adjust(rect, index));
           return new Proxy(list, {
             get: (t, k) => (
               typeof k === 'string' && /^\d+$/.test(k) ? arr[Number(k)] :
@@ -956,7 +965,7 @@ export function pageShim(c: PageConfig, eventName: string): void {
           });
         });
         if (P === proto('SVGGraphicsElement')) {
-          method(P, 'getBBox', (_s, args, orig) => adjust(orig(...args) as DOMRect));
+          method(P, 'getBBox', (_self, args, orig) => adjust(orig(...args) as DOMRect));
         }
       }
     }
