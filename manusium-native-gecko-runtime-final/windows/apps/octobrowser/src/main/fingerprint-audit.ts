@@ -134,8 +134,13 @@ export function buildFingerprintAuditReport(input: {
   const canvasStatus: FingerprintAuditStatus = applied.canvas === 'off'
     ? observed.canvas.blankReadback ? 'match' : 'mismatch'
     : observed.canvas.hash ? 'observed' : 'unavailable';
+  const rendering = observed.canvas.rendering;
+  const canvasReceived = rendering
+    ? `text ${rendering.text}; emoji ${rendering.emoji}; paint (GPU) ${rendering.paintGpu || '—'}; paint (CPU) ${rendering.paintCpu}; combined ${rendering.combined}`
+    : `${observed.canvas.hash ? `hash ${observed.canvas.hash}` : 'unavailable'}${observed.canvas.blankReadback ? ' · blank read-back' : ''}`;
   add('canvas', configured.canvas, applied.canvas, `${observed.canvas.hash ? `hash ${observed.canvas.hash}` : 'unavailable'}${observed.canvas.blankReadback ? ' · blank read-back' : ''}`,
     canvasStatus, configured.canvas === 'noise' ? 'fp.audit.note.canvasNoise' : undefined);
+  add('canvasRendering', configured.canvas, applied.canvas, canvasReceived, canvasStatus);
   add('audio', configured.audio, applied.audio, observed.audioHash ? `hash ${observed.audioHash}` : 'Unavailable',
     observed.audioHash ? 'observed' : 'unavailable', 'fp.audit.note.audio');
   add('clientRects', configured.clientRects, applied.clientRects, observed.rectsHash ? `probe ${observed.rectsHash}` : 'Unavailable',

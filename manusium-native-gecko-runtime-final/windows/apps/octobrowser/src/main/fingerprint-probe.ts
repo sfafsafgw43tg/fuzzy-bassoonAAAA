@@ -22,7 +22,11 @@ export interface FingerprintProbeSnapshot {
     standardVendor: string; standardRenderer: string; unmaskedVendor: string; unmaskedRenderer: string;
   };
   webgpuAvailable: boolean;
-  canvas: { hash: string; blankReadback: boolean };
+  canvas: {
+    hash: string;
+    blankReadback: boolean;
+    rendering?: { text: string; emoji: string; paintGpu: string; paintCpu: string; combined: string };
+  };
   audioHash: string;
   rectsHash: string;
   fonts: { availableCount: number; testedCount: number };
@@ -58,15 +62,52 @@ export const FINGERPRINT_PROBE_SCRIPT = String.raw`(() => (async () => {
   }
 
   const canvas = read('canvas', () => {
-    const target = document.createElement('canvas');
-    target.width = 96; target.height = 32;
-    const ctx = target.getContext('2d');
-    if (!ctx) throw new Error('unavailable');
-    ctx.fillStyle = '#2677d8'; ctx.fillRect(2, 2, 54, 22);
-    ctx.font = 'bold 13px sans-serif'; ctx.fillStyle = '#fff'; ctx.fillText('Octo audit', 5, 18);
-    const data = target.toDataURL();
-    const blank = document.createElement('canvas'); blank.width = target.width; blank.height = target.height;
-    return { hash: hash(data), blankReadback: data === blank.toDataURL() };
+    const make2d = () => {
+      const c = document.createElement('canvas'); c.width = 160; c.height = 64;
+      const ctx = c.getContext('2d'); if (!ctx) throw new Error('2d-unavailable');
+      return { c, ctx };
+    };
+    const render = (kind) => {
+      const { c, ctx } = make2d();
+      ctx.clearRect(0, 0, c.width, c.height);
+      if (kind === 'text') {
+        ctx.font = 'bold 17px Arial'; ctx.fillStyle = '#f3f4f6'; ctx.fillText('Octo Canvas', 9, 34);
+      } else if (kind === 'emoji') {
+        ctx.font = '28px "Segoe UI Emoji", sans-serif'; ctx.fillText('🛡️🦊', 18, 40);
+      } else {
+        const gradient = ctx.createLinearGradient(0, 0, c.width, c.height);
+        gradient.addColorStop(0, '#2677d8'); gradient.addColorStop(1, '#8cf8a3');
+        ctx.fillStyle = gradient; ctx.fillRect(4, 4, 72, 42);
+        ctx.beginPath(); ctx.arc(112, 31, 19, 0, Math.PI * 2); ctx.fillStyle = '#e879f9'; ctx.fill();
+        ctx.font = '12px sans-serif'; ctx.fillStyle = '#111827'; ctx.fillText('GPU/CPU', 88, 58);
+      }
+      return hash(c.toDataURL());
+    };
+    const gpuPaint = (() => {
+      try {
+        const c = document.createElement('canvas'); c.width = 32; c.height = 32;
+        const gl = c.getContext('webgl2') || c.getContext('webgl');
+        if (!gl) return '';
+        gl.clearColor(0.15, 0.47, 0.85, 1); gl.clear(gl.COLOR_BUFFER_BIT);
+        const pixels = new Uint8Array(32 * 32 * 4); gl.readPixels(0, 0, 32, 32, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+        return hash(Array.from(pixels).join(','));
+      } catch { fail('canvas-gpu-paint'); return ''; }
+    })();
+    const paintCpu = render('paint');
+    const textHash = render('text');
+    const emojiHash = render('emoji');
+    const combinedCanvas = make2d();
+    combinedCanvas.ctx.fillStyle = '#2677d8'; combinedCanvas.ctx.fillRect(2, 2, 72, 22);
+    combinedCanvas.ctx.font = 'bold 13px sans-serif'; combinedCanvas.ctx.fillStyle = '#fff'; combinedCanvas.ctx.fillText('Octo audit', 5, 18);
+    combinedCanvas.ctx.font = '24px "Segoe UI Emoji", sans-serif'; combinedCanvas.ctx.fillText('🛡️', 88, 28);
+    combinedCanvas.ctx.fillStyle = '#8cf8a3'; combinedCanvas.ctx.fillRect(2, 34, 124, 22);
+    const combined = hash(combinedCanvas.c.toDataURL());
+    const blank = document.createElement('canvas'); blank.width = combinedCanvas.c.width; blank.height = combinedCanvas.c.height;
+    return {
+      hash: combined,
+      blankReadback: combinedCanvas.c.toDataURL() === blank.toDataURL(),
+      rendering: { text: textHash, emoji: emojiHash, paintGpu: gpuPaint, paintCpu, combined },
+    };
   }, { hash: '', blankReadback: false });
 
   const webgl = read('webgl', () => {

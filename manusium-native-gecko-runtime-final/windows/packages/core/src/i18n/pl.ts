@@ -2303,6 +2303,7 @@ export const pl: Record<string, string> = {
   'fp.audit.row.webgl': 'Standardowy / debugowy renderer WebGL',
   'fp.audit.row.webgpu': 'Dostępność WebGPU',
   'fp.audit.row.canvas': 'Odczyt Canvas',
+  'fp.audit.row.canvasRendering': 'Dane renderowania Canvas',
   'fp.audit.row.audio': 'Próbka dźwięku offline',
   'fp.audit.row.clientRects': 'Próbka ClientRects',
   'fp.audit.row.fonts': 'Próbka dostępności czcionek',
