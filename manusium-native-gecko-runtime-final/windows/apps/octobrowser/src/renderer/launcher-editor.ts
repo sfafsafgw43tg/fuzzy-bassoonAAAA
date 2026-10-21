@@ -336,7 +336,7 @@ export function openEditor(p: Profile | null): void {
       save.disabled = true;
       const patch: Record<string, unknown> = {
         engine: 'electron', chromiumRuntime: d.chromiumRuntime, browserIntegration: d.browserIntegration, browserExecutablePath: d.browserExecutablePath?.trim() || undefined, status: d.status, tags: d.tags, folder: d.folder.trim(), profileDirectory: d.profileDirectory?.trim() || undefined, notes: d.notes, startPages: d.startPages,
-        homePage: d.homePage.trim() || 'octo://newtab', searchEngine: d.searchEngine || undefined, theme: d.theme, browserShell: d.browserShell, baseChromeLook: d.baseChromeLook, ordinaryBrowser: d.ordinaryBrowser, appMode: d.appMode, smartPaste: d.smartPaste, keepHistory: d.keepHistory, savePasswords: d.savePasswords, restoreSession: d.restoreSession,
+        homePage: d.homePage.trim() || 'octo://newtab', searchEngine: d.searchEngine || undefined, theme: d.theme, browserShell: 'octo', baseChromeLook: false, ordinaryBrowser: d.ordinaryBrowser, appMode: d.appMode, smartPaste: d.smartPaste, keepHistory: d.keepHistory, savePasswords: d.savePasswords, restoreSession: d.restoreSession,
         deleteOnClose: d.deleteOnClose, protection: d.protection, dns: d.dns, sandbox: d.sandbox, mobile: d.mobile, addons: d.addons,
         vstudioWebOnLaunch: d.vstudioWebOnLaunch,
         mediaCapture: d.mediaCapture, enginePrivacy: d.enginePrivacy, nativeChromium: d.nativeChromium,
@@ -451,8 +451,8 @@ function general(b: HTMLElement, d: Draft, creating: boolean, p: Profile | null,
     c.onclick = () => {
       if (!creating || d.kind === k) return;
       d.kind = k;
-      d.browserShell = k === 'tor' ? 'octo' : 'chrome';
-      d.baseChromeLook = d.browserShell === 'chrome';
+      d.browserShell = 'octo';
+      d.baseChromeLook = false;
       Object.assign(d, kindDefaults(k, S.init.addons.filter((a) => a.kind !== 'external-app').map((a) => a.id)));
       if (k !== 'tor' && !d.fp) void api.invoke<Fingerprint>('mgr:fingerprint-new', 'windows11').then((fp) => { if (!d.fp) { d.fp = fp; draw(); } });
       if (k === 'tor') d.fp = null;
