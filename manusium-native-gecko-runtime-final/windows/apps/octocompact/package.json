@@ -1,6 +1,6 @@
 {
   "name": "octocompact",
-  "version": "0.1.1",
+  "version": "0.2.1",
   "private": true,
   "description": "A compact, single-engine Octo desktop browser",
   "author": "OctoSuite contributors",
