@@ -231,7 +231,16 @@ const SCREENS: Record<'desktop' | 'mac', string[]> = {
 };
 const CORES = [2, 4, 6, 8, 10, 12, 16, 20, 24, 32];
 const MEMORY = [1, 2, 4, 8, 16, 32];
-const LANGS = ['en-US,en', 'en-GB,en', 'pl-PL,pl,en-US,en', 'de-DE,de,en-US,en', 'fr-FR,fr,en-US,en', 'es-ES,es,en-US,en', 'it-IT,it,en-US,en', 'uk-UA,uk,en-US,en', 'ru-RU,ru,en-US,en', 'pt-BR,pt,en-US,en', 'nl-NL,nl,en-US,en', 'tr-TR,tr,en-US,en', 'cs-CZ,cs,en-US,en', 'ja-JP,ja,en-US,en'];
+// Fingerprint core stores one primary BCP-47 tag and derives navigator.languages
+// and Accept-Language from it. Do not store a prebuilt comma-separated header.
+const LANGS = [
+  'en-US', 'en-GB', 'en-IE', 'en-CA', 'en-AU', 'en-NZ', 'en-IN', 'en-SG', 'en-ZA',
+  'pl-PL', 'de-DE', 'de-AT', 'de-CH', 'fr-FR', 'fr-BE', 'es-ES', 'es-MX', 'es-AR',
+  'it-IT', 'pt-PT', 'pt-BR', 'nl-NL', 'sv-SE', 'nb-NO', 'da-DK', 'fi-FI', 'cs-CZ',
+  'sk-SK', 'hu-HU', 'ro-RO', 'bg-BG', 'el-GR', 'tr-TR', 'uk-UA', 'ru-RU', 'lt-LT',
+  'lv-LV', 'et-EE', 'hr-HR', 'sr-RS', 'sl-SI', 'ja-JP', 'ko-KR', 'zh-CN', 'zh-TW',
+  'zh-HK', 'id-ID', 'th-TH', 'vi-VN', 'ms-MY', 'he-IL', 'ar-SA', 'ar-AE', 'ar-EG',
+];
 function timezones(): string[] {
   try { return (Intl as unknown as { supportedValuesOf(k: string): string[] }).supportedValuesOf('timeZone'); } catch { return ['UTC', 'Europe/Warsaw', 'Europe/London', 'Europe/Berlin', 'America/New_York', 'America/Los_Angeles', 'Asia/Tokyo']; }
 }
@@ -1229,28 +1238,35 @@ function advanced(b: HTMLElement, d: Draft, draw: () => void, summary: () => voi
   });
 
   const uaNew = h('button', { type: 'button', class: 'in-btn', title: t('fp.newUa'), 'aria-label': t('fp.newUa') }, icon('refreshCircle', 18));
-  uaNew.onclick = async () => {
-    const os = fp.os;
-    const currentEngine = await meta(os);
-    if (!currentEngine || d.fp !== fp || fp.os !== os) return;
-    const fullVersion = currentEngine.engine.full || fp.uaFullVersion;
-    const major = currentEngine.engine.major || Number(fullVersion.split('.')[0]) || 140;
+  uaNew.onclick = () => {
+    // Choose a different real-looking Chromium release and build number each
+    // time, while retaining the selected OS token and mobile/desktop shape.
+    const previous = fp.uaFullVersion;
+    let major = Number(previous.split('.')[0]) || 140;
+    for (let i = 0; i < 8 && String(major) === String(previous.split('.')[0]); i++) {
+      major = Number(CHROME_VERSIONS_LIST[Math.floor(Math.random() * CHROME_VERSIONS_LIST.length)]);
+    }
+    if (String(major) === String(previous.split('.')[0])) major = major === 155 ? 154 : 155;
+    const fullVersion = `${major}.0.${6800 + Math.floor(Math.random() * 900)}.${Math.floor(Math.random() * 200)}`;
     fp.userAgent = mobileEmulationFor(d.mobile, fullVersion)?.userAgent ?? chromiumUserAgent(fp.os, major);
     fp.uaFullVersion = fullVersion;
     fp.browserVersion = String(major);
     ua.value = fp.userAgent;
     ch();
-    toast(t('fp.uaReset'), 'ok');
+    toast(t('fp.uaGenerated'), 'ok');
   };
 
-  const uaRow = h('div', { class: 'row nowrap', style: 'width: 100%; max-width: 560px; gap: 8px;' }, uaVersionSelect, uaNew);
-  hw.append(frowWithInfo(t('fp.browserVersion'), t('fp.info.userAgent') || t('fp.uaHint'), uaRow));
+  const uaVersionRow = h('div', { class: 'row nowrap', style: 'width: 100%; max-width: 560px; gap: 8px;' }, uaVersionSelect);
+  hw.append(frowWithInfo(t('fp.browserVersion'), t('fp.info.userAgent') || t('fp.uaHint'), uaVersionRow));
 
   // 3. User-Agent String (Dedicated category row)
-  hw.append(frowWithInfo(t('fp.userAgent'), t('fp.uaHint'), ua));
+  const uaControlRow = h('div', { class: 'row nowrap ua-control-row' }, ua, uaNew);
+  hw.append(frowWithInfo(t('fp.userAgent'), t('fp.uaHint'), uaControlRow));
 
   // 4. Language & Interface Language
-  const langVal = select<string>(LANGS.includes(fp.language.value) ? fp.language.value : LANGS[0], LANGS.map((l) => [l, l] as [string, string]), (v) => { fp.language.value = v; ch(); });
+  const storedLanguage = fp.language.value.split(',')[0].trim();
+  const languageValue = LANGS.includes(storedLanguage) ? storedLanguage : LANGS[0];
+  const langVal = select<string>(languageValue, LANGS.map((l) => [l, l] as [string, string]), (v) => { fp.language.value = v; ch(); });
   langVal.classList.toggle('hidden', fp.language.mode !== 'manual' && fp.language.mode !== 'lang-match');
   hw.append(frowWithInfo(t('fp.language'), t('fp.info.language'),
     seg(fp.language.mode === 'auto' || fp.language.mode === 'ip-match' ? 'ip-match' : fp.language.mode === 'lang-match' ? 'lang-match' : fp.language.mode === 'real' ? 'real' : 'manual', [

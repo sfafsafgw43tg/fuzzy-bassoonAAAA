@@ -570,28 +570,29 @@ describe('browser entry UI', () => {
     expect(launcherCss).toContain('.fp-signals-grid');
   });
 
-  it('resets the User-Agent against the current engine without changing the selected OS release', () => {
-    const start = launcherEditor.indexOf('uaNew.onclick = async () => {');
+  it('generates a fresh User-Agent that preserves the selected OS shape', () => {
+    const start = launcherEditor.indexOf('uaNew.onclick = () => {');
     const end = launcherEditor.indexOf('const uaInfoCard', start);
     const handler = launcherEditor.slice(start, end);
     expect(start).toBeGreaterThanOrEqual(0);
-    expect(handler).toContain('const currentEngine = await meta(os)');
+    expect(handler).toContain('const previous = fp.uaFullVersion');
+    expect(handler).toContain('CHROME_VERSIONS_LIST');
     expect(handler).toContain('fp.uaFullVersion = fullVersion');
     expect(handler).toContain('chromiumUserAgent(fp.os, major)');
     expect(handler).not.toContain('mgr:fingerprint-new');
     expect(handler).not.toContain('fp.platformVersion =');
-    expect(handler).toContain("toast(t('fp.uaReset'), 'ok')");
-    expect(i18nEn).toContain('legacy User-Agent uses the Windows NT 10.0 token for both Windows 10 and 11');
-    expect(i18nEn).toContain("'fp.uaReset': 'User-Agent reset for the current Chromium version.");
+    expect(handler).toContain("toast(t('fp.uaGenerated'), 'ok')");
+    expect(i18nEn).toContain('Chrome uses the Windows NT 10.0 token for both Windows 10 and 11');
+    expect(i18nEn).toContain("'fp.uaGenerated': 'New User-Agent generated for the selected operating system.'");
     expect(i18nPl).toContain('Windows NT 10.0 zarówno dla Windows 10, jak i 11');
-    expect(i18nPl).toContain("'fp.uaReset': 'User-Agent przywrócony dla aktualnej wersji Chromium.");
+    expect(i18nPl).toContain("'fp.uaGenerated': 'Wygenerowano nowy User-Agent dla wybranego systemu operacyjnego.'");
   });
 
   it('describes the embedded engine and fingerprint limitations without promising undetectability', () => {
     expect(i18nEn).toContain("'profile.kindDesc.antidetect': 'A browser profile with separate local data and configurable identity settings.");
     expect(i18nEn).toContain('these settings do not guarantee anonymity or prevent detection.');
     expect(i18nPl).toContain('te ustawienia nie gwarantują anonimowości ani ochrony przed rozpoznaniem środowiska.');
-    expect(i18nEn).toContain("'fp.newUa': 'Reset to engine-compatible User-Agent'");
+    expect(i18nEn).toContain("'fp.newUa': 'New UA'");
   });
 
   it('labels browser-shell styles separately from the selected native engine', () => {

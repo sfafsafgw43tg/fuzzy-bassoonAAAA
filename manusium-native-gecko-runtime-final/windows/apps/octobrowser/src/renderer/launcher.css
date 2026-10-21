@@ -1087,6 +1087,13 @@ textarea.ua:focus {
   border-color: var(--accent);
   outline: none;
 }
+.ua-control-row { width: 100%; max-width: 560px; gap: 8px; align-items: stretch; }
+.ua-control-row > textarea.ua { flex: 1 1 auto; min-width: 0; width: auto; max-width: none; }
+.ua-control-row > .in-btn { align-self: center; }
+@media (max-width: 620px) {
+  .ua-control-row { align-items: flex-end; }
+  .ua-control-row > .in-btn { width: 36px; height: 36px; }
+}
 .gpu { display: flex; flex-direction: column; gap: 8px; }
 .gpu:empty { display: none; }
 .fp-off { display: flex; flex-direction: column; align-items: center; text-align: center; gap: 10px; padding: 50px 20px; color: var(--muted); }
