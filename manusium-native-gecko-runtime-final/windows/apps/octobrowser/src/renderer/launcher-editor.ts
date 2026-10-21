@@ -482,10 +482,21 @@ function general(b: HTMLElement, d: Draft, creating: boolean, p: Profile | null,
   }
   b.append(section(t('profile.base'), baseGrid, h('p', { class: 'hint', text: t('profile.baseHint') })));
 
-  // External privacy projects are deliberately separate from the embedded
-  // engines above. Selecting one stores it on this profile; the manager only
-  // launches entries whose adapter and executable are verified.
-  const integrationGrid = h('div', { class: 'browser-integration-grid', role: 'radiogroup', 'aria-label': t('browserIntegration.title') });
+  // Keep the optional privacy catalog out of the main profile flow. It is
+  // deliberately collapsed for every new editor instance; opening it is an
+  // explicit, keyboard-accessible choice and does not change the profile base.
+  const integrationId = 'browser-integrations-panel';
+  const integrationGrid = h('div', { id: integrationId, class: 'browser-integration-grid', role: 'radiogroup', 'aria-label': t('browserIntegration.title'), hidden: true });
+  const integrationToggle = h('button', {
+    type: 'button', class: 'browser-integration-toggle ghost', 'aria-expanded': 'false', 'aria-controls': integrationId,
+  }, icon('chevronDown', 15), h('span', { text: t('browserIntegration.open') }));
+  integrationToggle.onclick = () => {
+    const open = integrationGrid.hidden;
+    integrationGrid.hidden = !open;
+    integrationToggle.setAttribute('aria-expanded', String(open));
+    integrationToggle.replaceChildren(icon(open ? 'chevronUp' : 'chevronDown', 15), h('span', { text: t(open ? 'browserIntegration.close' : 'browserIntegration.open') }));
+    if (open) integrationGrid.querySelector<HTMLButtonElement>('button')?.focus();
+  };
   const integrationStatuses = new Map((S.init.browserIntegrations ?? []).map((entry) => [entry.id, entry]));
   for (const entry of BROWSER_INTEGRATIONS) {
     const status = integrationStatuses.get(entry.id);
@@ -500,9 +511,10 @@ function general(b: HTMLElement, d: Draft, creating: boolean, p: Profile | null,
         h('span', { class: `pill ${status?.installed ? 'ok' : 'unknown'}`, text: status?.installed ? t('browserIntegration.installed') : t('browserIntegration.notInstalled') }),
         status?.version ? h('span', { class: 'small muted', text: `${t('browserIntegration.version')}: ${status.version}` }) : null,
         h('span', { class: 'small muted', text: `${t('browserIntegration.license')}: ${entry.license}` })),
-      h('div', { class: 'row wrap' },
-        h('button', { class: 'btn small', type: 'button', text: t('browserIntegration.project') }),
-        canLaunch ? h('button', { class: 'btn small', type: 'button', text: t('browserIntegration.chooseExecutable') }) : null,
+      h('div', { class: 'row wrap browser-integration-actions' },
+        h('button', { class: 'btn ghost small', type: 'button', text: t('browserIntegration.project'), 'aria-label': `${t('browserIntegration.project')}: ${entry.name}` }),
+        h('button', { class: 'btn ghost small', type: 'button', text: t('browserIntegration.source'), 'aria-label': `${t('browserIntegration.source')}: ${entry.name}` }),
+        canLaunch ? h('button', { class: 'btn ghost small', type: 'button', text: t('browserIntegration.chooseExecutable') }) : null,
         canLaunch && selected ? h('span', { class: 'small muted', text: d.browserExecutablePath || status?.executablePath || t('browserIntegration.autoDetect') }) : null),
       !canLaunch ? h('p', { class: 'note', text: t('browserIntegration.nonBrowserWarning') }) : null,
     );
@@ -510,15 +522,17 @@ function general(b: HTMLElement, d: Draft, creating: boolean, p: Profile | null,
     selectButton.onclick = () => { d.browserIntegration = selected ? undefined : entry.id; if (!d.browserIntegration) d.browserExecutablePath = ''; draw(); };
     const buttons = card.querySelectorAll('button');
     const projectButton = buttons[1] as HTMLButtonElement | undefined;
-    if (projectButton && projectButton.textContent === t('browserIntegration.project')) projectButton.onclick = () => { void api.invoke('mgr:open-browser-integration-url', entry.officialUrl); };
-    const chooseButton = canLaunch ? (buttons[2] as HTMLButtonElement | undefined) : undefined;
-    if (chooseButton && chooseButton.textContent === t('browserIntegration.chooseExecutable')) chooseButton.onclick = async () => {
+    const sourceButton = buttons[2] as HTMLButtonElement | undefined;
+    if (projectButton) projectButton.onclick = () => { void api.invoke('mgr:open-browser-integration-url', entry.officialUrl).catch((error) => toast(errText(error), 'err')); };
+    if (sourceButton) sourceButton.onclick = () => { void api.invoke('mgr:open-browser-integration-url', entry.sourceUrl).catch((error) => toast(errText(error), 'err')); };
+    const chooseButton = canLaunch ? (buttons[3] as HTMLButtonElement | undefined) : undefined;
+    if (chooseButton) chooseButton.onclick = async () => {
       const selectedPath = await api.invoke<string>('mgr:browser-pick-executable');
       if (selectedPath) { d.browserExecutablePath = selectedPath; draw(); }
     };
     integrationGrid.append(card);
   }
-  b.append(section(t('browserIntegration.title'), integrationGrid, h('p', { class: 'hint', text: t('browserIntegration.hint') })));
+  b.append(section(t('browserIntegration.title'), integrationToggle, h('p', { class: 'hint browser-integration-collapsed-hint', text: t('browserIntegration.hint') }), integrationGrid));
 
   // Start pages
   const pages = h('div', { class: 'pages' });
