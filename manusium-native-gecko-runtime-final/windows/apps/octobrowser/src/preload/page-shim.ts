@@ -97,7 +97,22 @@ export function pageShim(c: PageConfig, eventName: string): void {
   type Fn = (...a: never[]) => unknown;
   const hook = <T extends Fn>(orig: T, impl: (target: T, self: unknown, args: unknown[]) => unknown): T => {
     if ((orig as unknown as Record<PropertyKey, unknown>)[WRAPPED] === true) return orig;
-    const p = new Proxy(orig, { apply: (t, s, a) => impl(t, s, a as unknown[]) });
+    let p: T;
+    p = new Proxy(orig, {
+      apply: (t, s, a) => impl(t, s, a as unknown[]),
+      setPrototypeOf: (target, next) => {
+        // Native callable objects reject a self-referential prototype cycle
+        // with TypeError. Forwarding this operation through a Proxy instead
+        // allows the cycle and later fails as RangeError/recursion, which is
+        // precisely what CreepJS reports as a prototype lie.
+        if (next && typeof next === 'object' && Object.getPrototypeOf(next) === p) return false;
+        // The __proto__ probe assigns a second Proxy around the callable.
+        // Reject that mutation as native functions do, rather than allowing
+        // the target's prototype to become another callable proxy.
+        if (typeof next === 'function' && next !== Object.getPrototypeOf(target)) return false;
+        return Reflect.setPrototypeOf(target, next);
+      },
+    });
     try { dP(p, WRAPPED, { value: true, configurable: false }); } catch { /* native callable may reject metadata */ }
     return p;
   };
