@@ -597,7 +597,7 @@ export function filterPhones(list: readonly PhoneSpec[], filter: PhoneFilter): P
 
 // ---------------------------------------------------------------- image variants
 
-export type ImageVariantId = 'play' | 'gapps' | 'aosp' | 'go' | 'legacy';
+export type ImageVariantId = 'play' | 'gapps' | 'aosp' | 'go' | 'legacy' | 'tablet';
 
 export interface ImageVariant {
   id: ImageVariantId;
@@ -627,6 +627,10 @@ export const IMAGE_VARIANTS: readonly ImageVariant[] = [
   { id: 'aosp', downloadFactor: 0.6, diskGb: 8, ramMb: 3072, cpus: 3, googleApps: false, playStore: false, apiOverride: 0, sdkKind: 'default' },
   { id: 'go', downloadFactor: 0.42, diskGb: 6, ramMb: 2048, cpus: 2, googleApps: true, playStore: true, apiOverride: 0, sdkKind: 'google_apis' },
   { id: 'legacy', downloadFactor: 0.38, diskGb: 4, ramMb: 1536, cpus: 2, googleApps: false, playStore: false, apiOverride: 30, sdkKind: 'default' },
+  // Android 12L is the official large-screen system image. It gives tablet
+  // profiles Android's own split-screen overview UI; it is not a fake second
+  // display and apps that opt out of resizing remain single-window.
+  { id: 'tablet', downloadFactor: 1, diskGb: 0, ramMb: 0, cpus: 0, googleApps: true, playStore: true, apiOverride: 32, sdkKind: 'google_apis_playstore' },
 ] as const;
 
 export function imageVariant(id: string): ImageVariant {

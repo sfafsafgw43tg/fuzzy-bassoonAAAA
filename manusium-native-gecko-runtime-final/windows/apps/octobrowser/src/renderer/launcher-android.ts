@@ -98,7 +98,7 @@ export interface PhoneSpec {
 }
 
 interface ImageVariant {
-  id: 'play' | 'gapps' | 'aosp' | 'go' | 'legacy'; downloadFactor: number; diskGb: number; ramMb: number;
+  id: 'play' | 'gapps' | 'aosp' | 'go' | 'legacy' | 'tablet'; downloadFactor: number; diskGb: number; ramMb: number;
   cpus: number; googleApps: boolean; playStore: boolean; apiOverride: number; sdkKind: string;
 }
 interface Catalog { phones: PhoneSpec[]; brands: string[]; variants: ImageVariant[] }
@@ -613,7 +613,6 @@ export function androidNetworkBar(reload: () => Promise<void>): HTMLElement {
   void refresh();
   return bar;
 }
-
 
 
 

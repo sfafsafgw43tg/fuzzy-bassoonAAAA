@@ -126,7 +126,7 @@ describe('lightweight image variants', () => {
     expect(legacy.api).toBe(30);
     expect(aosp.googleApps).toBe(false);
     expect(go.playStore).toBe(true);
-    expect(IMAGE_VARIANTS.map((item) => item.id)).toEqual(['play', 'gapps', 'aosp', 'go', 'legacy']);
+    expect(IMAGE_VARIANTS.map((item) => item.id)).toEqual(['play', 'gapps', 'aosp', 'go', 'legacy', 'tablet']);
   });
 
   it('feeds the variant through to the creation summary and SDK package', () => {
@@ -141,5 +141,17 @@ describe('lightweight image variants', () => {
     expect(playSummary.diskBytes).toBeGreaterThan(summary.diskBytes);
     // An unknown id falls back to the full profile instead of failing.
     expect(creationSummary(spec, 'nonsense').variant).toBe('play');
+  });
+
+  it('provides an official Android 12L Play image for tablet hardware', () => {
+    const tablet = phone('generic-tablet')!;
+    expect(tablet.identity.category).toBe('tablet');
+    expect(tablet.avd.device).toBe('pixel_tablet');
+    const summary = creationSummary(tablet, 'tablet');
+    expect(summary.variant).toBe('tablet');
+    expect(summary.apiLevel).toBe(32);
+    expect(summary.androidVersion).toBe('Android 12L');
+    expect(summary.image).toBe('system-images;android-32;google_apis_playstore;x86_64');
+    expect(summary.playStore).toBe(true);
   });
 });

@@ -1323,6 +1323,7 @@ export const pl: Record<string, string> = {
   'android.variant.aosp': 'Lekki AOSP · bez usług Google, dysk 8 GB',
   'android.variant.go': 'Android Go · najlżejszy ze sklepem Play, dysk 6 GB',
   'android.variant.legacy': 'Minimalny Android 11 · najmniejszy obraz, dysk 4 GB',
+  'android.variant.tablet': 'System tabletu · Android 12L + Google Play',
   'android.variantHint': 'Ten profil pobiera {download}, zajmuje {disk} dysku i zostawia około {free} wolnego miejsca w Androidzie.',
   'android.settings': 'Ustawienia urządzenia',
   'android.settingsTitle': 'Ustawienia: {name}',
@@ -3066,6 +3067,9 @@ export const pl: Record<string, string> = {
   'android.variantDesc.aosp': 'Czysty Android bez usług Google: najmniejszy i najszybszy obraz.',
   'android.variantDesc.go': 'Układ Android Go dla urządzenia z małą pamięcią: mniej RAM i mniej dysku.',
   'android.variantDesc.legacy': 'Starszy poziom API tego samego telefonu, do testów zgodności.',
+  'android.variantDesc.tablet': 'Oficjalny system Android 12L dla dużych ekranów i tabletów AVD. W widoku ostatnich aplikacji można umieścić obok siebie dwie aplikacje obsługujące zmianę rozmiaru.',
+  'android.tablet.splitScreenHint': 'Tryb tabletu używa oficjalnego systemu Android 12L dla dużych ekranów. Podział ekranu jest dostępny w widoku ostatnich aplikacji, gdy obie aplikacje obsługują zmianę rozmiaru; AVD nie udaje tej funkcji.',
+  'android.tablet.onlyForTablet': 'System Android 12L dla tabletów jest dostępny tylko po wybraniu profilu sprzętowego tabletu.',
   // ----------------------------------------------------------- VirtualBox Android
   'virtualbox.org': 'virtualbox.org',
   'virtualbox.distribution': 'Etykieta dystrybucji Androida',

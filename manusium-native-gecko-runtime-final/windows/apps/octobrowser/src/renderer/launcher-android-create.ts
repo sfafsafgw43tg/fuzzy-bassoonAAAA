@@ -38,7 +38,7 @@ import { progressText, runInstall } from './launcher-android-install';
 
 
 interface ImageVariant {
-  id: 'play' | 'gapps' | 'aosp' | 'go' | 'legacy'; downloadFactor: number; diskGb: number; ramMb: number;
+  id: 'play' | 'gapps' | 'aosp' | 'go' | 'legacy' | 'tablet'; downloadFactor: number; diskGb: number; ramMb: number;
   cpus: number; googleApps: boolean; playStore: boolean; apiOverride: number; sdkKind: string;
 }
 interface Catalog { phones: PhoneSpec[]; brands: string[]; variants: ImageVariant[] }
@@ -84,6 +84,7 @@ const VARIANTS: Array<{ id: string; labelKey: string; descKey: string }> = [
   { id: 'aosp', labelKey: 'android.variant.aosp', descKey: 'android.variantDesc.aosp' },
   { id: 'go', labelKey: 'android.variant.go', descKey: 'android.variantDesc.go' },
   { id: 'legacy', labelKey: 'android.variant.legacy', descKey: 'android.variantDesc.legacy' },
+  { id: 'tablet', labelKey: 'android.variant.tablet', descKey: 'android.variantDesc.tablet' },
 ];
 
 
@@ -732,6 +733,10 @@ export function androidCreateWizard(context: CreatorContext): void {
    */
   function pickPhone(phone: PhoneSpec, after?: () => void): void {
     draft.phone = phone;
+    // Tablet hardware gets the official Android 12L large-screen image by
+    // default. The variant remains visible and user-selectable in step 3.
+    if (phone.identity.category === 'tablet') draft.variant = 'tablet';
+    else if (draft.variant === 'tablet') draft.variant = 'play';
     summaries.clear();
     void applyProfileDefaults().then(() => {
       paintRail();
@@ -747,8 +752,10 @@ export function androidCreateWizard(context: CreatorContext): void {
     const grid = rovingFocus(h('div', { class: 'pick-grid two', role: 'radiogroup', 'aria-label': t('android.imageProfile') }));
     const cards = new Map<string, HTMLElement>();
     for (const variant of VARIANTS) {
+      const tabletOnly = variant.id === 'tablet';
       const card = optionCard({
         selected: draft.variant === variant.id,
+        disabled: tabletOnly && phone.identity.category !== 'tablet',
         title: t(variant.labelKey),
         meta: t(variant.descKey),
         onPick: () => {
@@ -761,7 +768,8 @@ export function androidCreateWizard(context: CreatorContext): void {
       cards.set(variant.id, card);
       grid.append(card);
     }
-    host.append(grid);
+    host.append(grid,
+      h('p', { class: 'hint', text: phone.identity.category === 'tablet' ? t('android.tablet.splitScreenHint') : t('android.tablet.onlyForTablet') }));
     const apiHost = h('section', { class: 'android-group' }, h('h3', { text: t('android.apiSelection.title') }));
     const apiStatus = h('p', { class: 'hint', role: 'status', 'aria-live': 'polite', text: t('android.apiSelection.loading') });
     const apiSlot = h('div', { class: 'grid2' });

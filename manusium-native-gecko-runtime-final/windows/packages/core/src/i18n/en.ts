@@ -1324,6 +1324,7 @@ export const en: Record<string, string> = {
   'android.variant.aosp': 'Lightweight AOSP · no Google services, 8 GB disk',
   'android.variant.go': 'Android Go · lightest with Play Store, 6 GB disk',
   'android.variant.legacy': 'Minimal Android 11 · smallest image, 4 GB disk',
+  'android.variant.tablet': 'Tablet system · Android 12L + Google Play',
   'android.variantHint': 'This profile downloads {download}, takes {disk} of disk and leaves about {free} free inside Android.',
   'android.settings': 'Device settings',
   'android.settingsTitle': 'Settings: {name}',
@@ -3067,6 +3068,9 @@ export const en: Record<string, string> = {
   'android.variantDesc.aosp': 'Plain Android without Google services: the smallest and fastest image.',
   'android.variantDesc.go': 'Android Go layout for a low-memory device: less RAM and less disk.',
   'android.variantDesc.legacy': 'An older API level of the same handset, for compatibility testing.',
+  'android.variantDesc.tablet': 'Official Android 12L large-screen system for tablet AVDs. Use Android’s overview to place two resizable apps side by side.',
+  'android.tablet.splitScreenHint': 'Tablet mode uses the official Android 12L large-screen system. Android split-screen is available from Overview when both apps support resizing; the AVD does not fake this capability.',
+  'android.tablet.onlyForTablet': 'The Android 12L tablet system is available only when a tablet hardware profile is selected.',
   // ----------------------------------------------------------- VirtualBox Android
   'virtualbox.org': 'virtualbox.org',
   'virtualbox.distribution': 'Android distribution label',
