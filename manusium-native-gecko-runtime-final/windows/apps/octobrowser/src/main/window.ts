@@ -548,9 +548,9 @@ export class BrowserWindowController {
     else { this.bringActiveTabsToFront(); this.layoutViews(); this.pushState(); }
   }
 
-  /** Tabs in the order the strip shows them: pinned first, then the rest. */
+  /** Tabs in their user-controlled strip order. Pinned is a state, not a position lock. */
   private visibleTabs(): Tab[] {
-    return [...this.tabs.filter((x) => x.pinned), ...this.tabs.filter((x) => !x.pinned)];
+    return [...this.tabs];
   }
 
   /**
@@ -728,7 +728,7 @@ export class BrowserWindowController {
   }
 
   state() {
-    const ordered = [...this.tabs.filter((t) => t.pinned), ...this.tabs.filter((t) => !t.pinned)];
+    const ordered = [...this.tabs];
     return {
       tabs: ordered.map((t) => this.tabState(t)),
       activeId: this.activeId,
@@ -887,8 +887,7 @@ export class BrowserWindowController {
       case 'new-right': {
         // A pinned tab's right-hand neighbour is the first unpinned slot, which
         // is not necessarily the element after it in insertion order.
-        const fresh = this.newTab(this.defaultNewTabUrl(), { after: t.pinned ? undefined : t.id });
-        if (t.pinned) this.tabAction(fresh, 'move', this.tabs.filter((x) => x.pinned).length);
+        const fresh = this.newTab(this.defaultNewTabUrl(), { after: t.id });
         this.send('ui:focus-address', null);
         break;
       }
@@ -907,12 +906,11 @@ export class BrowserWindowController {
         break;
       }
       case 'move': {
-        // Renderer indices follow the visible order (pinned tabs first), which
-        // can differ from insertion history after a pin toggle.
-        const ordered = [...this.tabs.filter((tab) => tab.pinned), ...this.tabs.filter((tab) => !tab.pinned)];
-        const pinnedCount = ordered.filter((tab) => tab.pinned).length;
-        const min = t.pinned ? 0 : pinnedCount;
-        const max = t.pinned ? Math.max(0, pinnedCount - 1) : ordered.length - 1;
+        // Pinning keeps compact styling and close protection, but does not lock
+        // a tab to a separate group. Every tab shares one movable order.
+        const ordered = [...this.tabs];
+        const min = 0;
+        const max = Math.max(0, ordered.length - 1);
         const requested = Number(arg);
         if (!Number.isFinite(requested)) break;
         const to = Math.max(min, Math.min(max, Math.round(requested)));

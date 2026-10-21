@@ -232,17 +232,17 @@ describe('BrowserWindowController crash fixes', () => {
     expect(targetChrome.sent.some(([channel]) => channel === 'ui:tab')).toBe(true);
   });
 
-  it('reorders in visible pinned-first order without crossing the pin boundary', () => {
+  it('reorders pinned and unpinned tabs in one shared visible order', () => {
     const rt = makeRt('normal', false);
     const w = open(rt, ['https://a.example/', 'https://pinned.example/', 'https://b.example/']);
     const [a, pinned, b] = w.tabs;
     w.tabAction(pinned.id, 'pin');
-    expect(w.state().tabs.map((tab) => tab.id)).toEqual([pinned.id, a.id, b.id]);
+    expect(w.state().tabs.map((tab) => tab.id)).toEqual([a.id, pinned.id, b.id]);
 
     w.tabAction(b.id, 'move', 1);
-    expect(w.state().tabs.map((tab) => tab.id)).toEqual([pinned.id, b.id, a.id]);
-    w.tabAction(b.id, 'move', 0); // cannot enter the pinned section
-    expect(w.state().tabs.map((tab) => tab.id)).toEqual([pinned.id, b.id, a.id]);
+    expect(w.state().tabs.map((tab) => tab.id)).toEqual([a.id, b.id, pinned.id]);
+    w.tabAction(b.id, 'move', 0); // pinned and unpinned tabs may be interleaved
+    expect(w.state().tabs.map((tab) => tab.id)).toEqual([b.id, a.id, pinned.id]);
   });
 
   it('wakes a sleeping tab when it is detached into an active destination', () => {
@@ -295,7 +295,7 @@ describe('tab context menu actions', () => {
     w.tabAction(pin.id, 'pin');
     w.activate(c.id); // the active tab is one of the victims
     w.tabAction(b.id, 'close-others');
-    expect(urls(w)).toEqual(['https://pin.example/', 'https://b.example/']);
+    expect(urls(w)).toEqual(['https://b.example/', 'https://pin.example/']);
     expect(w.state().activeId).toBe(b.id);
     expect(w.state().tabs.map((tab) => tab.id)).not.toContain(a.id);
   });
@@ -314,10 +314,10 @@ describe('tab context menu actions', () => {
     const rt = makeRt('normal', false);
     const w = open(rt, ['https://a.example/', 'https://b.example/', 'https://p.example/']);
     const [a, b, p] = w.tabs;
-    w.tabAction(p.id, 'pin'); // strip becomes [p, a, b]
+    w.tabAction(p.id, 'pin');
     w.activate(a.id);
     w.tabAction(a.id, 'close-right');
-    expect(urls(w)).toEqual(['https://p.example/', 'https://a.example/']);
+    expect(urls(w)).toEqual(['https://a.example/', 'https://p.example/']);
     expect(w.state().tabs.map((tab) => tab.id)).not.toContain(b.id);
   });
 
@@ -340,16 +340,14 @@ describe('tab context menu actions', () => {
     expect(w.state().activeId).toBe(ids[1]);
   });
 
-  it('new-right on a pinned tab puts the new tab at the start of the unpinned tabs', () => {
+  it('new-right on a pinned tab stays directly after the chosen tab', () => {
     const rt = makeRt('normal', false);
     const w = open(rt, ['https://a.example/', 'https://pin.example/', 'https://b.example/']);
     const [a, pin, b] = w.tabs;
-    w.tabAction(pin.id, 'pin'); // strip becomes [pin, a, b] although the array is [a, pin, b]
+    w.tabAction(pin.id, 'pin');
     w.tabAction(pin.id, 'new-right');
     const ids = w.state().tabs.map((tab) => tab.id);
-    expect(ids[0]).toBe(pin.id);
-    expect(ids[1]).toBe(w.state().activeId);
-    expect(ids.slice(2)).toEqual([a.id, b.id]);
+    expect(ids).toEqual([a.id, pin.id, w.state().activeId, b.id]);
   });
 
   it('bookmark-all bookmarks web pages in strip order and reports how many', () => {
