@@ -172,6 +172,24 @@ describe('sanitize + resolve', () => {
     expect(r.geolocation).toBeNull();
   });
 
+  it('keeps the default viewport smaller than the selected screen and available area', () => {
+    const configured = { ...base, os: 'windows11' as const, screen: { ...base.screen, mode: 'manual' as const, width: 1920, height: 1080 }, windowSize: { mode: 'default' as const, width: 1920, height: 1080 } };
+    const r = resolveFingerprint(configured, undefined, 'en-US');
+    if (r.kind === 'disabled' || !r.screen || !r.windowSize) throw new Error('unexpected disabled result');
+    expect(r.screen).toEqual({ width: 1920, height: 1080, availWidth: 1920, availHeight: 1040 });
+    expect(r.windowSize.width).toBeLessThan(r.screen.width);
+    expect(r.windowSize.height).toBeLessThan(r.screen.availHeight);
+    expect(r.windowSize.width).toBeGreaterThan(900);
+    expect(r.windowSize.height).toBeGreaterThan(900);
+  });
+
+  it('clamps a custom viewport to the selected available screen area', () => {
+    const configured = { ...base, os: 'windows11' as const, screen: { ...base.screen, mode: 'manual' as const, width: 1920, height: 1080 }, windowSize: { mode: 'custom' as const, width: 4000, height: 3000 } };
+    const r = resolveFingerprint(configured, undefined, 'en-US');
+    if (r.kind === 'disabled' || !r.screen || !r.windowSize) throw new Error('unexpected disabled result');
+    expect(r.windowSize).toEqual({ width: 1920, height: 1040 });
+  });
+
   it('reports real values when the fingerprint is disabled', () => {
     const r = resolveFingerprint(realFingerprint(150), { timezone: 'Asia/Tokyo', countryCode: 'JP' }, 'en-US');
     expect(r).toEqual({ kind: 'disabled', enabled: false });

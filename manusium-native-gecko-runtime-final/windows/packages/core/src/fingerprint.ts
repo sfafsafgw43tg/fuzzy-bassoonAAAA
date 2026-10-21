@@ -798,7 +798,21 @@ export function resolveFingerprint(fp: FingerprintConfig, geoInput: GeoInfo | un
     ? { width: fp.screen.width, height: fp.screen.height, availWidth: fp.screen.width, availHeight: fp.screen.height - (osKey === 'win' ? 40 : osKey === 'mac' ? 25 : 27) }
     : null;
   const viewport = on && (fp.windowSize?.mode === 'custom' || screen)
-    ? (fp.windowSize?.mode === 'custom' ? { width: fp.windowSize.width, height: fp.windowSize.height } : { width: screen!.width, height: screen!.height })
+    ? (() => {
+      if (fp.windowSize?.mode === 'custom') {
+        return {
+          width: Math.min(Math.max(320, Math.round(fp.windowSize.width)), screen?.availWidth ?? Math.round(fp.windowSize.width)),
+          height: Math.min(Math.max(240, Math.round(fp.windowSize.height)), screen?.availHeight ?? Math.round(fp.windowSize.height)),
+        };
+      }
+      // A browser viewport is not the whole physical screen. Keep a small,
+      // stable browser-frame/taskbar margin so innerWidth/innerHeight do not
+      // suspiciously equal screen.width/screen.height on every profile.
+      return {
+        width: Math.max(320, screen!.width - (osKey === 'win' ? 16 : 12)),
+        height: Math.max(240, screen!.availHeight - (osKey === 'win' ? 16 : 12)),
+      };
+    })()
     : null;
   const configuredGpu = (fp.webglInfo.mode === 'manual' || fp.webglInfo.mode === 'custom') && fp.webglInfo.vendor && fp.webglInfo.renderer
     ? { vendor: fp.webglInfo.vendor, renderer: fp.webglInfo.renderer }

@@ -384,6 +384,10 @@ export function pageShim(c: PageConfig, eventName: string): void {
       fixed(S, 'availHeight', sc.availHeight);
       fixed(S, 'colorDepth', 24);
       fixed(S, 'pixelDepth', 24);
+      const portrait = sc.height >= sc.width;
+      const SO = proto('ScreenOrientation');
+      fixed(SO, 'type', portrait ? 'portrait-primary' : 'landscape-primary');
+      fixed(SO, 'angle', portrait ? 0 : 90);
       const requestedViewport = fp.windowSize ?? { width: sc.width, height: sc.height };
       const viewport = {
         width: Math.min(Math.max(1, requestedViewport.width), Math.max(1, sc.availWidth || sc.width)),
@@ -400,8 +404,6 @@ export function pageShim(c: PageConfig, eventName: string): void {
       if (fp.deviceScaleFactor && Number.isFinite(fp.deviceScaleFactor)) {
         getter(window, 'devicePixelRatio', (_s, orig) => { orig(); return fp.deviceScaleFactor; });
       }
-      getter(window, 'outerWidth', (_s, orig) => { orig(); return viewport.width; });
-      getter(window, 'outerHeight', (_s, orig) => { orig(); return viewport.height; });
       getter(window, 'screenX', (_s, orig) => Math.max(0, Math.min(Number(orig()), sc.width - 100)));
       getter(window, 'screenY', (_s, orig) => Math.max(0, Math.min(Number(orig()), sc.height - 100)));
     }
