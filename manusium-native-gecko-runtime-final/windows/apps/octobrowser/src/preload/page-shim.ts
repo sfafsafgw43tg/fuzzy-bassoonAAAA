@@ -83,6 +83,11 @@ export function pageShim(c: PageConfig, eventName: string): void {
   const R = Reflect;
   const gOPD = Object.getOwnPropertyDescriptor;
   const dP = Object.defineProperty;
+  // A frame can receive the preload more than once during navigation or when
+  // subframes are promoted into the main world. Never proxy an already wrapped
+  // native function again: stacked proxies are what make prototype auditors
+  // recurse through apply/getPrototypeOf/setPrototypeOf checks.
+  const WRAPPED = Symbol.for('octo.native-wrapper');
 
   // ------------------------------------------------------------ masking
   // Keep the platform's native Function.prototype.toString untouched. A
@@ -91,7 +96,9 @@ export function pageShim(c: PageConfig, eventName: string): void {
 
   type Fn = (...a: never[]) => unknown;
   const hook = <T extends Fn>(orig: T, impl: (target: T, self: unknown, args: unknown[]) => unknown): T => {
+    if ((orig as unknown as Record<PropertyKey, unknown>)[WRAPPED] === true) return orig;
     const p = new Proxy(orig, { apply: (t, s, a) => impl(t, s, a as unknown[]) });
+    try { dP(p, WRAPPED, { value: true, configurable: false }); } catch { /* native callable may reject metadata */ }
     return p;
   };
   /** Replace a getter; `fn(self, orig)` - call orig() first to keep native brand checks. */
@@ -101,6 +108,7 @@ export function pageShim(c: PageConfig, eventName: string): void {
     const origGet = d?.get;
     const fallbackGet = () => d?.value;
     const baseGet = (origGet || fallbackGet) as Fn;
+    if ((baseGet as unknown as Record<PropertyKey, unknown>)[WRAPPED] === true) return;
     try {
       dP(proto, prop, {
         configurable: true,
@@ -114,6 +122,7 @@ export function pageShim(c: PageConfig, eventName: string): void {
     if (!proto) return;
     const d = gOPD(proto, name);
     if (!d || typeof d.value !== 'function') return;
+    if ((d.value as unknown as Record<PropertyKey, unknown>)[WRAPPED] === true) return;
     try { dP(proto, name, { ...d, value: hook(d.value as Fn, (t, s, a) => fn(s, a, (...x) => R.apply(t, s, x))) }); } catch { /* ignore */ }
   };
   const proto = (name: string): object | undefined => (W[name] as { prototype?: object } | undefined)?.prototype;
