@@ -224,9 +224,10 @@ describe('browser entry UI', () => {
     expect(manager).toContain("profile.homePage.startsWith('http') ? profile.homePage : CHROMIUM_DEFAULT_START_PAGE");
     expect(manager).toContain('Promise.all(restoreUrls.slice(1).map((url) => tabs.newTab(url, false)))');
     expect(manager).toContain('startPages.shift() ?? CHROMIUM_DEFAULT_START_PAGE');
-    expect(launcherEditor).toContain('const START_PAGE_PRESETS');
-    expect(launcherEditor).toContain('d.searchEngine = selected.searchEngine');
-    expect(launcherEditor).toContain("icon('shieldCheck', 14)");
+    expect(launcherEditor).toContain('const SEARCH_ENGINE_HOME_PAGES');
+    expect(launcherEditor).toContain('function searchEngineControl');
+    expect(launcherEditor).toContain("settings:search:latency");
+    expect(launcherEditor).toContain('d.startPages = [homepage]');
     expect(runtime).toContain('effectiveProfileSearchEngine(this.profile)');
   });
 

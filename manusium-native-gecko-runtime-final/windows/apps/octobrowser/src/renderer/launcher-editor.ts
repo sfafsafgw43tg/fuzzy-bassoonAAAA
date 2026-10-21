@@ -66,17 +66,21 @@ interface Draft {
 const ANTI_ADDONS = ['audio-mixer'];
 const GOOGLE_HOME = 'https://www.google.com/';
 const CHROMIUM_DEFAULT_START_PAGE = 'https://noai.duckduckgo.com/';
-const START_PAGE_PRESETS = [
-  { url: CHROMIUM_DEFAULT_START_PAGE, searchEngine: 'duckduckgo-noai', label: 'DuckDuckGo (no AI)', score: 98 },
-  { url: 'https://www.startpage.com/', searchEngine: 'startpage', label: 'Startpage', score: 94 },
-  { url: 'https://search.brave.com/', searchEngine: 'brave', label: 'Brave Search', score: 88 },
-  { url: 'https://www.mojeek.com/', searchEngine: 'mojeek', label: 'Mojeek', score: 86 },
-  { url: 'https://searx.be/', searchEngine: 'searx', label: 'SearX (public instance)', score: 82 },
-  { url: 'https://duckduckgo.com/', searchEngine: 'duckduckgo-ai', label: 'DuckDuckGo (AI features)', score: 76 },
-  { url: 'https://swisscows.com/', searchEngine: 'swisscows', label: 'Swisscows', score: 74 },
-  { url: 'https://www.ecosia.org/', searchEngine: 'ecosia', label: 'Ecosia', score: 70 },
-  { url: GOOGLE_HOME, searchEngine: 'google', label: 'Google', score: 52 },
-] as const;
+const SEARCH_ENGINE_HOME_PAGES: Record<string, string> = {
+  'duckduckgo-noai': CHROMIUM_DEFAULT_START_PAGE,
+  'duckduckgo-ai': 'https://duckduckgo.com/',
+  duckduckgo: 'https://duckduckgo.com/',
+  google: GOOGLE_HOME,
+  startpage: 'https://www.startpage.com/',
+  brave: 'https://search.brave.com/',
+  mojeek: 'https://www.mojeek.com/',
+  searx: 'https://searx.be/',
+  qwant: 'https://www.qwant.com/',
+  ecosia: 'https://www.ecosia.org/',
+  metager: 'https://metager.org/',
+  swisscows: 'https://swisscows.com/en/web',
+  kagi: 'https://kagi.com/',
+};
 const savesPasswordsByDefault = (kind: Kind) => kind !== 'private' && kind !== 'temporary' && kind !== 'tor';
 
 const CHROME_VERSIONS_LIST = [
@@ -377,26 +381,40 @@ function proxyInput(px: ProxyDraft): unknown {
 function section(title: string, ...children: Array<HTMLElement | null>): HTMLElement {
   return h('section', { class: 'ed-sec' }, title ? h('h3', { text: title }) : null, ...children);
 }
-function startPagePresetControl(d: Draft, onApplied: () => void): HTMLElement {
-  const current = START_PAGE_PRESETS.find((preset) => preset.url === d.homePage || preset.url === d.startPages[0]);
-  const scoreValue = h('span', { text: current ? `${current.score}/100` : '—' });
-  const score = h('span', { class: 'start-page-safety', title: t('profile.startPageSafetyHint') }, icon('shieldCheck', 14), scoreValue, h('span', { text: ` ${t('profile.startPageSafety')}` }));
-  const preset = select<string>(current?.url ?? '', [
-    ['', t('profile.startPagePresetChoose')],
-    ...START_PAGE_PRESETS.map((item) => [item.url, `${item.label} · ${item.score}/100`] as [string, string]),
-  ], (url) => {
-    const selected = START_PAGE_PRESETS.find((item) => item.url === url);
-    if (!selected) return;
-    d.homePage = selected.url;
-    d.searchEngine = selected.searchEngine;
-    if (!d.startPages.includes(selected.url)) d.startPages.push(selected.url);
-    scoreValue.textContent = `${selected.score}/100`;
+function searchEngineControl(d: Draft, onApplied: () => void): HTMLElement {
+  const engineIds = (S.init?.searchEngines ?? Object.keys(SEARCH_ENGINE_HOME_PAGES)).filter((id) => SEARCH_ENGINE_HOME_PAGES[id]);
+  const selectedEngine = engineIds.includes(d.searchEngine ?? '') ? d.searchEngine as string : 'duckduckgo-noai';
+  const status = h('span', { class: 'search-engine-check-status', role: 'status', 'aria-live': 'polite', text: t('profile.searchEngineNotTested') });
+  const results = h('div', { class: 'search-engine-results', 'aria-live': 'polite' });
+  const verify = h('button', { type: 'button', class: 'btn small', text: t('profile.searchEngineTestAll') });
+  const drawResults = (checks: Array<{ engine: string; reachable: boolean; latencyMs: number | null; state?: string }>) => {
+    results.replaceChildren(...checks.map((check) => h('span', {
+      class: `search-engine-result ${check.reachable ? 'ok' : 'bad'}`,
+      title: check.reachable ? `${check.engine}: ${check.latencyMs ?? '—'} ms` : `${check.engine}: ${check.state ?? 'unreachable'}`,
+      text: `${t(`settings.search.${check.engine}`)} · ${check.reachable ? `${check.latencyMs ?? '—'} ms` : t('profile.searchEngineUnavailable')}`,
+    })));
+  };
+  verify.onclick = async () => {
+    verify.disabled = true;
+    status.textContent = t('profile.searchEngineTesting');
+    const checks = await api.invoke<Array<{ engine: string; reachable: boolean; latencyMs: number | null; state?: string }>>('settings:search:latency').catch(() => []);
+    const reachable = checks.filter((check) => check.reachable).length;
+    status.textContent = t('profile.searchEngineTested', { ok: reachable, total: checks.length });
+    drawResults(checks);
+    verify.disabled = false;
+  };
+  const engine = select<string>(selectedEngine, engineIds.map((id) => [id, t(`settings.search.${id}`)] as [string, string]), (id) => {
+    const homepage = SEARCH_ENGINE_HOME_PAGES[id];
+    if (!homepage) return;
+    d.searchEngine = id;
+    d.homePage = homepage;
+    d.startPages = [homepage];
     onApplied();
   });
-  return h('div', { class: 'field start-page-preset' },
-    h('span', { class: 'lbl', text: t('profile.startPagePreset') }),
-    h('div', { class: 'row nowrap' }, preset, score),
-    h('span', { class: 'hint', text: t('profile.startPageSafetyHint') }));
+  return h('div', { class: 'search-engine-control' },
+    h('div', { class: 'row wrap' }, engine, verify, status),
+    h('p', { class: 'hint', text: t('profile.searchEngineSelectionHint') }),
+    results);
 }
 // ------------------------------------------------------------------ General
 function general(b: HTMLElement, d: Draft, creating: boolean, p: Profile | null, draw: () => void, summary: () => void): void {
@@ -534,7 +552,7 @@ function general(b: HTMLElement, d: Draft, creating: boolean, p: Profile | null,
   }
   b.append(section(t('browserIntegration.title'), integrationToggle, h('p', { class: 'hint browser-integration-collapsed-hint', text: t('browserIntegration.hint') }), integrationGrid));
 
-  // Start pages
+  // Search engine and startup page
   const pages = h('div', { class: 'pages' });
   const drawPages = () => {
     clear(pages);
@@ -558,8 +576,12 @@ function general(b: HTMLElement, d: Draft, creating: boolean, p: Profile | null,
   addBtn.onclick = add;
   addUrl.onkeydown = (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } };
   drawPages();
-  const preset = startPagePresetControl(d, () => { drawPages(); summary(); });
-  b.append(section(t('ui.startPages'), preset, h('div', { class: 'row nowrap' }, addUrl, addBtn), pages, h('p', { class: 'hint', text: t('ui.startPagesHint') })));
+  const searchEngine = searchEngineControl(d, () => { drawPages(); summary(); });
+  const extraPages = h('details', { class: 'start-pages-extra' },
+    h('summary', { text: t('profile.additionalStartPages') }),
+    h('p', { class: 'hint', text: t('profile.additionalStartPagesHint') }),
+    h('div', { class: 'row nowrap' }, addUrl, addBtn), pages);
+  b.append(section(t('profile.searchEngine'), searchEngine, extraPages));
 
   // Proxy
   if (d.kind === 'tor') b.append(section(t('ui.col.proxy'), h('p', { class: 'info', text: t('net.torNotHere') })));
