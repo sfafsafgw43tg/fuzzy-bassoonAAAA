@@ -3079,6 +3079,7 @@ export const en: Record<string, string> = {
   'android.variantDesc.tablet': 'Official Android 12L large-screen system for tablet AVDs. Use Android’s overview to place two resizable apps side by side.',
   'android.tablet.splitScreenHint': 'Tablet mode uses the official Android 12L large-screen system. Android split-screen is available from Overview when both apps support resizing; the AVD does not fake this capability.',
   'android.tablet.onlyForTablet': 'The Android 12L tablet system is available only when a tablet hardware profile is selected.',
+  'android.tablet.switchesHardware': 'Selecting Android 12L will switch the hardware choice to the available tablet profile so the AVD uses truthful large-screen dimensions.',
   // ----------------------------------------------------------- VirtualBox Android
   'virtualbox.org': 'virtualbox.org',
   'virtualbox.distribution': 'Android distribution label',

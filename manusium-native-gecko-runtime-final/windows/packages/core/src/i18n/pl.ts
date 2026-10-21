@@ -3078,6 +3078,7 @@ export const pl: Record<string, string> = {
   'android.variantDesc.tablet': 'Oficjalny system Android 12L dla dużych ekranów i tabletów AVD. W widoku ostatnich aplikacji można umieścić obok siebie dwie aplikacje obsługujące zmianę rozmiaru.',
   'android.tablet.splitScreenHint': 'Tryb tabletu używa oficjalnego systemu Android 12L dla dużych ekranów. Podział ekranu jest dostępny w widoku ostatnich aplikacji, gdy obie aplikacje obsługują zmianę rozmiaru; AVD nie udaje tej funkcji.',
   'android.tablet.onlyForTablet': 'System Android 12L dla tabletów jest dostępny tylko po wybraniu profilu sprzętowego tabletu.',
+  'android.tablet.switchesHardware': 'Wybór Androida 12L przełączy sprzęt na dostępny profil tabletu, aby AVD używał prawdziwych wymiarów dużego ekranu.',
   // ----------------------------------------------------------- VirtualBox Android
   'virtualbox.org': 'virtualbox.org',
   'virtualbox.distribution': 'Etykieta dystrybucji Androida',

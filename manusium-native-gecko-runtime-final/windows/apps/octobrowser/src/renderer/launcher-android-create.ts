@@ -749,16 +749,24 @@ export function androidCreateWizard(context: CreatorContext): void {
   function renderSystem(host: HTMLElement): void {
     const phone = draft.phone;
     if (!phone) return;
+    const tabletHardware = phones.find((candidate) => candidate.identity.category === 'tablet');
+    const hasTabletHardware = phone.identity.category === 'tablet';
     const grid = rovingFocus(h('div', { class: 'pick-grid two', role: 'radiogroup', 'aria-label': t('android.imageProfile') }));
     const cards = new Map<string, HTMLElement>();
     for (const variant of VARIANTS) {
       const tabletOnly = variant.id === 'tablet';
       const card = optionCard({
         selected: draft.variant === variant.id,
-        disabled: tabletOnly && phone.identity.category !== 'tablet',
         title: t(variant.labelKey),
         meta: t(variant.descKey),
         onPick: () => {
+          // Android 12L is a large-screen image. If the user picks it while a
+          // phone is selected, move to the real tablet catalog entry instead
+          // of silently ignoring the click or creating a misleading AVD.
+          if (tabletOnly && !hasTabletHardware && tabletHardware) {
+            draft.phone = tabletHardware;
+            summaries.clear();
+          }
           draft.variant = variant.id;
           void applyProfileDefaults().then(paint);
         },
@@ -769,7 +777,7 @@ export function androidCreateWizard(context: CreatorContext): void {
       grid.append(card);
     }
     host.append(grid,
-      h('p', { class: 'hint', text: phone.identity.category === 'tablet' ? t('android.tablet.splitScreenHint') : t('android.tablet.onlyForTablet') }));
+      h('p', { class: 'hint', text: hasTabletHardware ? t('android.tablet.splitScreenHint') : tabletHardware ? t('android.tablet.switchesHardware') : t('android.tablet.onlyForTablet') }));
     const apiHost = h('section', { class: 'android-group' }, h('h3', { text: t('android.apiSelection.title') }));
     const apiStatus = h('p', { class: 'hint', role: 'status', 'aria-live': 'polite', text: t('android.apiSelection.loading') });
     const apiSlot = h('div', { class: 'grid2' });
