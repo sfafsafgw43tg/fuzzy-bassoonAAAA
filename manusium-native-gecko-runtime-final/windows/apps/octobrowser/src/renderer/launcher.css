@@ -985,6 +985,11 @@ details summary { cursor: pointer; color: var(--muted); font-size: 12.5px; }
 .browser-integration-actions .btn.ghost:hover { color: var(--text) !important; background: var(--panel2) !important; border-color: var(--line2) !important; }
 .search-engine-control { display: flex; flex-direction: column; gap: 8px; min-width: 0; }
 .search-engine-control select { min-width: min(280px, 100%); }
+.search-engine-label-name { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.select-trigger .search-engine-label-name { flex: 1 1 auto; }
+.search-engine-score { color: var(--muted); font-size: 11px; font-variant-numeric: tabular-nums; white-space: nowrap; }
+.select-option .search-engine-score { margin-left: auto; }
+.select-option svg, .select-trigger svg:not(:last-child) { color: var(--accent-h); flex: none; }
 .search-engine-check-status { color: var(--muted); font-size: 12px; }
 .search-engine-results { display: flex; flex-wrap: wrap; gap: 5px 8px; min-height: 20px; }
 .search-engine-result { color: var(--muted); font-size: 11px; }

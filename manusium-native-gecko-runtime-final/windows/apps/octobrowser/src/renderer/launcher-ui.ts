@@ -483,21 +483,26 @@ export function field(labelKey: string, control: HTMLElement, hintKey?: string, 
  * and option container intentionally follow the supplied reference: a single
  * clean control, an attached list, and a restrained selected/hover state.
  */
-export function select<T extends string>(value: T, options: Array<[T, string] | [T, string, boolean]>, onChange?: (v: T) => void): HTMLButtonElement {
+export function select<T extends string>(value: T, options: Array<[T, string] | [T, string, boolean]>, onChange?: (v: T) => void, renderLabel?: (value: T, text: string) => Node[]): HTMLButtonElement {
   let current = value;
   const wrap = h('div', { class: 'select-menu' });
   const trigger = h('button', { type: 'button', class: 'select-trigger', 'aria-haspopup': 'listbox', 'aria-expanded': 'false' }) as HTMLButtonElement;
-  const label = h('span', { class: 'ell', text: options.find(([v]) => v === current)?.[1] ?? String(current) });
+  const label = h('span', { class: 'ell' });
+  const setLabel = (target: HTMLElement, selected: T, text: string) => {
+    target.replaceChildren(...(renderLabel ? renderLabel(selected, text) : [h('span', { text })]));
+  };
+  setLabel(label, current, options.find(([v]) => v === current)?.[1] ?? String(current));
   trigger.append(label, icon('chevronDown', 16));
   const list = h('div', { class: 'select-options hidden', role: 'listbox' });
   const close = () => { list.classList.add('hidden'); trigger.setAttribute('aria-expanded', 'false'); };
   const open = () => { if (trigger.disabled) return; list.classList.remove('hidden'); trigger.setAttribute('aria-expanded', 'true'); };
   for (const option of options) {
     const [v, text, disabled] = option;
-    const item = h('button', { type: 'button', class: `select-option${v === current ? ' on' : ''}`, role: 'option', 'aria-selected': String(v === current), text, ...(disabled ? { disabled: 'true', title: text } : {}) });
+    const item = h('button', { type: 'button', class: `select-option${v === current ? ' on' : ''}`, role: 'option', 'aria-selected': String(v === current), ...(disabled ? { disabled: 'true', title: text } : {}) });
+    setLabel(item, v, text);
     item.onclick = () => {
       current = v;
-      label.textContent = text;
+      setLabel(label, v, text);
       list.querySelectorAll('.select-option').forEach((x) => { x.classList.toggle('on', x === item); x.setAttribute('aria-selected', String(x === item)); });
       close();
       onChange?.(v);

@@ -81,6 +81,13 @@ const SEARCH_ENGINE_HOME_PAGES: Record<string, string> = {
   swisscows: 'https://swisscows.com/en/web',
   kagi: 'https://kagi.com/',
 };
+// These are Octo.su heuristics, not security, anonymity, or search-quality
+// guarantees. Keeping them explicit makes the selector's score transparent.
+const SEARCH_ENGINE_PRIVACY_SCORES: Record<string, number> = {
+  'duckduckgo-noai': 96, startpage: 95, brave: 92, searx: 90, kagi: 90,
+  metager: 88, swisscows: 88, mojeek: 86, qwant: 84, ecosia: 82,
+  duckduckgo: 90, 'duckduckgo-ai': 84, google: 55,
+};
 const savesPasswordsByDefault = (kind: Kind) => kind !== 'private' && kind !== 'temporary' && kind !== 'tor';
 
 const CHROME_VERSIONS_LIST = [
@@ -403,6 +410,15 @@ function searchEngineControl(d: Draft, onApplied: () => void): HTMLElement {
     drawResults(checks);
     verify.disabled = false;
   };
+  const engineLabel = (id: string, text: string): Node[] => {
+    const score = SEARCH_ENGINE_PRIVACY_SCORES[id];
+    if (score === undefined) return [h('span', { class: 'search-engine-label-name', text })];
+    return [
+      h('span', { class: 'search-engine-label-name', text }),
+      icon('shield', 14),
+      h('span', { class: 'search-engine-score', text: `${score}/100` }),
+    ];
+  };
   const engine = select<string>(selectedEngine, engineIds.map((id) => [id, t(`settings.search.${id}`)] as [string, string]), (id) => {
     const homepage = SEARCH_ENGINE_HOME_PAGES[id];
     if (!homepage) return;
@@ -410,7 +426,7 @@ function searchEngineControl(d: Draft, onApplied: () => void): HTMLElement {
     d.homePage = homepage;
     d.startPages = [homepage];
     onApplied();
-  });
+  }, engineLabel);
   return h('div', { class: 'search-engine-control' },
     h('div', { class: 'row wrap' }, engine, verify, status),
     h('p', { class: 'hint', text: t('profile.searchEngineSelectionHint') }),

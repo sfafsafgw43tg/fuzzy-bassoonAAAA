@@ -225,6 +225,9 @@ describe('browser entry UI', () => {
     expect(manager).toContain('Promise.all(restoreUrls.slice(1).map((url) => tabs.newTab(url, false)))');
     expect(manager).toContain('startPages.shift() ?? CHROMIUM_DEFAULT_START_PAGE');
     expect(launcherEditor).toContain('const SEARCH_ENGINE_HOME_PAGES');
+    expect(launcherEditor).toContain('const SEARCH_ENGINE_PRIVACY_SCORES');
+    expect(launcherEditor).toContain("'duckduckgo-noai': 96");
+    expect(launcherEditor).toContain("icon('shield', 14)");
     expect(launcherEditor).toContain('function searchEngineControl');
     expect(launcherEditor).toContain("settings:search:latency");
     expect(launcherEditor).toContain('d.startPages = [homepage]');
