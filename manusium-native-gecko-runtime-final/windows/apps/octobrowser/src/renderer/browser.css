@@ -1434,30 +1434,45 @@ body.vm-mode *::after {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  min-height: 32px;
-  padding: 6px 10px;
+  width: max-content;
+  max-width: 100%;
+  min-height: 30px;
+  margin-top: 2px;
+  padding: 5px 9px;
   color: var(--text);
-  border: 1px solid var(--line);
-  border-radius: 8px;
-  background: transparent;
+  border: 1px solid var(--line) !important;
+  border-radius: 7px;
+  background: color-mix(in srgb, var(--panel2) 48%, transparent) !important;
+  box-shadow: none !important;
+  font: inherit;
+  line-height: 1.2;
+  text-align: left;
+  white-space: nowrap;
+  cursor: pointer;
+  appearance: none;
+  -webkit-appearance: none;
 }
-.browser-integration-toggle:hover { background: var(--panel2); border-color: var(--line2); }
+.browser-integration-toggle:hover { background: var(--panel2) !important; border-color: var(--line2) !important; }
 .browser-integration-toggle:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .browser-integration-collapsed-hint { margin: 7px 0 0; }
 .browser-integration-actions { align-items: center; }
 .browser-integration-actions .btn.ghost {
-  background: transparent;
+  appearance: none;
+  -webkit-appearance: none;
+  background: transparent !important;
   color: var(--text);
-  border-color: var(--line);
+  border-color: var(--line) !important;
+  box-shadow: none !important;
 }
-.browser-integration-actions .btn.ghost:hover { background: var(--panel2); border-color: var(--line2); }
+.browser-integration-actions .btn.ghost:hover { background: var(--panel2) !important; border-color: var(--line2) !important; }
 .browser-integration-actions .btn.ghost:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 .browser-integration-select {
   appearance: none;
   -webkit-appearance: none;
   background: transparent !important;
-  border: 0;
+  border: 0 !important;
   color: var(--text);
+  box-shadow: none !important;
 }
 .browser-integration-card {
   display: flex;
@@ -1467,7 +1482,8 @@ body.vm-mode *::after {
   padding: 12px;
   border: 1px solid var(--line, #30343a);
   border-radius: 10px;
-  background: var(--panel, #15181c);
+  background: color-mix(in srgb, var(--panel) 92%, var(--bg)) !important;
+  box-shadow: none;
 }
 .browser-integration-card.on {
   border-color: var(--accent, #d8e2ec);
@@ -1483,7 +1499,8 @@ body.vm-mode *::after {
   color: inherit;
   text-align: left;
   background: transparent !important;
-  border: 0;
+  border: 0 !important;
+  box-shadow: none !important;
   cursor: pointer;
 }
 .browser-integration-select:focus-visible,
