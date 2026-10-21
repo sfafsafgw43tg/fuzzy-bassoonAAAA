@@ -209,7 +209,8 @@ describe('steps and the console installer', () => {
     expect(pageShim).toContain("Object.defineProperty(G.navigator, 'gpu'");
     expect(pageShim).toContain('const WrappedWorker = new Proxy(nativeWorker');
     expect(pageShim).toContain('Reflect.construct(target, [blobUrl, options], newTarget)');
-    expect(pageShim).toContain("names.set(WrappedWorker, 'Worker')");
+    expect(pageShim).toContain('Keep the platform\'s native Function.prototype.toString untouched');
+    expect(pageShim).not.toContain("names.set(WrappedWorker, 'Worker')");
     expect(pageShim).toContain("fp.webgl === 'noise' || fp.webglVendor || fp.webglRenderer");
     expect(pageShim).toContain("kind === 'experimental-webgl2'");
     expect(mainProcess).toContain("p.fingerprint?.enabled === true && p.fingerprint.webgl !== 'off'");

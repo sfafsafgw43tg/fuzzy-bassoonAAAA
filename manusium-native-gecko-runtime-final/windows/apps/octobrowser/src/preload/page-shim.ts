@@ -85,21 +85,13 @@ export function pageShim(c: PageConfig, eventName: string): void {
   const dP = Object.defineProperty;
 
   // ------------------------------------------------------------ masking
-  const names = new WeakMap<object, string>();
-  const nativeToString = Function.prototype.toString;
-  const tsProxy = new Proxy(nativeToString, {
-    apply(target, self, args) {
-      const n = (typeof self === 'function' || typeof self === 'object') && self !== null ? names.get(self) : undefined;
-      return n !== undefined ? `function ${n}() { [native code] }` : R.apply(target, self, args);
-    },
-  });
-  names.set(tsProxy, 'toString');
-  try { dP(Function.prototype, 'toString', { ...gOPD(Function.prototype, 'toString'), value: tsProxy }); } catch { /* ignore */ }
+  // Keep the platform's native Function.prototype.toString untouched. A
+  // Proxy around this method is observable to browser audits and is commonly
+  // reported as `hasToStringProxy: true`.
 
   type Fn = (...a: never[]) => unknown;
   const hook = <T extends Fn>(orig: T, impl: (target: T, self: unknown, args: unknown[]) => unknown): T => {
     const p = new Proxy(orig, { apply: (t, s, a) => impl(t, s, a as unknown[]) });
-    names.set(p, orig.name);
     return p;
   };
   /** Replace a getter; `fn(self, orig)` - call orig() first to keep native brand checks. */
@@ -657,9 +649,7 @@ export function pageShim(c: PageConfig, eventName: string): void {
         },
       });
       // The proxy keeps the native target's name, length, prototype and
-      // instanceof behavior. Also make the existing native-code toString
-      // compatibility layer report the expected constructor name.
-      names.set(WrappedWorker, 'Worker');
+      // instanceof behavior. Keep the platform's native toString untouched.
       try { dP(window, 'Worker', { ...gOPD(window, 'Worker'), value: WrappedWorker }); } catch { /* page may have locked Worker */ }
     }
 
