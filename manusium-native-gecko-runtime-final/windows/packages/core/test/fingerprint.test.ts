@@ -172,6 +172,13 @@ describe('sanitize + resolve', () => {
     expect(r.brands.some((b) => b.brand === 'Google Chrome')).toBe(true);
   });
 
+  it('resolves Polish auto language from a Polish proxy even when the app locale is German', () => {
+    const r = resolveFingerprint(base, { countryCode: 'pl', timezone: 'Europe/Warsaw' }, 'de-DE');
+    if (r.kind === 'disabled') throw new Error('unexpected disabled result');
+    expect(r.languages).toEqual(['pl-PL', 'pl', 'en-US', 'en']);
+    expect(r.acceptLanguage).toBe('pl-PL,pl;q=0.9,en-US;q=0.8,en;q=0.7');
+  });
+
   it('falls back to the app language when no geo information exists', () => {
     const r = resolveFingerprint(base, undefined, 'pl-PL');
     if (r.kind === 'disabled') throw new Error('unexpected disabled result');

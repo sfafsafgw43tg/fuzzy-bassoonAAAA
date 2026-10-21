@@ -773,8 +773,9 @@ function safeGeoInfo(geo: GeoInfo | undefined): GeoInfo | undefined {
   if (!plainObject(geo)) return undefined;
   const raw = geo as Record<string, unknown>;
   const out: GeoInfo = {};
+  const countryCode = typeof raw.countryCode === 'string' ? raw.countryCode.trim().toUpperCase() : undefined;
   if (raw.ip === undefined || (typeof raw.ip === 'string' && isIP(raw.ip) !== 0)) out.ip = typeof raw.ip === 'string' ? raw.ip : undefined;
-  if (raw.countryCode === undefined || (typeof raw.countryCode === 'string' && /^[A-Za-z]{2}$/.test(raw.countryCode))) out.countryCode = typeof raw.countryCode === 'string' ? raw.countryCode : undefined;
+  if (raw.countryCode === undefined || (countryCode && /^[A-Z]{2}$/.test(countryCode))) out.countryCode = countryCode;
   if (raw.timezone === undefined || (typeof raw.timezone === 'string' && validTimezone(raw.timezone))) out.timezone = typeof raw.timezone === 'string' ? raw.timezone : undefined;
   if (raw.latitude === undefined || (typeof raw.latitude === 'number' && Number.isFinite(raw.latitude) && raw.latitude >= -90 && raw.latitude <= 90)) out.latitude = typeof raw.latitude === 'number' ? raw.latitude : undefined;
   if (raw.longitude === undefined || (typeof raw.longitude === 'number' && Number.isFinite(raw.longitude) && raw.longitude >= -180 && raw.longitude <= 180)) out.longitude = typeof raw.longitude === 'number' ? raw.longitude : undefined;

@@ -83,6 +83,10 @@ describe('normalizeIpInfo', () => {
     const r = normalizeIpInfo({ status: 'success', query: '1.1.1.1', country: 'Australia', countryCode: 'AU', regionName: 'Queensland', city: 'Brisbane', lat: -27.4, lon: 153, timezone: 'Australia/Brisbane' }, 5);
     expect(r).toMatchObject({ ok: true, ip: '1.1.1.1', countryCode: 'AU', region: 'Queensland', timezone: 'Australia/Brisbane', latitude: -27.4 });
   });
+  it('trims country codes before applying IP-based locale mapping', () => {
+    const r = normalizeIpInfo({ success: true, ip: '109.243.144.229', country: 'Poland', country_code: ' pl ' }, 10);
+    expect(r).toMatchObject({ ok: true, countryCode: 'PL' });
+  });
   it('reports failures', () => {
     expect(normalizeIpInfo({ success: false, message: 'reserved range' }, 1)).toMatchObject({ ok: false, error: 'reserved range' });
   });

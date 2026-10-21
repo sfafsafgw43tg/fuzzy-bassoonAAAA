@@ -321,7 +321,7 @@ export function normalizeIpInfo(json: unknown, latencyMs: number): ProxyCheckRes
     at: new Date().toISOString(),
     ip,
     country: typeof j.country === 'string' ? j.country : typeof j.country_name === 'string' ? j.country_name : undefined,
-    countryCode: String(j.country_code ?? j.countryCode ?? '').toUpperCase() || undefined,
+    countryCode: String(j.country_code ?? j.countryCode ?? '').trim().toUpperCase() || undefined,
     region: (j.region ?? j.regionName) as string | undefined,
     city: j.city as string | undefined,
     timezone: tz,
