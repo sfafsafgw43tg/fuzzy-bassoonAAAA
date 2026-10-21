@@ -22,6 +22,7 @@ import { VersionedStore } from './config';
 import { copyDir, ensureDir, secureDeleteDir, atomicWriteFile } from './fsutil';
 import { ProtectionConfig, ProtectionLevel } from './privacy';
 import { browserEngineFor, DEFAULT_CHROMIUM_RUNTIME_VERSION, type BrowserEngine } from './inkbrowser';
+import { isBrowserIntegrationId, type BrowserIntegrationId } from './browser-integrations';
 import { packDir, unpackTo, isCachePath } from './archive';
 import { unzipSingleFile, zipSingleFile } from './portable-zip';
 import {
@@ -171,6 +172,10 @@ export interface Profile {
   engine?: BrowserEngine;
   /** Exact catalog version for native Chromium profiles; absent means the catalog default. */
   chromiumRuntime?: string;
+  /** Optional external browser/extension integration selected for this profile. */
+  browserIntegration?: BrowserIntegrationId;
+  /** User-selected executable for a browser integration, never interpreted as a command line. */
+  browserExecutablePath?: string;
   sandbox: SandboxConfig;
   audio: AudioConfig;
   /** Actual host inputs preferred by getUserMedia in this isolated profile. */
@@ -457,6 +462,10 @@ export function sanitizeProfile(input: unknown): Profile {
     dns: { ...base.dns, ...(p.dns ?? {}) },
     engine: browserEngineFor(p.engine),
     chromiumRuntime: typeof p.chromiumRuntime === 'string' && /^\d+\.\d+\.\d+\.\d+$/.test(p.chromiumRuntime) ? p.chromiumRuntime : undefined,
+    browserIntegration: isBrowserIntegrationId(p.browserIntegration) ? p.browserIntegration : undefined,
+    browserExecutablePath: typeof p.browserExecutablePath === 'string' && path.isAbsolute(p.browserExecutablePath)
+      ? path.resolve(p.browserExecutablePath).slice(0, 2048)
+      : undefined,
     sandbox: { ...base.sandbox, ...(p.sandbox ?? {}) },
     audio: { ...base.audio, ...(p.audio ?? {}) },
     mediaCapture: {

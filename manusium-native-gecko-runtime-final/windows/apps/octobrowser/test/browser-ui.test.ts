@@ -178,11 +178,13 @@ describe('browser entry UI', () => {
     expect(i18nPl).toContain("'startup.starting': 'Uruchamianie…'");
   });
 
-  it('exposes only the Electron base in the creator while retaining advanced profile controls', () => {
-    expect(launcherEditor).toContain("t('profile.base.electron')");
-    expect(launcherEditor).not.toContain("for (const choice of ['chromium', 'firefox', 'electron'] as const)");
+  it('exposes Chrome-first, Firefox-second, and lightweight Electron Base choices in the creator', () => {
+    expect(launcherEditor).toContain("for (const choice of ['chromium', 'firefox', 'electron'] as const)");
+    expect(launcherEditor).toContain("d.engine = choice === 'chromium' ? 'inkbrowser' : choice");
+    expect(launcherEditor).toContain("d.browserShell = choice === 'chromium' ? 'chrome' : choice === 'firefox' ? 'firefox' : 'octo'");
     expect(launcherEditor).toContain("['manual', t('fp.v.manual')]");
     expect(launcherEditor).toContain("['off', t('fp.v.off')]");
+    expect(manager).toContain("browserEngineFor(p.engine) === 'firefox'");
     expect(manager).toContain("patch.fingerprint = { ...patch.fingerprint, enabled: false }");
     expect(manager).toContain("clean.fingerprint = { ...fingerprint, enabled: false }");
     expect(i18nEn).toContain("'browserEngine.firefoxNote':");
@@ -596,7 +598,7 @@ describe('browser entry UI', () => {
     expect(i18nEn).toContain("'fp.audit.engineNote':");
     expect(i18nPl).toContain("'fp.audit.engineNote':");
     expect(fingerprintAuditUi).toContain("t('fp.audit.engineNote'");
-    expect(launcherEditor).toContain("t('profile.base.electron')");
+    expect(launcherEditor).toContain("const base = d.engine === 'firefox' ? 'firefox' : d.engine === 'electron' ? 'electron' : 'chromium';");
     expect(launcherEditor).toContain("section(t('profile.base'");
   });
 

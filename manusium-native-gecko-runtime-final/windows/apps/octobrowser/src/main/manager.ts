@@ -41,7 +41,7 @@ import { UpdateManager } from '@octo/shell/update-manager';
 import { runMasterPasswordUnlock } from '@octo/shell/unlock';
 import { iconPath, THEME } from '@octo/shell/windows-ui';
 import { findTorBrowser, firefoxAvailability, launchFirefox, launchDetached, launchWindowsSandbox, windowsSandboxAvailable } from '@octo/shell/winutil';
-import { browserEngineFor, inkbrowserBlocks, NEW_PROFILE_ENGINE } from '@octo/core';
+import { browserEngineFor, inkbrowserBlocks, NEW_PROFILE_ENGINE, BROWSER_INTEGRATIONS } from '@octo/core';
 import { findInkBrowser } from './inkbrowser';
 import { bootstrapFileFor } from '@octo/shell/prepare';
 import { clearVirtualBoxManagePath, installVirtualBox, setVirtualBoxManagePath, virtualBoxStatus, type VirtualBoxLaunchMode } from './virtualbox';
@@ -71,6 +71,7 @@ import { discoverFirefoxRuntime, geckoCatalogEntry, installFirefoxRuntime, inspe
 import { chromiumPrivacyArgs, prepareChromiumPrivacy, prepareFirefoxPrivacy } from '@octo/shell/engine-privacy';
 import { nativeBundledExtensionPaths } from './extensions';
 import { installNativeCamera, nativeCameraStatus, uninstallNativeCamera } from './native-camera';
+import { detectBrowserIntegrations, launchBrowserIntegration } from './browser-integrations';
 
 let importedHandsetsLoaded = false;
 
@@ -877,6 +878,14 @@ export class Manager {
     if (running) {
       running.channel.send({ t: 'focus' });
       return { status: 'focused' };
+    }
+    if (p.browserIntegration) {
+      const result = await launchBrowserIntegration(p, this.ctx.layout.profileEngineDir(p.id));
+      if (result.status === 'browser-integration-launched') {
+        this.profiles.setLastUsed(id);
+        this.pushProfiles();
+      }
+      return result;
     }
     // Older profiles may still carry an Electron page-shim fingerprint after
     // being switched to a native engine. Migrate that stale flag before the
@@ -2489,6 +2498,7 @@ export class Manager {
         || engineResourceRoots().some((resourcesPath) => !!discoverFirefoxRuntime(resourcesPath, path.join(ctx.layout.engine, 'runtimes', 'gecko'))),
       inkbrowserInstalled: Boolean(bundledChromiumExecutable() || (!app.isPackaged && findInkBrowser())),
       chromiumRuntimes: listInstalled(path.join(ctx.layout.engine, 'runtimes', 'chromium'), process.platform, process.arch, engineResourceRoots()),
+      browserIntegrations: await detectBrowserIntegrations(),
       settings: ctx.settings.load(),
       searchEngines: Object.keys(SEARCH_ENGINES),
       update: this.updates.getStatus(),
@@ -2498,6 +2508,19 @@ export class Manager {
     handle('mgr:profiles', L, () => this.profileList());
     handle('mgr:archived', L, () => this.profileList(false, true));
     handle('mgr:chromium-catalog', L, () => listInstalled(path.join(ctx.layout.engine, 'runtimes', 'chromium'), process.platform, process.arch, engineResourceRoots()));
+    handle('mgr:browser-integrations', L, () => detectBrowserIntegrations());
+    handle('mgr:browser-pick-executable', L, async (e) => {
+      const owner = BrowserWindow.fromWebContents(e.sender);
+      if (!owner) return '';
+      const result = await dialog.showOpenDialog(owner, {
+        properties: ['openFile'],
+        filters: [{ name: 'Windows executable', extensions: ['exe'] }],
+        title: this.t('browserIntegration.chooseExecutable'),
+      });
+      const selected = result.canceled ? '' : String(result.filePaths[0] ?? '');
+      if (!selected || !/^[A-Za-z]:\\/.test(selected) || selected.includes('..')) return '';
+      return selected;
+    });
     handle('mgr:firefox-runtime-status', L, () => {
       const userRoot = path.join(ctx.layout.engine, 'runtimes', 'gecko');
       const diagnostic = engineResourceRoots().map((resourcesPath) => inspectFirefoxRuntime(resourcesPath, userRoot)).find((item) => item.reason === 'ready');
@@ -3684,6 +3707,13 @@ export class Manager {
     handle('mgr:update-rollback', L, (_e, v: string) => this.updates.rollback(String(v)));
     handle('mgr:filters-update', L, () => this.maybeUpdateFilters(true));
     handle('mgr:launch-detect', L, () => { this.launchDetect(); return true; });
+    handle('mgr:open-browser-integration-url', L, (_e, rawUrl: string) => {
+      this.requireOnline();
+      const url = String(rawUrl ?? '').trim();
+      if (!/^https:\/\//i.test(url) || !BROWSER_INTEGRATIONS.some((entry) => entry.officialUrl === url || entry.sourceUrl === url)) throw new Error('Unapproved integration URL');
+      void shell.openExternal(url);
+      return true;
+    });
     handle('mgr:open-external', L, (_e, which: 'tor' | 'bitwarden' | 'releases' | 'wsb-docs' | 'whonix' | 'virtualbox' | 'whonix-other' | 'privacy-sexy' | 'privacy-sexy-search') => {
       this.requireOnline();
       const urls = {
