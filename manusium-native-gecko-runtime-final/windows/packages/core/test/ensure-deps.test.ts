@@ -112,6 +112,16 @@ describe('fingerprint inputs', () => {
     expect(computeFingerprint(root, 'linux', 'x64')).not.toBe(before);
   });
 
+  it('ignores application release-version changes but still tracks dependency changes', () => {
+    makeProject();
+    const before = computeFingerprint(root, 'linux', 'x64');
+    put('package.json', JSON.stringify({ name: 'fixture', version: '0.2.1', private: true, devDependencies: { electron: '39.0.0' } }));
+    put('apps/octobrowser/package.json', '{"name":"octobrowser","version":"0.2.1"}\n');
+    expect(computeFingerprint(root, 'linux', 'x64')).toBe(before);
+    put('package.json', JSON.stringify({ name: 'fixture', version: '0.2.1', private: true, devDependencies: { electron: '40.0.0' } }));
+    expect(computeFingerprint(root, 'linux', 'x64')).not.toBe(before);
+  });
+
   it('distinguishes a missing file from an empty one', () => {
     expect(fingerprintOf({ '.npmrc': null })).not.toBe(fingerprintOf({ '.npmrc': '' }));
   });

@@ -124,7 +124,9 @@ describe('maintenance scripts', () => {
     // the one script the npm start hooks also run: tools/ensure-deps.mjs decides what to install.
     expect(ps1Text).toContain('function Invoke-EnsureDependencies');
     expect(ps1Text).toContain('ensure-deps.mjs');
-    expect(ps1Text).toContain("Key = 'stepDeps'; Required = $true; Fatal = $true; Action = { return (Invoke-EnsureDependencies) }");
+    expect(ps1Text).toContain("Key = 'stepDeps'; Required = $true; Fatal = $true; Action = {");
+    expect(ps1Text).toContain('if (-not (Invoke-EnsureDependencies)) { return $false }');
+    expect(ps1Text).toContain('return (Repair-ElectronSandboxAcl)');
     expect(ps1Text).not.toContain('.octo-lock-sha256');
   });
 

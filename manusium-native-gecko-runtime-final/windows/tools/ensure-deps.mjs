@@ -60,14 +60,43 @@ export function fingerprintOf(inputs, platform = process.platform, arch = proces
   return hash.digest('hex');
 }
 
-/** Reads the fingerprint inputs of a checkout from disk and fingerprints them. */
-export function computeFingerprint(root, platform, arch) {
+function readFingerprintInputs(root, normalizeVersions = false) {
   const inputs = {};
   for (const rel of fingerprintInputPaths(root)) {
     const abs = path.join(root, rel);
-    inputs[rel] = existsSync(abs) ? readFileSync(abs) : null;
+    const content = existsSync(abs) ? readFileSync(abs) : null;
+    if (!normalizeVersions || content === null || !rel.endsWith('.json')) {
+      inputs[rel] = content;
+      continue;
+    }
+    try {
+      const manifest = JSON.parse(content.toString('utf8'));
+      // App release versions do not change the dependency graph. Ignore only
+      // package metadata versions; dependency and lockfile package versions
+      // remain part of the fingerprint and still force a real reinstall.
+      if (rel.endsWith('/package.json') || rel === 'package.json') delete manifest.version;
+      if (rel === 'package-lock.json') {
+        delete manifest.version;
+        if (manifest.packages?.['']) delete manifest.packages[''].version;
+      }
+      inputs[rel] = Buffer.from(JSON.stringify(manifest));
+    } catch {
+      // A malformed manifest must still produce a different fingerprint and
+      // be diagnosed by npm rather than being silently treated as unchanged.
+      inputs[rel] = content;
+    }
   }
-  return fingerprintOf(inputs, platform, arch);
+  return inputs;
+}
+
+/** Reads the dependency inputs while excluding release-only package versions. */
+export function computeFingerprint(root, platform, arch) {
+  return fingerprintOf(readFingerprintInputs(root, true), platform, arch);
+}
+
+/** Legacy raw fingerprint used once to migrate stamps from pre-0.2.1 builds. */
+export function computeLegacyFingerprint(root, platform, arch) {
+  return fingerprintOf(readFingerprintInputs(root, false), platform, arch);
 }
 
 /** Pure: true when the root manifest declares Electron. */
@@ -303,16 +332,26 @@ export function ensureDependencies(root, options = {}) {
 function ensureDependenciesUnlocked(root, { checkOnly = false, run = runCommand, log = writeLine } = {}) {
   const pkg = JSON.parse(readFileSync(path.join(root, 'package.json'), 'utf8'));
   const electronNeeded = electronRequired(pkg);
+  const fingerprint = computeFingerprint(root);
+  const legacyFingerprint = computeLegacyFingerprint(root);
+  const stamp = readStamp(root);
+  // A stamp produced before version-normalized fingerprinting is valid when
+  // the only manifest change was the application release version. Migrate it
+  // immediately so the next launch uses the new stable fingerprint.
+  const compatibleStamp = stamp?.fingerprint === legacyFingerprint
+    ? { ...stamp, fingerprint }
+    : stamp;
   const plan = planDependencyWork({
     modulesPresent: existsSync(path.join(root, 'node_modules')),
-    stamp: readStamp(root),
-    fingerprint: computeFingerprint(root),
+    stamp: compatibleStamp,
+    fingerprint,
     electronNeeded,
     electronPackageInstalled: electronPackagePresent(root),
     electronBinaryInstalled: electronBinaryPresent(root),
   });
 
   if (plan.action === 'none') {
+    if (stamp?.fingerprint === legacyFingerprint && stamp.fingerprint !== fingerprint) writeStamp(root, fingerprint);
     log('Dependencies are up to date.');
     return { status: 0, plan };
   }
