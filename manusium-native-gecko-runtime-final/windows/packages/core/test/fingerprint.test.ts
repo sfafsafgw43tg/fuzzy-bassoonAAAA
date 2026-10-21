@@ -77,6 +77,14 @@ describe('Chromium-compatible user agent across UI shell styles', () => {
     expect(fp10.platformVersion).toBe('10.0.0');
     expect(fp11.platformVersion).not.toBe('10.0.0');
   });
+
+  it('keeps Windows 10 and 11 distinguishable through valid Client Hints after import', () => {
+    const win11 = sanitizeFingerprint({ os: 'windows11', platformVersion: '10.0.0' }, generateFingerprint({ engineMajor: 150, os: 'windows11', seed: 'stale-win11' }));
+    const win10 = sanitizeFingerprint({ os: 'windows10', platformVersion: '15.0.0' }, generateFingerprint({ engineMajor: 150, os: 'windows10', seed: 'stale-win10' }));
+    expect(win11.platformVersion).toBe('13.0.0');
+    expect(win10.platformVersion).toBe('10.0.0');
+    expect(chromiumUserAgent('windows10', 150)).toBe(chromiumUserAgent('windows11', 150));
+  });
 });
 
 describe('renderer-safe Chromium UA validation and snapshots', () => {

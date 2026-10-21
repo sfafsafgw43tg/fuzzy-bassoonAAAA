@@ -593,6 +593,19 @@ export function sanitizeFingerprint(input: unknown, base: FingerprintConfig): Fi
   }).filter(Boolean) : (base.fontList ?? fontPresets(os));
   if (fontList.join('').length > 16_384) throw new Error('Font list is too large');
 
+  // Chromium intentionally keeps the legacy Windows UA token at NT 10.0 for
+  // both Windows 10 and 11. Sites distinguish the two through UA-CH
+  // platformVersion, so repair imported profiles carrying a stale value.
+  const storedPlatformVersion = str(v.platformVersion, 32);
+  const validPlatformVersion = /^\d+\.\d+\.\d+$/.test(storedPlatformVersion)
+    ? storedPlatformVersion
+    : (os === 'windows11' ? '13.0.0' : os === 'windows10' ? '10.0.0' : base.platformVersion);
+  const platformVersion = os === 'windows11' && Number.parseInt(validPlatformVersion, 10) < 13
+    ? '13.0.0'
+    : os === 'windows10' && Number.parseInt(validPlatformVersion, 10) >= 13
+      ? '10.0.0'
+      : validPlatformVersion;
+
   return {
     schemaVersion: FINGERPRINT_SCHEMA_VERSION,
     ...(legacyGeoPermission ? { migrationWarnings: ['fp.warn.geoPermissionMigrated'] } : (base.migrationWarnings ? { migrationWarnings: [...base.migrationWarnings] } : {})),
@@ -601,7 +614,7 @@ export function sanitizeFingerprint(input: unknown, base: FingerprintConfig): Fi
     os,
     userAgent: ua,
     uaFullVersion: /^\d+\.\d+\.\d+\.\d+$/.test(str(v.uaFullVersion, 32)) ? str(v.uaFullVersion, 32) : base.uaFullVersion,
-    platformVersion: /^\d+\.\d+\.\d+$/.test(str(v.platformVersion, 32)) ? str(v.platformVersion, 32) : base.platformVersion,
+    platformVersion,
     osVersion: v.osVersion === undefined ? base.osVersion : (str(v.osVersion, 64) || base.osVersion),
     browserVersion: v.browserVersion === undefined ? base.browserVersion : (str(v.browserVersion, 16) || base.browserVersion),
     webrtc: {
