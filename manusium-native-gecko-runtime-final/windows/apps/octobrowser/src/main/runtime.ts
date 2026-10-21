@@ -40,6 +40,7 @@ import { UpdateStatus } from '@octo/shell/update-manager';
 import { BrowserWindowController, Rect } from './window';
 import { bundledExtension, bundledExtensionPath, BundledExtension } from './extensions';
 import { SHORTCUT_HELP } from '../shared/shortcuts';
+import { serviceWorkerFingerprintPreload } from '../preload/service-worker';
 
 type Pending = { resolve: (ok: boolean) => void; timer: NodeJS.Timeout };
 
@@ -214,6 +215,7 @@ export class ProfileRuntime {
     this.fp = this.profile.ordinaryBrowser
       ? { kind: 'disabled', enabled: false }
       : resolveFingerprint(this.profile.fingerprint, geo, this.lang);
+    this.registerServiceWorkerFingerprintPreload(ses);
     this.mobile = null;
     const nativeUserAgent = ses.getUserAgent();
     const profileUserAgent = this.fp.enabled
@@ -827,6 +829,40 @@ export class ProfileRuntime {
       if (!full.startsWith(root) || !fs.existsSync(full)) return new Response('Not found', { status: 404 });
       return net.fetch(pathToFileURL(full).toString());
     });
+  }
+
+  /**
+   * Service workers are separate JavaScript realms; the tab page shim cannot
+   * reach them. Electron supports a real service-worker preload per session,
+   * so generate a profile-scoped, data-only bootstrap after fingerprint
+   * resolution and register it before the first profile window is created.
+   */
+  private registerServiceWorkerFingerprintPreload(ses: Electron.Session): void {
+    if (!this.fp?.enabled) return;
+    const config = {
+      platform: this.fp.platform,
+      languages: this.fp.languages,
+      cores: this.fp.cores,
+      memory: this.fp.memory,
+      webgl: this.fp.webgl,
+      vendor: this.fp.webglVendor || 'WebGL Vendor',
+      renderer: this.fp.webglRenderer || 'WebGL Renderer',
+      seed: Number.parseInt(this.fp.seed.slice(0, 8), 16) >>> 0,
+    };
+    const filePath = path.join(this.layout.temp, 'service-worker-fingerprint-preload.js');
+    try {
+      fs.mkdirSync(this.layout.temp, { recursive: true });
+      const source = `(${serviceWorkerFingerprintPreload.toString()})(${JSON.stringify(config)});\n`;
+      fs.writeFileSync(filePath, source, { encoding: 'utf8', mode: 0o600 });
+      ses.registerPreloadScript({
+        id: `octo-service-worker-fingerprint-${this.profile.id}`,
+        type: 'service-worker',
+        filePath,
+      });
+      this.logger.info('fingerprint.serviceWorkerPreload', { profile: this.profile.id, webgl: config.webgl });
+    } catch (error) {
+      this.logger.warn('fingerprint.serviceWorkerPreloadFailed', { profile: this.profile.id, error: String(error) });
+    }
   }
 
   private isInternalSender(e: IpcMainInvokeEvent): boolean {

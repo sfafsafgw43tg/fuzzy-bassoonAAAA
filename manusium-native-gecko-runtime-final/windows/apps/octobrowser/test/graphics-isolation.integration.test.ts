@@ -92,6 +92,17 @@ it('patches worker-created OffscreenCanvas contexts and SharedWorker bootstraps'
   expect(source).toContain('hashWorker(j ^ gpuSalt');
 });
 
+it('registers a real per-profile Service Worker preload', () => {
+  const runtime = readFileSync(path.resolve(__dirname, '..', 'src', 'main', 'runtime.ts'), 'utf8');
+  const worker = readFileSync(path.resolve(__dirname, '..', 'src', 'preload', 'service-worker.ts'), 'utf8');
+  expect(runtime).toContain("type: 'service-worker'");
+  expect(runtime).toContain('registerPreloadScript');
+  expect(runtime).toContain('serviceWorkerFingerprintPreload.toString()');
+  expect(worker).toContain('OffscreenCanvas');
+  expect(worker).toContain('UNMASKED_RENDERER_WEBGL');
+  expect(worker).toContain('hardwareConcurrency');
+});
+
 it('covers Canvas exports and all common AudioBuffer/Analyser readback APIs', () => {
   const source = readFileSync(path.resolve(__dirname, '..', 'src', 'preload', 'page-shim.ts'), 'utf8');
   for (const name of ['toDataURL', 'toBlob', 'convertToBlob', 'transferToImageBitmap', 'getImageData']) {
