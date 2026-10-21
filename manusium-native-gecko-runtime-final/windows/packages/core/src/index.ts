@@ -9,7 +9,6 @@ export * from './mnemonic';
 export * from './bootstrap';
 export * from './paths';
 export * from './inkbrowser';
-export * from './browser-integrations';
 export * from './logger';
 export * from './config';
 export * from './keyring';

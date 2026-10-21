@@ -33,12 +33,12 @@ function plainProfile(): Profile {
 }
 
 describe('browser engine choice', () => {
-  it('profiles without a stored engine, and unknown values, stay on Electron', () => {
+  it('profiles without a stored engine and every legacy value normalize to Electron', () => {
     expect(browserEngineFor(undefined)).toBe('electron');
     expect(browserEngineFor('electron')).toBe('electron');
     expect(browserEngineFor('blink-anything')).toBe('electron');
-    expect(browserEngineFor('inkbrowser')).toBe('inkbrowser');
-    expect(browserEngineFor('firefox')).toBe('firefox');
+    expect(browserEngineFor('inkbrowser')).toBe('electron');
+    expect(browserEngineFor('firefox')).toBe('electron');
   });
 
   it('new profiles use the compatibility-first Electron choice', () => {
@@ -46,11 +46,11 @@ describe('browser engine choice', () => {
     expect(inkbrowserBlocks(factsFor(defaultProfile('personal', 'Default')))).toEqual(['fingerprint', 'protection']);
   });
 
-  it('sanitizeProfile keeps a valid engine and gives older profiles electron', () => {
+  it('sanitizeProfile normalizes legacy native engines to Electron', () => {
     const base = defaultProfile('personal', 'Engine test');
     expect(sanitizeProfile({ ...base, engine: undefined }).engine).toBe('electron');
-    expect(sanitizeProfile({ ...base, engine: 'inkbrowser' }).engine).toBe('inkbrowser');
-    expect(sanitizeProfile({ ...base, engine: 'firefox' }).engine).toBe('firefox');
+    expect(sanitizeProfile({ ...base, engine: 'inkbrowser' }).engine).toBe('electron');
+    expect(sanitizeProfile({ ...base, engine: 'firefox' }).engine).toBe('electron');
     expect(sanitizeProfile({ ...base, engine: 'other' as unknown as 'electron' }).engine).toBe('electron');
   });
 });

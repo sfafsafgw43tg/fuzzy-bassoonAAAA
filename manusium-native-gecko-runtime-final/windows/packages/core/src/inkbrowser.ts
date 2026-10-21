@@ -4,12 +4,11 @@
  * the process (apps/octobrowser/src/main/inkbrowser.ts). See docs/inkbrowser/BLUEPRINT.md.
  */
 
-export const BROWSER_ENGINES = ['inkbrowser', 'firefox', 'electron'] as const;
-export type BrowserEngine = (typeof BROWSER_ENGINES)[number];
+export const BROWSER_ENGINES = ['electron'] as const;
+/** Legacy values remain accepted only so old profile files can be normalized safely. */
+export type BrowserEngine = 'inkbrowser' | 'firefox' | 'electron';
 /** Profiles saved before the engine choice existed, and any unknown value, stay on Electron. */
-export function browserEngineFor(value: unknown): BrowserEngine {
-  return value === 'inkbrowser' || value === 'firefox' ? value : 'electron';
-}
+export function browserEngineFor(_value: unknown): BrowserEngine { return 'electron'; }
 
 /** Electron is the compatibility-first default for newly created profiles. */
 export const NEW_PROFILE_ENGINE: BrowserEngine = 'electron';

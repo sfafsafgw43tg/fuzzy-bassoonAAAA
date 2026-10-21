@@ -58,7 +58,7 @@ export interface ProxyCheck { ok: boolean; at: string; ip?: string; country?: st
 export interface ProfileProxy { type: ProxyType; host: string; port: number; changeIpUrl: string; name: string; savedId: string }
 export interface Profile {
   /** Browser engine: 'electron' (default when missing) or 'inkbrowser'. */
-  engine?: string; chromiumRuntime?: string; browserIntegration?: string; browserExecutablePath?: string;
+  engine?: string; chromiumRuntime?: string;
   id: string; name: string; kind: Kind; color: string; createdAt: string; updatedAt: string; trashedAt?: string;
   protection: { level: Level; overrides?: Record<string, unknown> };
   network: { mode: 'system' | 'direct' | 'proxy'; proxyRules?: string; proxyBypass?: string; hasProxyCredentials?: boolean; lockdown?: boolean; proxy?: ProfileProxy };
@@ -119,7 +119,6 @@ export interface Init {
   lang: 'en' | 'pl'; dicts: Dicts; version: string; dataDir: string; searchEngines: string[]; addons: AddonInfo[]; kinds: Kind[];
   windowsSandbox: boolean; torBrowser: boolean; firefoxAvailable: boolean; inkbrowserInstalled: boolean;
   chromiumRuntimes: Array<{ entry: { version: string; channel: string; support: string; default?: boolean; displayName?: string; distribution?: string }; rootDir: string; executablePath: string; installed: boolean; bundled?: boolean; installable?: boolean }>;
-  browserIntegrations: Array<{ id: string; name: string; classification: string; installed: boolean; executablePath?: string; version?: string; officialUrl: string; sourceUrl: string; license: string; maintenance: string; limitation: string; capabilities: Record<string, boolean> }>;
   settings: Settings; update: UpdateStatus; logMode: 'off' | 'standard' | 'diagnostic'; filtersUpdatedAt: string | null;
   keyringMode: 'os' | 'password' | null; keyringRequiresPassword: boolean; secretBackend: 'local';
 }
