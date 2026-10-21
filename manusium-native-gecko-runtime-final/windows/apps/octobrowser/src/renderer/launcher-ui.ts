@@ -250,6 +250,24 @@ export function toast(text: string, kind: 'ok' | 'err' | 'info' = 'info', detail
   window.setTimeout(close, kind === 'err' ? 7500 : 5000);
 }
 
+/** Compact top-right application notification; intentionally never uses Windows toasts. */
+export function appNotification(title: string, body: string, source = 'Octo.su'): void {
+  const el = h('article', { class: 'app-notification', role: 'status', 'aria-live': 'polite' },
+    h('div', { class: 'app-notification-copy' },
+      h('div', { class: 'app-notification-head' },
+        h('span', { class: 'app-notification-source', text: `${source} · ${t('toast.justNow')}` }),
+        h('span', { class: 'app-notification-actions' },
+          h('button', { type: 'button', class: 'app-notification-settings', title: 'Notification settings', 'aria-label': 'Notification settings', text: '⚙' }),
+          h('button', { type: 'button', class: 'app-notification-close', title: t('toast.dismiss'), 'aria-label': t('toast.dismiss'), text: '×' }))),
+      h('strong', { class: 'app-notification-title', text: title }),
+      h('span', { class: 'app-notification-body', text: body })),
+    h('div', { class: 'app-notification-icon', 'aria-hidden': 'true' }, brandLogo(34)));
+  const close = () => { el.classList.add('leaving'); window.setTimeout(() => el.remove(), 180); };
+  el.querySelector<HTMLButtonElement>('.app-notification-close')?.addEventListener('click', close);
+  $('app-notifications').append(el);
+  window.setTimeout(close, 7500);
+}
+
 /** Error messages from the main process may be i18n keys (proxy.err.*). */
 export function errText(err: unknown): string {
   const m = String((err as Error)?.message ?? err).replace(/^Error invoking remote method '[^']+': (Error: )?/, '');

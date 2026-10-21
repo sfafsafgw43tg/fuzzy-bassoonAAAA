@@ -10,7 +10,7 @@
  *   - auto-locks after inactivity or when Windows locks;
  *   - checks for updates (daily first launch / every 3rd launch / manual) and updates filter lists.
  */
-import { app, BrowserWindow, dialog, Menu, Notification, powerMonitor, shell, session, Session, Tray, net as electronNet } from 'electron';
+import { app, BrowserWindow, dialog, Menu, powerMonitor, shell, session, Session, Tray, net as electronNet } from 'electron';
 import { spawn, ChildProcess } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as fsp from 'node:fs/promises';
@@ -2733,15 +2733,12 @@ export class Manager {
      * something else. Only ever called because a checkbox said so.
      */
     handle('mgr:notify', L, (_e, input: { title?: string; body?: string; silent?: boolean }) => {
-      if (!Notification.isSupported()) return false;
       const clean = (value: unknown, max: number) => String(value ?? '').replace(/[\u0000-\u001f]/g, ' ').trim().slice(0, max);
-      const notification = new Notification({
-        title: clean(input?.title, 120) || 'Octo.su',
-        body: clean(input?.body, 300),
-        silent: input?.silent === true,
-      });
-      notification.on('click', () => { this.launcher?.show(); this.launcher?.focus(); });
-      notification.show();
+      const title = clean(input?.title, 120) || 'Octo.su';
+      const body = clean(input?.body, 300);
+      this.launcher?.show();
+      this.launcher?.focus();
+      this.launcher?.webContents.send('mgr:toast', { title, body, source: 'Octo.su' });
       return true;
     });
     // What the user chose last time, and the languages a device can boot in.
@@ -3129,28 +3126,13 @@ export class Manager {
     handle('mgr:native-camera-status', L, () => nativeCameraStatus());
     handle('mgr:native-camera-install', L, async () => {
       const result = await installNativeCamera();
-      if (result.installed && process.platform === 'win32' && Notification.isSupported()) {
-        const strings = DICTS[this.ctx.lang] ?? DICTS.en;
-        const notification = new Notification({
-          title: strings['android.nativeCamera.connectedTitle'],
-          body: strings['android.nativeCamera.connectedBody'],
-          silent: false,
-        });
-        notification.on('click', () => { this.launcher?.show(); this.launcher?.focus(); });
-        notification.show();
-      } else if (result.installed && process.platform === 'win32') {
+      if (result.installed && process.platform === 'win32') {
         const strings = DICTS[this.ctx.lang] ?? DICTS.en;
         const title = strings['android.nativeCamera.connectedTitle'];
         const body = strings['android.nativeCamera.connectedBody'];
-        const messageBox = {
-          type: 'info' as const,
-          title,
-          message: body,
-          buttons: ['OK'],
-        };
-        void (this.launcher && !this.launcher.isDestroyed()
-          ? dialog.showMessageBox(this.launcher, messageBox)
-          : dialog.showMessageBox(messageBox));
+        this.launcher?.show();
+        this.launcher?.focus();
+        this.launcher?.webContents.send('mgr:toast', { title, body, source: 'Octo.su' });
       }
       return result;
     });

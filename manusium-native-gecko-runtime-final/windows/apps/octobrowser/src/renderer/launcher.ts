@@ -10,7 +10,7 @@ import { api, clear } from '@octo/shell/renderer/bridge';
 import { applyI18n, h, setDicts, setLang, t } from '@octo/shell/renderer/i18n-client';
 import { icon } from '@octo/shell/renderer/icons';
 import { keyProtectionPanel } from '@octo/shell/renderer/keypanel';
-import { $, S, L, Init, brandLogo, Profile, SavedProxy, Settings, UpdateStatus, View, PluginEntry, CorePluginEntry, animateIn, busy, run, toast, closeModal, closePopup, confirmDialog, field, select, toggle, input, copyText, modal, beginStartupScreen, finishStartupScreen, refreshStartupScreen } from './launcher-ui';
+import { $, S, L, Init, brandLogo, Profile, SavedProxy, Settings, UpdateStatus, View, PluginEntry, CorePluginEntry, animateIn, busy, run, toast, appNotification, closeModal, closePopup, confirmDialog, field, select, toggle, input, copyText, modal, beginStartupScreen, finishStartupScreen, refreshStartupScreen } from './launcher-ui';
 import { renderProfiles, renderFolders } from './launcher-profiles';
 import { renderProxies } from './launcher-proxies';
 import { renderTrash } from './launcher-trash';
@@ -995,7 +995,10 @@ async function boot(): Promise<void> {
   api.on<Profile[]>('mgr:profiles', (list) => { S.profiles = list; soft(); });
   api.on<SavedProxy[]>('mgr:proxies', (list) => { S.proxies = list; soft(); });
   api.on<UpdateStatus>('mgr:update-status', (u) => { init.update = u; renderNav(); });
-  api.on<{ key: string; params?: Record<string, string | number>; kind?: 'ok' | 'err' | 'info' }>('mgr:toast', (m) => toast(t(m.key, m.params), m.kind));
+  api.on<{ key?: string; params?: Record<string, string | number>; kind?: 'ok' | 'err' | 'info'; title?: string; body?: string; source?: string }>('mgr:toast', (m) => {
+    if (m.title) appNotification(m.title, m.body ?? '', m.source ?? 'Octo.su');
+    else if (m.key) toast(t(m.key, m.params), m.kind);
+  });
   api.on<string>('mgr:show-tab', (tab) => {
     if (NAV.some(([x]) => x === tab)) {
       S.view = tab as View;
