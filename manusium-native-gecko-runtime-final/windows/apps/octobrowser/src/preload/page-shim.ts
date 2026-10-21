@@ -152,31 +152,6 @@ export function pageShim(c: PageConfig, eventName: string): void {
     h = Math.imul(h ^ (h >>> 15), 0x846ca68b);
     return (h ^ (h >>> 16)) >>> 0;
   };
-  // Media IDs are origin-scoped in Chromium, but they must remain stable
-  // within one profile across enumerateDevices(), getUserMedia(), tracks and
-  // audio output. Keep only the native mapping in memory; never expose it.
-  const spoofedMediaToNative = new Map<string, string>();
-  const mediaIdentity = (kind: MediaDeviceKind, index: number): { deviceId: string; groupId: string } => {
-    const kindCode = kind === 'audioinput' ? 0x11 : kind === 'videoinput' ? 0x22 : 0x33;
-    const id = `${kind.slice(0, 3)}-${hash(kindCode, index).toString(16).padStart(8, '0')}${hash(kindCode ^ 0x55, index).toString(16).padStart(8, '0')}`;
-    const groupId = `grp-${hash(0x44, index).toString(16).padStart(8, '0')}${hash(0x99, index).toString(16).padStart(8, '0')}`;
-    return { deviceId: id, groupId };
-  };
-  const remapMediaConstraint = (value: unknown): unknown => {
-    if (typeof value === 'string') return spoofedMediaToNative.get(value) || value;
-    if (Array.isArray(value)) return value.map((item) => remapMediaConstraint(item));
-    if (!value || typeof value !== 'object') return value;
-    const out = { ...(value as Record<string, unknown>) };
-    if ('exact' in out) out.exact = remapMediaConstraint(out.exact);
-    if ('ideal' in out) out.ideal = remapMediaConstraint(out.ideal);
-    return out;
-  };
-  const remapMediaConstraints = (constraints: MediaStreamConstraints): MediaStreamConstraints => {
-    const out = { ...constraints };
-    if (constraints.audio && typeof constraints.audio === 'object') out.audio = remapMediaConstraint(constraints.audio) as MediaTrackConstraints;
-    if (constraints.video && typeof constraints.video === 'object') out.video = remapMediaConstraint(constraints.video) as MediaTrackConstraints;
-    return out;
-  };
   /** Flip the lowest bit of a sparse, seed-dependent subset of RGB channels. */
   const noisePixels = (data: Uint8ClampedArray | Uint8Array, w: number): void => {
     for (let i = 0; i < data.length; i += 4) {
@@ -235,7 +210,7 @@ export function pageShim(c: PageConfig, eventName: string): void {
     const normalizedLabel = (value: string) => value.trim().toLocaleLowerCase()
       .replace(/^(default|communications|domyślne|komunikacja)\s*[-–:]\s*/i, '');
     method(MD, 'getUserMedia', (self, args, orig) => {
-      const requested = remapMediaConstraints((args[0] && typeof args[0] === 'object' ? { ...(args[0] as MediaStreamConstraints) } : {}) as MediaStreamConstraints);
+      const requested = (args[0] && typeof args[0] === 'object' ? { ...(args[0] as MediaStreamConstraints) } : {}) as MediaStreamConstraints;
       const choose = (devices: MediaDeviceInfo[]) => {
         const next: MediaStreamConstraints = { ...requested };
         const cameraWanted = !!requested.video && !!c.cameraLabel;
@@ -1203,14 +1178,9 @@ export function pageShim(c: PageConfig, eventName: string): void {
         ]);
         const make = (kind: MediaDeviceKind, i: number): MediaDeviceInfo => {
           const existing = orderedByKind.get(kind)?.[i];
-          const identity = mediaIdentity(kind, i);
-          if (existing?.deviceId) spoofedMediaToNative.set(identity.deviceId, existing.deviceId);
-          // Keep capture metadata opaque until the page has a legitimate
-          // permission grant. CreepJS and similar audits render empty Web API
-          // fields as `n/a`; never expose host labels, IDs, or group IDs.
-          // The private identity/native maps above remain available to the
-          // getUserMedia and setSinkId bridges.
-          const o = { deviceId: '', kind, label: '', groupId: '', toJSON() { return { deviceId: '', kind, label: '', groupId: '' }; } };
+          if (existing) return existing;
+          const gid = hash(kind.length, i).toString(16).padStart(8, '0').repeat(8);
+          const o = { deviceId: '', kind, label: '', groupId: gid, toJSON() { return { deviceId: '', kind, label: '', groupId: gid }; } };
           const p = kind === 'audiooutput' ? MDI : IDI;
           if (p) Object.setPrototypeOf(o, p.prototype);
           return o as unknown as MediaDeviceInfo;
@@ -1222,26 +1192,6 @@ export function pageShim(c: PageConfig, eventName: string): void {
         for (let i = 0; i < want.audioOutputs; i++) out.push(make('audiooutput', i));
         return out;
       }));
-      method(proto('MediaStreamTrack'), 'getSettings', (self, args, orig) => {
-        const settings = { ...((orig(...args) as MediaTrackSettings) || {}) } as MediaTrackSettings & { groupId?: string };
-        if (settings.deviceId) {
-          for (const [spoofed, native] of spoofedMediaToNative) {
-            if (native === settings.deviceId) settings.deviceId = spoofed;
-          }
-        }
-        if (settings.deviceId) {
-          const kind: MediaDeviceKind = (self as MediaStreamTrack).kind === 'video' ? 'videoinput' : 'audioinput';
-          for (let i = 0; i < 32; i++) {
-            const identity = mediaIdentity(kind, i);
-            if (identity.deviceId === settings.deviceId) settings.groupId = identity.groupId;
-          }
-        }
-        return settings;
-      });
-      method(proto('HTMLMediaElement'), 'setSinkId', (self, args, orig) => {
-        const sinkId = typeof args[0] === 'string' ? spoofedMediaToNative.get(args[0]) || args[0] : args[0];
-        return orig(sinkId);
-      });
     }
   }
 
