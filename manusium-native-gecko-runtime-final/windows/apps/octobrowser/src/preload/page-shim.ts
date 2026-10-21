@@ -483,8 +483,15 @@ export function pageShim(c: PageConfig, eventName: string): void {
       method(proto('OffscreenCanvas'), 'getContext', blockContext);
     }
     if (fp.webgl !== 'off') {
-      const exposedVendor = fp.webglVendor || 'WebGL Vendor';
-      const exposedRenderer = fp.webglRenderer || 'WebGL Renderer';
+      // Keep one canonical selected-GPU pair. Every WebGL disclosure path
+      // below (standard parameters, debug extension, workers and readback
+      // salt) derives from these exact strings.
+      const selectedGpu = Object.freeze({
+        vendor: String(fp.webglVendor || 'WebGL Vendor').trim(),
+        renderer: String(fp.webglRenderer || 'WebGL Renderer').trim(),
+      });
+      const exposedVendor = selectedGpu.vendor;
+      const exposedRenderer = selectedGpu.renderer;
       const gpuName = `${exposedVendor} ${exposedRenderer}`.toLowerCase();
       const gpuTier = /rtx|rx [569]|rx 6|rx 7|m[2-4]|iris xe|radeon pro/.test(gpuName) ? 'high'
         : /gtx|uhd|iris|vega|m1|m2/.test(gpuName) ? 'mid' : 'low';
@@ -859,15 +866,18 @@ export function pageShim(c: PageConfig, eventName: string): void {
     // ---- audio noise ----
     if (fp.audio === 'noise') {
       const done = new WeakSet<object>();
+      let audioProfileSalt = 0;
+      const audioIdentity = `${fp.canvas}|${fp.webgl}|${String(fp.webglVendor || 'WebGL Vendor').trim()}|${String(fp.webglRenderer || 'WebGL Renderer').trim()}`;
+      for (let i = 0; i < audioIdentity.length; i++) audioProfileSalt = Math.imul(audioProfileSalt ^ audioIdentity.charCodeAt(i), 16777619);
       const perturbAudio = (data: Float32Array, salt: number, amplitude = 2e-6): void => {
         for (let i = 0; i < data.length; i += 17) {
-          const delta = (((hash(i, salt) & 0xffff) / 0xffff) - 0.5) * amplitude;
+          const delta = (((hash(i ^ audioProfileSalt, salt) & 0xffff) / 0xffff) - 0.5) * amplitude;
           const value = data[i] + delta;
           data[i] = Math.max(-1, Math.min(1, value));
         }
       };
       const perturbBytes = (data: Uint8Array, salt: number): void => {
-        for (let i = 0; i < data.length; i += 13) data[i] ^= hash(i, salt) & 1;
+        for (let i = 0; i < data.length; i += 13) data[i] ^= hash(i ^ audioProfileSalt, salt) & 1;
       };
       method(proto('AudioBuffer'), 'getChannelData', (self, args, orig) => {
         const data = orig(...args) as Float32Array;
