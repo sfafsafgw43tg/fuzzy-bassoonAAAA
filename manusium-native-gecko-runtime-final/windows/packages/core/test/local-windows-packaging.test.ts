@@ -71,12 +71,12 @@ describe('branded local Windows setup', () => {
     expect(installer).toContain("return $branded");
     expect(installer).toContain('The launcher is always the branded Electron app shell');
   });
-  it('keeps the profile Base choice independent from the Electron launcher', () => {
+  it('keeps the profile Base fixed to Electron', () => {
     const editor = fs.readFileSync(path.join(root, 'apps/octobrowser/src/renderer/launcher-editor.ts'), 'utf8');
     const engine = fs.readFileSync(path.join(root, 'packages/core/src/inkbrowser.ts'), 'utf8');
     const open = fn('Invoke-Open');
     expect(editor).toContain('engine: NEW_PROFILE_ENGINE');
-    expect(editor).toContain("d.engine = choice === 'chromium' ? 'inkbrowser' : choice");
+    expect(editor).toContain("d.engine = 'electron';");
     expect(engine).toContain("export const NEW_PROFILE_ENGINE: BrowserEngine = 'electron'");
     expect(open).toContain("$electronExe = Get-ElectronLauncherExe 'octobrowser'");
   });

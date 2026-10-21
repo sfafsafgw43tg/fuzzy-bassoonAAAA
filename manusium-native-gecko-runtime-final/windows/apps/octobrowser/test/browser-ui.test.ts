@@ -178,10 +178,10 @@ describe('browser entry UI', () => {
     expect(i18nPl).toContain("'startup.starting': 'Uruchamianie…'");
   });
 
-  it('exposes Chrome-first, Firefox-second, and lightweight Electron Base choices in the creator', () => {
-    expect(launcherEditor).toContain("for (const choice of ['chromium', 'firefox', 'electron'] as const)");
-    expect(launcherEditor).toContain("d.engine = choice === 'chromium' ? 'inkbrowser' : choice");
-    expect(launcherEditor).toContain("d.browserShell = choice === 'chromium' ? 'chrome' : choice === 'firefox' ? 'firefox' : 'octo'");
+  it('exposes only the lightweight Electron Base choice in the creator', () => {
+    expect(launcherEditor).not.toContain("for (const choice of ['chromium', 'firefox', 'electron'] as const)");
+    expect(launcherEditor).toContain("d.engine = 'electron';");
+    expect(launcherEditor).toContain("d.browserShell = 'octo';");
     expect(launcherEditor).toContain("['manual', t('fp.v.manual')]");
     expect(launcherEditor).toContain("['off', t('fp.v.off')]");
     expect(manager).toContain("browserEngineFor(p.engine) === 'firefox'");
@@ -599,14 +599,14 @@ describe('browser entry UI', () => {
     expect(i18nEn).toContain("'fp.audit.engineNote':");
     expect(i18nPl).toContain("'fp.audit.engineNote':");
     expect(fingerprintAuditUi).toContain("t('fp.audit.engineNote'");
-    expect(launcherEditor).toContain("const base = d.engine === 'firefox' ? 'firefox' : d.engine === 'electron' ? 'electron' : 'chromium';");
+    expect(launcherEditor).toContain("d.engine = 'electron';");
     expect(launcherEditor).toContain("section(t('profile.base'");
   });
 
-  it('defaults new embedded profiles to the full Chrome-style window shell', () => {
+  it('defaults new profiles to the Electron shell', () => {
     expect(profiles).toContain("const browserShell: BrowserShell = kind === 'tor' ? 'octo' : 'chrome'");
-    expect(launcherEditor).toContain("theme: 'dark', browserShell: 'chrome', baseChromeLook: true");
-    expect(launcherEditor).toContain("d.browserShell = k === 'tor' ? 'octo' : 'chrome'");
+    expect(launcherEditor).toContain("theme: 'dark', browserShell: 'octo', baseChromeLook: false");
+    expect(launcherEditor).toContain("d.browserShell = 'octo';");
   });
 
   it('audits actual selected-profile page read-back and keeps limitations explicit', () => {

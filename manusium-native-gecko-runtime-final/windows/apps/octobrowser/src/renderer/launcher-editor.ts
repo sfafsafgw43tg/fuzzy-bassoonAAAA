@@ -34,7 +34,7 @@ import { icon } from '@octo/shell/renderer/icons';
 import { parseProxy } from '@octo/core/proxy';
 import { presetFor } from '@octo/core/privacy';
 import { chromiumUserAgent } from '@octo/core/user-agent';
-import { browserEngineFor, NEW_PROFILE_ENGINE, type BrowserEngine } from '@octo/core/inkbrowser';
+import { NEW_PROFILE_ENGINE, type BrowserEngine } from '@octo/core/inkbrowser';
 import { BROWSER_INTEGRATIONS, isBrowserIntegrationId, type BrowserIntegrationId } from '@octo/core/browser-integrations';
 import { DEFAULT_ENGINE_PRIVACY, sanitizeEnginePrivacy, type EnginePrivacySettings } from '@octo/core/engine-privacy';
 import { DEFAULT_NATIVE_CHROMIUM_CONFIG } from '@octo/core/chromium-config';
@@ -176,7 +176,7 @@ function kindDefaults(kind: Kind, addons: string[]): Pick<Draft, 'protection' | 
 function newDraft(): Draft {
   const folder = S.folder && S.folder !== '__none' ? S.folder : '';
   return {
-    name: '', kind: 'antidetect', engine: NEW_PROFILE_ENGINE, chromiumRuntime: '155.0.8059.39', status: '', tags: [], folder, profileDirectory: '', notes: '', startPages: [CHROMIUM_DEFAULT_START_PAGE], browserIntegration: undefined, browserExecutablePath: '', homePage: CHROMIUM_DEFAULT_START_PAGE, searchEngine: 'duckduckgo-noai', theme: 'dark', browserShell: 'chrome', baseChromeLook: true, ordinaryBrowser: false, appMode: false, smartPaste: true,
+    name: '', kind: 'antidetect', engine: NEW_PROFILE_ENGINE, chromiumRuntime: '155.0.8059.39', status: '', tags: [], folder, profileDirectory: '', notes: '', startPages: [CHROMIUM_DEFAULT_START_PAGE], browserIntegration: undefined, browserExecutablePath: '', homePage: CHROMIUM_DEFAULT_START_PAGE, searchEngine: 'duckduckgo-noai', theme: 'dark', browserShell: 'octo', baseChromeLook: false, ordinaryBrowser: false, appMode: false, smartPaste: true,
     dns: { mode: 'inherit', dohTemplate: '' },
     ...kindDefaults('antidetect', S.init.addons.filter((a) => a.kind !== 'external-app').map((a) => a.id)),
     vstudioWebOnLaunch: false,
@@ -197,7 +197,7 @@ function draftFrom(p: Profile): Draft {
   }
   const c = structuredClone(p);
   return {
-    name: c.name, kind: c.kind, engine: browserEngineFor(c.engine), chromiumRuntime: c.chromiumRuntime, browserIntegration: isBrowserIntegrationId(c.browserIntegration) ? c.browserIntegration : undefined, browserExecutablePath: c.browserExecutablePath ?? '', status: c.status ?? '', tags: c.tags ?? [], folder: c.folder ?? '', profileDirectory: c.profileDirectory ?? '', notes: c.notes ?? '', startPages: c.startPages ?? [],
+    name: c.name, kind: c.kind, engine: 'electron', chromiumRuntime: c.chromiumRuntime, browserIntegration: isBrowserIntegrationId(c.browserIntegration) ? c.browserIntegration : undefined, browserExecutablePath: c.browserExecutablePath ?? '', status: c.status ?? '', tags: c.tags ?? [], folder: c.folder ?? '', profileDirectory: c.profileDirectory ?? '', notes: c.notes ?? '', startPages: c.startPages ?? [],
     homePage: c.homePage === 'octo://newtab' ? '' : c.homePage, searchEngine: c.searchEngine ?? '', theme: c.theme, browserShell: c.browserShell, baseChromeLook: c.baseChromeLook === true, ordinaryBrowser: c.ordinaryBrowser === true, appMode: c.appMode === true, smartPaste: c.smartPaste !== false, keepHistory: c.keepHistory, savePasswords: c.savePasswords === true, restoreSession: c.restoreSession, deleteOnClose: c.deleteOnClose,
     protection: { level: c.protection.level, overrides: c.protection.overrides ?? {} }, dns: c.dns, sandbox: c.sandbox, mobile: c.mobile ?? { device: 'none', orientation: 'portrait' }, addons: c.addons,
     vstudioWebOnLaunch: c.vstudioWebOnLaunch === true,
@@ -335,7 +335,7 @@ export function openEditor(p: Profile | null): void {
       busy = true;
       save.disabled = true;
       const patch: Record<string, unknown> = {
-        engine: d.engine || NEW_PROFILE_ENGINE, chromiumRuntime: d.chromiumRuntime, browserIntegration: d.browserIntegration, browserExecutablePath: d.browserExecutablePath?.trim() || undefined, status: d.status, tags: d.tags, folder: d.folder.trim(), profileDirectory: d.profileDirectory?.trim() || undefined, notes: d.notes, startPages: d.startPages,
+        engine: 'electron', chromiumRuntime: d.chromiumRuntime, browserIntegration: d.browserIntegration, browserExecutablePath: d.browserExecutablePath?.trim() || undefined, status: d.status, tags: d.tags, folder: d.folder.trim(), profileDirectory: d.profileDirectory?.trim() || undefined, notes: d.notes, startPages: d.startPages,
         homePage: d.homePage.trim() || 'octo://newtab', searchEngine: d.searchEngine || undefined, theme: d.theme, browserShell: d.browserShell, baseChromeLook: d.baseChromeLook, ordinaryBrowser: d.ordinaryBrowser, appMode: d.appMode, smartPaste: d.smartPaste, keepHistory: d.keepHistory, savePasswords: d.savePasswords, restoreSession: d.restoreSession,
         deleteOnClose: d.deleteOnClose, protection: d.protection, dns: d.dns, sandbox: d.sandbox, mobile: d.mobile, addons: d.addons,
         vstudioWebOnLaunch: d.vstudioWebOnLaunch,
@@ -466,38 +466,16 @@ function general(b: HTMLElement, d: Draft, creating: boolean, p: Profile | null,
   // Base is the real browser engine choice. Electron is selected for new
   // profiles because it is the compatibility-first bundled engine. The visual
   // shell is derived from the selected engine; it is not the engine.
-  const base = d.engine === 'firefox' ? 'firefox' : d.engine === 'electron' ? 'electron' : 'chromium';
-  const baseGrid = h('div', { class: 'kind-grid browser-base-grid', role: 'radiogroup' });
-  for (const choice of ['chromium', 'firefox', 'electron'] as const) {
-    const selected = base === choice;
-    const card = h('button', { type: 'button', class: `kind-card${selected ? ' on' : ''}`, role: 'radio', 'aria-checked': String(selected) },
-      h('span', { class: 'kc-ic shell-mark' }, choice === 'chromium' ? 'Cr' : choice === 'firefox' ? 'F' : 'E'),
-      h('span', { class: 'kc-t' }, h('b', { text: t(`profile.base.${choice}`) }), h('span', { class: 'kc-desc', text: t(`profile.baseDesc.${choice}`) })));
-    card.onclick = () => {
-      d.engine = choice === 'chromium' ? 'inkbrowser' : choice;
-      d.browserShell = choice === 'chromium' ? 'chrome' : choice === 'firefox' ? 'firefox' : 'octo';
-      d.baseChromeLook = choice === 'chromium';
-      if (choice === 'chromium' && (!d.homePage || d.homePage === 'octo://newtab')) {
-        d.homePage = CHROMIUM_DEFAULT_START_PAGE;
-        d.searchEngine = 'duckduckgo-noai';
-        if (!d.startPages.length) d.startPages = [CHROMIUM_DEFAULT_START_PAGE];
-      } else if (choice !== 'chromium' && d.homePage === CHROMIUM_DEFAULT_START_PAGE && d.searchEngine === 'duckduckgo-noai') {
-        d.homePage = 'octo://newtab';
-        d.searchEngine = undefined;
-        if (d.startPages.length === 1 && d.startPages[0] === CHROMIUM_DEFAULT_START_PAGE) d.startPages = [];
-      }
-      // Keep the complete Advanced editor visible while switching bases. The
-      // manager still normalizes unsupported Electron page-shim fields before
-      // native launch; only enginePrivacy is applied by native runtimes.
-      if (!d.fp && d.kind !== 'tor') {
-        void api.invoke<Fingerprint>('mgr:fingerprint-new', 'windows11').then((fp) => {
-          if (!d.fp && d.engine === (choice === 'chromium' ? 'inkbrowser' : choice)) { d.fp = fp; draw(); }
-        });
-      }
-      draw();
-    };
-    baseGrid.append(card);
-  }
+  // Electron is the only supported profile base for now. Keep this explicit
+  // and non-interactive so native engine choices cannot be selected or saved
+  // accidentally from the profile editor.
+  d.engine = 'electron';
+  d.browserShell = 'octo';
+  d.baseChromeLook = false;
+  const baseGrid = h('div', { class: 'kind-grid browser-base-grid', role: 'radiogroup' },
+    h('button', { type: 'button', class: 'kind-card on', role: 'radio', 'aria-checked': 'true' },
+      h('span', { class: 'kc-ic shell-mark' }, 'E'),
+      h('span', { class: 'kc-t' }, h('b', { text: t('profile.base.electron') }), h('span', { class: 'kc-desc', text: t('profile.baseDesc.electron') }))));
   b.append(section(t('profile.base'), baseGrid, h('p', { class: 'hint', text: t('profile.baseHint') })));
 
   // Keep the optional privacy catalog out of the main profile flow. It is
