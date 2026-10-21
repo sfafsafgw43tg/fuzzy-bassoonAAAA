@@ -589,6 +589,11 @@ export function pageShim(c: PageConfig, eventName: string): void {
       vendor: string;
       renderer: string;
       seed: number;
+      platform: string;
+      languages: string[];
+      cores: number | null;
+      memory: number | null;
+      canvas: 'off' | 'real' | 'noise';
     }): void => {
       const G = globalThis as unknown as Record<string, unknown>;
       let state = config.seed >>> 0;
@@ -606,6 +611,43 @@ export function pageShim(c: PageConfig, eventName: string): void {
         const wrapped = new Proxy(original, { apply: (target, self, args) => impl(self, args as unknown[], (...next) => Reflect.apply(target, self, next)) });
         try { Object.defineProperty(protoValue, name, { ...descriptor, value: wrapped }); } catch { /* protected prototype */ }
       };
+      const workerNavigator = (G.WorkerNavigator as { prototype?: object } | undefined)?.prototype;
+      const fixedWorker = (property: string, value: unknown): void => {
+        if (!workerNavigator) return;
+        const descriptor = Object.getOwnPropertyDescriptor(workerNavigator, property);
+        const originalGet = descriptor?.get;
+        if (!descriptor || !originalGet) return;
+        try {
+          Object.defineProperty(workerNavigator, property, {
+            configurable: true,
+            enumerable: descriptor.enumerable ?? true,
+            get: () => { Reflect.apply(originalGet, G.navigator, []); return value; },
+          });
+        } catch { /* protected prototype */ }
+      };
+      fixedWorker('platform', config.platform);
+      if (config.cores) fixedWorker('hardwareConcurrency', config.cores);
+      if (config.memory) fixedWorker('deviceMemory', config.memory);
+      if (config.languages.length) {
+        const languages = Object.freeze(config.languages.slice());
+        fixedWorker('languages', languages);
+        fixedWorker('language', languages[0]);
+      }
+      if (config.canvas === 'noise') {
+        replace((G.OffscreenCanvasRenderingContext2D as { prototype?: object } | undefined)?.prototype, 'getImageData', (_self, args, orig) => {
+          const image = orig(...args) as ImageData;
+          if (image?.data) {
+            const width = image.width || 1;
+            for (let i = 0; i < image.data.length; i += 4) {
+              if (image.data[i + 3] === 0) continue;
+              const pixel = i >> 2;
+              const h = hashWorker(pixel % width, (pixel / width) | 0);
+              if ((h & 15) === 0) image.data[i + ((h >>> 4) % 3)] ^= 1;
+            }
+          }
+          return image;
+        });
+      }
       const patch = (ctor: unknown): void => {
         const P = (ctor as { prototype?: object } | undefined)?.prototype;
         if (!P) return;
@@ -684,7 +726,7 @@ export function pageShim(c: PageConfig, eventName: string): void {
     };
     const nativeWorker = (W as { Worker?: unknown }).Worker;
     if (typeof nativeWorker === 'function') {
-      const workerConfig = JSON.stringify({ webgl: fp.webgl, webgpu: fp.webgpu, vendor: fp.webglVendor || 'WebGL Vendor', renderer: fp.webglRenderer || 'WebGL Renderer', seed });
+      const workerConfig = JSON.stringify({ webgl: fp.webgl, webgpu: fp.webgpu, vendor: fp.webglVendor || 'WebGL Vendor', renderer: fp.webglRenderer || 'WebGL Renderer', seed, platform: fp.platform, languages: fp.languages || [], cores: fp.cores, memory: fp.memory, canvas: fp.canvas });
       const bootstrapSource = workerWebGLBootstrap.toString();
       const WrappedWorker = new Proxy(nativeWorker as new (u: string | URL, o?: WorkerOptions) => Worker, {
         construct(target, args, newTarget) {
@@ -708,6 +750,32 @@ export function pageShim(c: PageConfig, eventName: string): void {
       // The proxy keeps the native target's name, length, prototype and
       // instanceof behavior. Keep the platform's native toString untouched.
       try { dP(window, 'Worker', { ...gOPD(window, 'Worker'), value: WrappedWorker }); } catch { /* page may have locked Worker */ }
+    }
+    const nativeSharedWorker = (W as { SharedWorker?: unknown }).SharedWorker;
+    if (typeof nativeSharedWorker === 'function') {
+      const workerConfig = JSON.stringify({ webgl: fp.webgl, webgpu: fp.webgpu, vendor: fp.webglVendor || 'WebGL Vendor', renderer: fp.webglRenderer || 'WebGL Renderer', seed, platform: fp.platform, languages: fp.languages || [], cores: fp.cores, memory: fp.memory, canvas: fp.canvas });
+      const bootstrapSource = workerWebGLBootstrap.toString();
+      type SharedWorkerInit = { name?: string; type?: 'classic' | 'module'; credentials?: 'omit' | 'same-origin' | 'include' };
+      const WrappedSharedWorker = new Proxy(nativeSharedWorker as new (u: string | URL, o?: string | SharedWorkerInit) => SharedWorker, {
+        construct(target, args, newTarget) {
+          const absolute = new URL(String(args[0]), document.baseURI).href;
+          const options = args[1] as string | SharedWorkerInit | undefined;
+          const workerType = typeof options === 'object' && options?.type === 'module' ? 'module' : 'classic';
+          const source = workerType === 'module'
+            ? `(${bootstrapSource})(${workerConfig});\nimport ${JSON.stringify(absolute)};`
+            : `(${bootstrapSource})(${workerConfig});\nimportScripts(${JSON.stringify(absolute)});`;
+          const blobUrl = URL.createObjectURL(new Blob([source], { type: 'text/javascript' }));
+          try {
+            const worker = Reflect.construct(target, [blobUrl, options], newTarget);
+            window.setTimeout(() => URL.revokeObjectURL(blobUrl), 0);
+            return worker;
+          } catch (error) {
+            URL.revokeObjectURL(blobUrl);
+            throw error;
+          }
+        },
+      });
+      try { dP(window, 'SharedWorker', { ...gOPD(window, 'SharedWorker'), value: WrappedSharedWorker }); } catch { /* page may have locked SharedWorker */ }
     }
 
     // Keep native WebGPU untouched when it is enabled. Fabricating adapter
