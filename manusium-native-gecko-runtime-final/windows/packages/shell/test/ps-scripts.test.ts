@@ -53,16 +53,17 @@ describe('octo.ps1 stays parseable', () => {
 });
 
 describe('install.bat covers every dependency', () => {
-  it('supports a hidden complete background setup without hiding UAC requirements', () => {
+  it('starts without mandatory elevation and keeps UAC targeted to privileged steps', () => {
     expect(source).toContain('[switch]$Background');
     expect(source).toContain("background setup requested; using default paths");
     expect(source).toContain('if ($Background)');
     const installBat = fs.readFileSync(path.resolve(__dirname, '..', '..', '..', 'scripts', 'install.bat'), 'utf8');
     expect(installBat).toContain('OCTO_WANTS_BACKGROUND');
     expect(installBat).toContain('hidden.vbs');
-    expect(installBat).toContain('-Background');
-    expect(installBat).toContain('starts immediately without a startup elevation handoff');
-    expect(installBat).toContain('elevate-installer.ps1');
+    expect(installBat).toContain('find /i "-background"');
+    expect(installBat).toContain('Start normally without administrator rights');
+    expect(installBat).not.toContain('Requesting administrator permission');
+    expect(installBat).not.toContain('goto request_elevation');
     expect(source).toContain('Visual Studio modification requires administrator rights');
     expect(source).toContain('-Verb RunAs');
   });
@@ -268,7 +269,7 @@ describe('classic visible installer launch', () => {
   it('keeps a normal launch visible and hides only explicit background setup', () => {
     expect(installBat).toContain('lib\\hidden.vbs');
     expect(installBat).toContain('OCTO_HIDDEN');
-    expect(installBat).toContain('Only an explicit');
+    expect(installBat).toContain('Start normally without administrator rights');
     expect(installBat).toContain('if defined OCTO_WANTS_BACKGROUND if not defined OCTO_WANTS_CONSOLE');
     // There is exactly one hidden relaunch, and it is guarded by the explicit
     // background condition above; the default path reaches PowerShell directly.

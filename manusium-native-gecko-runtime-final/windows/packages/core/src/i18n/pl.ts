@@ -656,7 +656,7 @@ export const pl: Record<string, string> = {
   'leak.exposed': 'Widoczne dla stron',
 
   // ---------------------------------------------------------------- interfejs przeglądarki
-  'ui.addressPlaceholder': 'Szukaj w DuckDuckGo lub wpisz adres',
+  'ui.addressPlaceholder': 'Szukaj lub wpisz adres',
   'ui.newTab': 'Nowa karta',
   'ui.closeTab': 'Zamknij kartę',
   'ui.searchTabs': 'Szukaj kart',
@@ -1705,7 +1705,7 @@ export const pl: Record<string, string> = {
   'detect.notInstalled': 'Nie znaleziono OctoDetect.su obok Octo.su. Zainstaluj pełny pakiet OctoSuite.',
 
   // ---------------------------------------------------------------- strony wewnętrzne
-  'newtab.search': 'Szukaj w DuckDuckGo lub wpisz adres',
+  'newtab.search': 'Szukaj lub wpisz adres',
   'newtab.searchNote': 'Wyszukiwania trafiają do DuckDuckGo. Podczas pisania nic nie jest wysyłane.',
   'newtab.protection': 'Ochrona',
   'errpage.title': 'Nie można otworzyć tej strony',

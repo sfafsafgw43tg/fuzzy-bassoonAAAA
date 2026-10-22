@@ -61,8 +61,16 @@ describe('profile-local Chrome extensions', () => {
     fs.writeFileSync(path.join(root, 'manifest.json'), JSON.stringify({
       manifest_version: 3, name: 'Local QA tool', version: '1.2.3', permissions: ['storage', 'tabs'], host_permissions: ['https://example.test/*'],
     }));
-    expect(inspectLocalChromeExtension(root)).toMatchObject({ name: 'Local QA tool', version: '1.2.3', permissions: ['storage', 'tabs'], hostPermissions: ['https://example.test/*'], manifestVersion: 3 });
+    expect(inspectLocalChromeExtension(root)).toMatchObject({ name: 'Local QA tool', version: '1.2.3', permissions: ['storage', 'tabs'], hostPermissions: ['https://example.test/*'], manifestVersion: 3, integrity: expect.stringMatching(/^[a-f0-9]{64}$/) });
     expect(inspectLocalChromeExtension(root).id).toMatch(/^chrome-local-[a-f0-9]{16}$/);
+  });
+
+  it('changes the integrity marker when an unpacked bundle changes', () => {
+    const root = fs.mkdtempSync(path.join('/tmp', 'octo-local-extension-integrity-'));
+    fs.writeFileSync(path.join(root, 'manifest.json'), JSON.stringify({ manifest_version: 3, name: 'Integrity tool', version: '1' }));
+    const before = inspectLocalChromeExtension(root).integrity;
+    fs.writeFileSync(path.join(root, 'background.js'), 'console.log("changed");');
+    expect(inspectLocalChromeExtension(root).integrity).not.toBe(before);
   });
 
   it('rejects malformed and unsupported manifests', () => {

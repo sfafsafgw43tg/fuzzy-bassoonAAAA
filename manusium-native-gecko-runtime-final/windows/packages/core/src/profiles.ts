@@ -86,6 +86,8 @@ export interface ProfileChromeExtension {
   name: string;
   version: string;
   path: string;
+  /** SHA-256 integrity marker for the selected unpacked bundle. */
+  integrity?: string;
   permissions: string[];
   hostPermissions: string[];
   enabled: boolean;
@@ -504,7 +506,8 @@ export function sanitizeProfile(input: unknown): Profile {
         && typeof value.enabled === 'boolean';
     }).slice(0, 12).map((extension) => ({
       id: extension.id.slice(0, 80), name: extension.name.replace(/[\u0000-\u001f]/g, '').slice(0, 120), version: extension.version.slice(0, 64),
-      path: path.resolve(extension.path).slice(0, 2048), permissions: extension.permissions.filter((item) => typeof item === 'string').slice(0, 64).map((item) => item.slice(0, 256)),
+      path: path.resolve(extension.path).slice(0, 2048), integrity: typeof extension.integrity === 'string' && /^[a-f0-9]{64}$/.test(extension.integrity) ? extension.integrity : undefined,
+      permissions: extension.permissions.filter((item) => typeof item === 'string').slice(0, 64).map((item) => item.slice(0, 256)),
       hostPermissions: extension.hostPermissions.filter((item) => typeof item === 'string').slice(0, 64).map((item) => item.slice(0, 256)), enabled: extension.enabled,
     })) : [],
     savePasswords: typeof p.savePasswords === 'boolean' ? p.savePasswords : base.savePasswords,

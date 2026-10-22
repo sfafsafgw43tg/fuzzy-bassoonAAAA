@@ -68,6 +68,11 @@ let pageInfoView: PageInfoView = 'root';
 let panelCoversContent = false;
 let closeCountdownTimer: number | undefined;
 let stopChromeMediaPreview: (() => boolean) | null = null;
+// The trusted chrome should behave like a browser's omnibox: after the
+// profile window is opened, typing starts in the address/search field without
+// requiring a click. New-tab commands also focus it through the existing
+// ui:focus-address event.
+let focusAddressOnFirstState = true;
 const downloads = new Map<string, DownloadInfo>();
 let shuttingDown = false;
 
@@ -2751,6 +2756,10 @@ function initEvents(): void {
     renderAddress();
     renderStatus();
     void renderBookbar();
+    if (focusAddressOnFirstState) {
+      focusAddressOnFirstState = false;
+      window.requestAnimationFrame(() => handleCommand('focus-address'));
+    }
     if (panel === 'audio' || panel === 'addons' || panel === 'updates') openPanel(panel, () => void renderPanel(panel!), t(`panel.${panel}`));
   });
   api.on<TabState>('ui:tab', (tab) => {

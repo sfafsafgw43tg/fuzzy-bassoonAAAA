@@ -23,6 +23,7 @@ export interface LocalChromeExtensionManifest {
   name: string;
   version: string;
   path: string;
+  integrity: string;
   permissions: string[];
   hostPermissions: string[];
   manifestVersion: 2 | 3;
@@ -37,6 +38,23 @@ const BUNDLED_EXTENSIONS: readonly BundledExtension[] = Object.freeze([
 const cleanStrings = (value: unknown, max = 64): string[] => Array.isArray(value)
   ? value.filter((item): item is string => typeof item === 'string').map((item) => item.replace(/[\u0000-\u001f]/g, '').trim().slice(0, 256)).filter(Boolean).slice(0, max)
   : [];
+
+function extensionIntegrity(root: string): string {
+  const hash = crypto.createHash('sha256');
+  const walk = (dir: string): void => {
+    for (const entry of fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name))) {
+      const full = path.join(dir, entry.name);
+      const relative = path.relative(root, full).replace(/\\/g, '/');
+      if (entry.isSymbolicLink()) throw new Error('Chrome extension bundles cannot contain symbolic links');
+      if (entry.isDirectory()) { walk(full); continue; }
+      if (!entry.isFile()) continue;
+      if (fs.statSync(full).size > 32 * 1024 * 1024) throw new Error('Chrome extension file is too large');
+      hash.update(relative).update('\0').update(fs.readFileSync(full)).update('\0');
+    }
+  };
+  walk(root);
+  return hash.digest('hex');
+}
 
 /** Validate an unpacked MV2/MV3 directory and return only safe persisted metadata. */
 export function inspectLocalChromeExtension(extensionPath: string): LocalChromeExtensionManifest {
@@ -54,11 +72,11 @@ export function inspectLocalChromeExtension(extensionPath: string): LocalChromeE
   const version = typeof manifest.version === 'string' ? manifest.version.trim().slice(0, 64) : '';
   if (!name || !version) throw new Error('Chrome extension manifest must declare name and version');
   const digest = crypto.createHash('sha256').update(resolved.toLowerCase()).digest('hex').slice(0, 16);
-  return { id: `chrome-local-${digest}`, name, version, path: resolved, permissions: cleanStrings(manifest.permissions), hostPermissions: cleanStrings(manifest.host_permissions), manifestVersion };
+  return { id: `chrome-local-${digest}`, name, version, path: resolved, integrity: extensionIntegrity(resolved), permissions: cleanStrings(manifest.permissions), hostPermissions: cleanStrings(manifest.host_permissions), manifestVersion };
 }
 
 export function toProfileChromeExtension(manifest: LocalChromeExtensionManifest): ProfileChromeExtension {
-  return { id: manifest.id, name: manifest.name, version: manifest.version, path: manifest.path, permissions: manifest.permissions, hostPermissions: manifest.hostPermissions, enabled: true };
+  return { id: manifest.id, name: manifest.name, version: manifest.version, path: manifest.path, integrity: manifest.integrity, permissions: manifest.permissions, hostPermissions: manifest.hostPermissions, enabled: true };
 }
 
 export function bundledExtension(addonId: string): BundledExtension | undefined {
