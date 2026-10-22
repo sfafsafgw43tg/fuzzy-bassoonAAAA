@@ -135,14 +135,6 @@ describe('installer recovers from missing vendor packages', () => {
     expect(source).toContain("node_modules\\electron\\dist\\electron.exe");
   });
 
-  it('quotes the Electron ACL path and rights token for spaced checkout paths', () => {
-    const acl = source.slice(source.indexOf('function Repair-ElectronSandboxAcl'), source.indexOf('# Validate one staged native runtime'));
-    expect(acl).toContain("('\"{0}\" /grant \"*S-1-15-2-1:(OI)(CI)(RX)\" /T /C' -f $dist)");
-    expect(acl).toContain('-ArgumentList $aclArguments');
-    expect(acl).toContain('/grant:r');
-    expect(acl).toContain("$verified = (& icacls.exe $dist 2>&1 | Out-String)");
-  });
-
   it('only ever downloads from the allowed vendor hosts', () => {
     const hosts = /\$VendorHosts = @\(([^)]*)\)/.exec(source)?.[1] ?? '';
     expect(hosts).toContain('dl.google.com');

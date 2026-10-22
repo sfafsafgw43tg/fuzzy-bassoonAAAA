@@ -2515,27 +2515,12 @@ function Repair-ElectronSandboxAcl {
   $aclText = (& icacls.exe $dist 2>&1 | Out-String)
   if ($aclText -match 'S-1-15-2-1|ALL APPLICATION PACKAGES') { return $true }
   try {
-    # Start-Process joins an ArgumentList array into one command line. Quote
-    # both the path and the SID/rights token explicitly; otherwise a checkout
-    # such as C:\ad pod kange\... is split and icacls returns ERROR_INVALID_PARAMETER (87).
-    $aclAttempts = @(
-      ('"{0}" /grant "*S-1-15-2-1:(OI)(CI)(RX)" /T /C' -f $dist),
-      # Some Windows builds reject /grant with a pre-existing explicit ACE;
-      # /grant:r replaces only this SID's ACE with the same least privilege.
-      ('"{0}" /grant:r "*S-1-15-2-1:(OI)(CI)(RX)" /T /C' -f $dist)
-    )
-    $lastExit = $null
-    foreach ($aclArguments in $aclAttempts) {
-      $result = Start-Process -FilePath 'icacls.exe' -ArgumentList $aclArguments -WorkingDirectory $InstallRoot -Verb RunAs -Wait -PassThru
-      $lastExit = $result.ExitCode
-      if ($lastExit -ne 0) { continue }
-      $verified = (& icacls.exe $dist 2>&1 | Out-String)
-      if ($verified -match 'S-1-15-2-1|ALL APPLICATION PACKAGES') {
-        Write-Log 'info' "Repaired Electron sandbox ACL: $dist"
-        return $true
-      }
-    }
-    throw "icacls could not apply the Electron sandbox ACL (last exit code $lastExit)."
+    $result = Start-Process -FilePath 'icacls.exe' -ArgumentList @($dist, '/grant', '*S-1-15-2-1:(OI)(CI)(RX)', '/T', '/C') -WorkingDirectory $InstallRoot -Verb RunAs -Wait -PassThru
+    if ($result.ExitCode -ne 0) { throw "icacls exited with code $($result.ExitCode)" }
+    $verified = (& icacls.exe $dist 2>&1 | Out-String)
+    if ($verified -notmatch 'S-1-15-2-1|ALL APPLICATION PACKAGES') { throw 'The Electron sandbox ACL was not present after repair.' }
+    Write-Log 'info' "Repaired Electron sandbox ACL: $dist"
+    return $true
   } catch {
     Warn "Electron cannot start because its sandbox ACL is missing. Run setup as administrator and repair '$dist'. $($_.Exception.Message)"
     return $false

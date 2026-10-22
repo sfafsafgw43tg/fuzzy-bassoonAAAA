@@ -204,12 +204,12 @@ export async function startProfile(p: Profile): Promise<void> {
     case 'wsb-unavailable': wsbUnavailable(p); break;
     case 'inkbrowser-missing': case 'inkbrowser-conflict': toast(inkbrowserLaunchMessage(r.status, r.detail), 'err'); break;
     case 'firefox-engine-unavailable': toast(`${t('launch.status.firefox-engine-unavailable')} (${r.detail ?? 'runtime-unavailable'})`, 'err'); break;
-    case 'firefox-launch-failed': toast(t('launch.status.firefox-launch-failed'), 'err', r.detail); break;
+    case 'firefox-launch-failed': toast(t('launch.status.firefox-launch-failed'), 'err'); break;
     case 'browser-integration-missing': toast(t('launch.status.browser-integration-missing'), 'err'); break;
     case 'browser-integration-unsupported': toast(t('launch.status.browser-integration-unsupported'), 'err'); break;
     case 'browser-integration-unavailable': toast(t('launch.status.browser-integration-unavailable'), 'err'); break;
-    case 'browser-integration-launch-failed': toast(t('launch.status.browser-integration-launch-failed'), 'err', r.detail); break;
-    default: toast(r.status, 'err', r.detail);
+    case 'browser-integration-launch-failed': toast(t('launch.status.browser-integration-launch-failed'), 'err'); break;
+    default: toast(r.status, 'err');
   }
   progress?.done();
 }
