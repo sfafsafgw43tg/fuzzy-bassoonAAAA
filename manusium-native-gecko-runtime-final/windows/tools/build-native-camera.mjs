@@ -32,6 +32,14 @@ const projects = [
 fs.mkdirSync(output, { recursive: true });
 let completed = false;
 try {
+  // The DirectShow backend includes the shared protocol as
+  // ../../octo-camera/feed_protocol.h. The two projects are staged as
+  // siblings, so provide that header explicitly without copying the whole
+  // Media Foundation project into the DirectShow build tree.
+  const protocolSource = path.join(root, 'native', 'octo-camera', 'feed_protocol.h');
+  const protocolTarget = path.join(staging, 'octo-camera', 'feed_protocol.h');
+  fs.mkdirSync(path.dirname(protocolTarget), { recursive: true });
+  fs.copyFileSync(protocolSource, protocolTarget);
   for (const project of projects) {
     fs.cpSync(project.source, project.staged, { recursive: true, filter: (entry) => !entry.includes(`${path.sep}build${path.sep}`) && !entry.endsWith(`${path.sep}build`) });
     run('cmake', ['-S', project.staged, '-B', project.build, '-A', 'x64']);

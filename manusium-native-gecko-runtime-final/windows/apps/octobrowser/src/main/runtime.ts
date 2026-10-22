@@ -273,10 +273,20 @@ export class ProfileRuntime {
     if (!urls.length && this.profile.homePage) urls.push(this.profile.homePage);
     urls.push(...startPages);
     const initialWindow = this.openWindow(urls);
-    // A profile is ready only once a visible browser window has loaded its
-    // trusted chrome. This keeps the launcher from showing STOP for a hidden
-    // or failed-to-load profile window.
-    await initialWindow.whenChromeReady();
+    // The native window is already shown by openWindow(). Do not leave the
+    // launcher stuck at STARTING while a Windows renderer is still loading the
+    // local trusted chrome. A failed load still rejects immediately; a slow
+    // load is allowed to finish in the visible profile window asynchronously.
+    let chromeReady = false;
+    try {
+      await Promise.race([
+        initialWindow.whenChromeReady().then(() => { chromeReady = true; }),
+        new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
+      ]);
+    } catch (err) {
+      throw err;
+    }
+    if (!chromeReady) this.logger.warn('window.chrome-load-slow', { profile: this.profile.id });
     this.logger.info('profile.started', { profile: this.profile.id, kind: this.profile.kind, level: this.profile.protection.level, sandbox: this.profile.sandbox.mode });
     this.channel.send({ t: 'ready' });
 
@@ -384,13 +394,17 @@ export class ProfileRuntime {
     if (!f.enabled) return undefined;
     const usesAuto = f.timezone.mode === 'auto' || f.language.mode === 'auto' || f.geolocation.mode === 'auto' || f.webrtc.mode === 'altered';
     if (!usesAuto) return undefined;
-    // "Based on IP" must inspect the actual exit even in system/direct mode.
-    // Falling back to the Windows locale is what made a Polish IP open Google
-    // in Romanian on hosts whose regional settings happened to be Romanian.
-    const r = await this.checkProxy().catch(() => undefined);
-    const g = r?.ok ? r : this.profile.proxyCheck?.ok ? this.profile.proxyCheck : undefined;
-    if (!r?.ok) this.logger.warn('fingerprint.proxy-check-failed', { error: r?.error });
-    return g;
+    // A saved, verified proxy result is already the profile's last known exit
+    // identity. Re-checking public IP services synchronously here made a normal
+    // Electron launch depend on DNS, proxy latency, and third-party availability;
+    // on Windows that could keep the child alive with no window until the
+    // manager's readiness timeout fired. Use the saved result for startup and
+    // let explicit proxy checks refresh it later.
+    if (this.profile.proxyCheck?.ok) return this.profile.proxyCheck;
+    // Do not perform a first-launch network request here. A profile without a
+    // cached result must still open immediately; the explicit proxy-check
+    // action can refresh the exit identity after the window is available.
+    return undefined;
   }
 
   private async shutdown(): Promise<void> {
@@ -1434,11 +1448,11 @@ export function runProfileProcess(distDir: string, dataDir: string, lang: Lang, 
     app.exit(3); // not started by the manager
     return;
   }
-  // Exactly one process per profile (Chromium also locks the userData folder).
-  if (!app.requestSingleInstanceLock()) {
-    app.exit(0);
-    return;
-  }
+  // Do not call Electron's global requestSingleInstanceLock() here. The
+  // launcher already owns that application-wide lock, so asking for it again
+  // makes every profile child exit before it receives its key on Windows.
+  // The manager owns one child per profile and Chromium's profile directory
+  // lock provides the second line of defence.
   let started = false;
   const timeout = setTimeout(() => { if (!started) app.exit(2); }, 20_000); // no key from the manager => exit
   channel.onMessage((m) => {
