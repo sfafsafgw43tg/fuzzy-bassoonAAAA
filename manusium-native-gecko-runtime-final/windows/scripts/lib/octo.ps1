@@ -2515,7 +2515,11 @@ function Repair-ElectronSandboxAcl {
   $aclText = (& icacls.exe $dist 2>&1 | Out-String)
   if ($aclText -match 'S-1-15-2-1|ALL APPLICATION PACKAGES') { return $true }
   try {
-    $result = Start-Process -FilePath 'icacls.exe' -ArgumentList @($dist, '/grant', '*S-1-15-2-1:(OI)(CI)(RX)', '/T', '/C') -WorkingDirectory $InstallRoot -Verb RunAs -Wait -PassThru
+    # Start-Process joins an ArgumentList array into one command line. Quote
+    # both the path and the SID/rights token explicitly; otherwise a checkout
+    # such as C:\ad pod kange\... is split and icacls returns ERROR_INVALID_PARAMETER (87).
+    $aclArguments = '"{0}" /grant "*S-1-15-2-1:(OI)(CI)(RX)" /T /C' -f $dist
+    $result = Start-Process -FilePath 'icacls.exe' -ArgumentList $aclArguments -WorkingDirectory $InstallRoot -Verb RunAs -Wait -PassThru
     if ($result.ExitCode -ne 0) { throw "icacls exited with code $($result.ExitCode)" }
     $verified = (& icacls.exe $dist 2>&1 | Out-String)
     if ($verified -notmatch 'S-1-15-2-1|ALL APPLICATION PACKAGES') { throw 'The Electron sandbox ACL was not present after repair.' }
