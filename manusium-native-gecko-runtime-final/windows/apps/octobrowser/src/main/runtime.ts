@@ -88,6 +88,8 @@ export class ProfileRuntime {
   /** Saved website logins of this profile (see packages/core/src/passwords.ts). */
   passwords!: PasswordStore;
   private bridge: ProxyBridge | null = null;
+  /** Prevent duplicate manager readiness messages when the safe shell opens early. */
+  private startupReadySent = false;
   /** Manager-owned quota for the saved proxy currently assigned to this profile. */
   private proxyQuota: { id: string; limitBytes: number; usedBytes: number } | null = null;
   private pendingProxyUsage = 0;
@@ -156,6 +158,12 @@ export class ProfileRuntime {
     }
   }
 
+  private signalStartupReady(): void {
+    if (this.startupReadySent) return;
+    this.startupReadySent = true;
+    this.channel.send({ t: 'ready' });
+  }
+
   // ---------------------------------------------------------------- start
 
   async start(key: Buffer, quota?: { id: string; limitBytes: number; usedBytes: number }): Promise<void> {
@@ -204,6 +212,17 @@ export class ProfileRuntime {
       isTrafficAllowed: () => this.canUseProxyTraffic(),
       isOffline: () => this.settings.load().offline,
     });
+    // Open an empty local shell before proxy resolution, extension loading, or
+    // cookie migration. It contains no external tab, so this cannot send page
+    // traffic before the profile route is installed, but it prevents a slow
+    // Windows API from making the profile appear not to start.
+    this.registerIpc();
+    const initialWindow = this.openWindow([], true);
+    await Promise.race([
+      initialWindow.whenChromeReady(),
+      new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
+    ]);
+    this.signalStartupReady();
     // Proxy with credentials Chromium cannot use (SOCKS auth) -> local bridge.
     await this.startProxyBridge();
     // Route the session before the first exit-IP lookup. Without this ordering,
@@ -250,7 +269,6 @@ export class ProfileRuntime {
     // Cookies imported in the launcher while the profile was closed.
     await this.applyQueuedCookies();
 
-    this.registerIpc();
     this.channel.onMessage((m) => void this.onManagerMessage(m));
 
     // Restore previous session or open the home page.
@@ -272,23 +290,10 @@ export class ProfileRuntime {
       .slice(0, 20);
     if (!urls.length && this.profile.homePage) urls.push(this.profile.homePage);
     urls.push(...startPages);
-    const initialWindow = this.openWindow(urls);
-    // The native window is already shown by openWindow(). Do not leave the
-    // launcher stuck at STARTING while a Windows renderer is still loading the
-    // local trusted chrome. A failed load still rejects immediately; a slow
-    // load is allowed to finish in the visible profile window asynchronously.
-    let chromeReady = false;
-    try {
-      await Promise.race([
-        initialWindow.whenChromeReady().then(() => { chromeReady = true; }),
-        new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
-      ]);
-    } catch (err) {
-      throw err;
+    for (const url of (urls.length ? urls : [initialWindow.defaultNewTabUrl()])) {
+      initialWindow.newTab(url, { active: true });
     }
-    if (!chromeReady) this.logger.warn('window.chrome-load-slow', { profile: this.profile.id });
     this.logger.info('profile.started', { profile: this.profile.id, kind: this.profile.kind, level: this.profile.protection.level, sandbox: this.profile.sandbox.mode });
-    this.channel.send({ t: 'ready' });
 
     app.on('before-quit', (e) => {
       if (this.quitting) return;
