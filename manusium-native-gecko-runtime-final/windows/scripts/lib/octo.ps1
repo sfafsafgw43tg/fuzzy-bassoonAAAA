@@ -921,7 +921,13 @@ function Invoke-Open([string]$appId) {
   $argString = $allArgs -join ' '
 
 
-  $electronExe = Get-ElectronLauncherExe 'octobrowser'
+  # In a source checkout, never select release\octobrowser\win-unpacked\Octo.su.exe:
+  # it can be older than the source that was just rebuilt. Use the package-owned
+  # Electron binary directly. Installed copies retain the packaged resolver.
+  $electronExe = if ($devCheckout) {
+    $sourceElectron = Join-Path $InstallRoot 'node_modules\electron\dist\electron.exe'
+    if (Test-Path -LiteralPath $sourceElectron -PathType Leaf) { $sourceElectron } else { $null }
+  } else { Get-ElectronLauncherExe 'octobrowser' }
   if ($electronExe) {
     if (-not (Test-Path -LiteralPath $appMain)) { Fail (T 'notBuilt') }
     Say (T 'devMode')
