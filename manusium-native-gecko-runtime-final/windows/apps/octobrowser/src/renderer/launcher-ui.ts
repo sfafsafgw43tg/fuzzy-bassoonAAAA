@@ -56,6 +56,7 @@ export interface Fingerprint {
 }
 export interface ProxyCheck { ok: boolean; at: string; ip?: string; country?: string; countryCode?: string; region?: string; city?: string; timezone?: string; latitude?: number; longitude?: number; latencyMs?: number; error?: string }
 export interface ProfileProxy { type: ProxyType; host: string; port: number; changeIpUrl: string; name: string; savedId: string }
+export interface ProfileChromeExtension { id: string; name: string; version: string; path: string; permissions: string[]; hostPermissions: string[]; enabled: boolean }
 export interface Profile {
   /** Browser engine: 'electron' (default when missing) or 'inkbrowser'. */
   engine?: string; chromiumRuntime?: string; browserIntegration?: string; browserExecutablePath?: string;
@@ -67,7 +68,7 @@ export interface Profile {
   audio: { muted: boolean; volume: number; outputDeviceId: string };
   mediaCapture: { cameraLabel: string; microphoneLabel: string };
   mobile: { device: MobileDeviceId; orientation: 'portrait' | 'landscape'; osVersion?: '15' | '14' | '13' | '12' | '18.0' | '17.5' | '16.7' };
-  addons: string[]; vstudioWebOnLaunch: boolean; encrypted: boolean; deleteOnClose: boolean; keepHistory: boolean; savePasswords: boolean; restoreSession: boolean; homePage: string; searchEngine?: string;
+  addons: string[]; chromeExtensions?: ProfileChromeExtension[]; vstudioWebOnLaunch: boolean; encrypted: boolean; deleteOnClose: boolean; keepHistory: boolean; savePasswords: boolean; restoreSession: boolean; homePage: string; searchEngine?: string;
   theme: 'dark' | 'light'; browserShell: 'octo' | 'chrome' | 'chromium' | 'firefox' | 'safari'; baseChromeLook: boolean; ordinaryBrowser?: boolean; appMode?: boolean; smartPaste?: boolean; fingerprint: Fingerprint;
   enginePrivacy: { chromium: { webRtc: 'default' | 'disable-non-proxied-udp'; location: 'ask' | 'block'; webgl: 'allow' | 'disable' }; firefox: { webRtc: 'default' | 'disabled'; location: 'ask' | 'block'; webgl: 'allow' | 'disable'; resistFingerprinting: boolean } };
   nativeChromium: NativeChromiumConfig;

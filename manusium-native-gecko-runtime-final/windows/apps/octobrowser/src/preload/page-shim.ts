@@ -23,6 +23,8 @@
  */
 
 export interface PageFingerprint {
+  /** Profile-selected UA; optional for compatibility with older serialized profiles. */
+  userAgent?: string;
   platform: string;
   brands: Array<{ brand: string; version: string }>;
   fullVersionList: Array<{ brand: string; version: string }>;
@@ -667,6 +669,7 @@ export function pageShim(c: PageConfig, eventName: string): void {
       vendor: string;
       renderer: string;
       seed: number;
+      userAgent: string;
       platform: string;
       languages: string[];
       cores: number | null;
@@ -704,6 +707,7 @@ export function pageShim(c: PageConfig, eventName: string): void {
         } catch { /* protected prototype */ }
       };
       fixedWorker('platform', config.platform);
+      fixedWorker('userAgent', config.userAgent);
       if (config.cores) fixedWorker('hardwareConcurrency', config.cores);
       if (config.memory) fixedWorker('deviceMemory', config.memory);
       if (config.languages.length) {
@@ -878,7 +882,7 @@ export function pageShim(c: PageConfig, eventName: string): void {
     };
     const nativeWorker = (W as { Worker?: unknown }).Worker;
     if (typeof nativeWorker === 'function') {
-      const workerConfig = JSON.stringify({ webgl: fp.webgl, webgpu: fp.webgpu, vendor: fp.webglVendor || 'WebGL Vendor', renderer: fp.webglRenderer || 'WebGL Renderer', seed, platform: fp.platform, languages: fp.languages || [], cores: fp.cores, memory: fp.memory, canvas: fp.canvas });
+      const workerConfig = JSON.stringify({ webgl: fp.webgl, webgpu: fp.webgpu, vendor: fp.webglVendor || 'WebGL Vendor', renderer: fp.webglRenderer || 'WebGL Renderer', seed, userAgent: fp.userAgent || String((W.navigator as { userAgent?: unknown } | undefined)?.userAgent || ''), platform: fp.platform, languages: fp.languages || [], cores: fp.cores, memory: fp.memory, canvas: fp.canvas });
       const bootstrapSource = workerWebGLBootstrap.toString();
       const WrappedWorker = new Proxy(nativeWorker as new (u: string | URL, o?: WorkerOptions) => Worker, {
         construct(target, args, newTarget) {
@@ -905,7 +909,7 @@ export function pageShim(c: PageConfig, eventName: string): void {
     }
     const nativeSharedWorker = (W as { SharedWorker?: unknown }).SharedWorker;
     if (typeof nativeSharedWorker === 'function') {
-      const workerConfig = JSON.stringify({ webgl: fp.webgl, webgpu: fp.webgpu, vendor: fp.webglVendor || 'WebGL Vendor', renderer: fp.webglRenderer || 'WebGL Renderer', seed, platform: fp.platform, languages: fp.languages || [], cores: fp.cores, memory: fp.memory, canvas: fp.canvas });
+      const workerConfig = JSON.stringify({ webgl: fp.webgl, webgpu: fp.webgpu, vendor: fp.webglVendor || 'WebGL Vendor', renderer: fp.webglRenderer || 'WebGL Renderer', seed, userAgent: fp.userAgent || String((W.navigator as { userAgent?: unknown } | undefined)?.userAgent || ''), platform: fp.platform, languages: fp.languages || [], cores: fp.cores, memory: fp.memory, canvas: fp.canvas });
       const bootstrapSource = workerWebGLBootstrap.toString();
       type SharedWorkerInit = { name?: string; type?: 'classic' | 'module'; credentials?: 'omit' | 'same-origin' | 'include' };
       const WrappedSharedWorker = new Proxy(nativeSharedWorker as new (u: string | URL, o?: string | SharedWorkerInit) => SharedWorker, {

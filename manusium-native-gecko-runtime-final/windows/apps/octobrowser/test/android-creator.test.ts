@@ -880,14 +880,13 @@ describe('portable handset files', () => {
 });
 
 describe('Windows native camera connection notification', () => {
-  it('notifies after a successful native camera installation', () => {
+  it('shows an in-app card after a successful native camera installation', () => {
     expect(manager).toContain("handle('mgr:native-camera-install'");
     expect(manager).toContain("if (result.installed && process.platform === 'win32')");
     expect(manager).toContain("const title = strings['android.nativeCamera.connectedTitle']");
     expect(manager).toContain("const body = strings['android.nativeCamera.connectedBody']");
-    expect(manager).toContain('silent: false');
-    expect(manager).toContain('notification.show()');
-    expect(manager).toContain('dialog.showMessageBox');
-    expect(manager).toContain("buttons: ['OK']");
+    expect(manager).toContain("this.launcher?.webContents.send('mgr:toast'");
+    expect(manager).not.toContain('new Notification');
+    expect(manager).not.toContain('dialog.showMessageBox');
   });
 });

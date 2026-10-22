@@ -2017,7 +2017,7 @@ function Test-AndroidStudioPresent {
 # Downloads from vendor hosts the tooling really needs. The
 # allow-list is exact: anything else is refused, the same rule Invoke-Download
 # applies to our own release host.
-$VendorHosts = @('aka.ms', 'dl.google.com', 'download.vb-audio.com', 'vb-audio.com', 'nodejs.org', 'github.com', 'git-scm.com', 'www.python.org', 'obsproject.com')
+$VendorHosts = @('aka.ms', 'dl.google.com', 'download.vb-audio.com', 'vb-audio.com', 'nodejs.org', 'github.com', 'api.github.com', 'git-scm.com', 'www.python.org', 'obsproject.com', 'cmake.org', 'visualstudio.microsoft.com', 'developer.android.com', 'learn.microsoft.com', 'chromium.googlesource.com')
 
 function Invoke-VendorDownload([string]$url, [string]$dest) {
   try { $host_ = ([uri]$url).Host } catch { return $false }

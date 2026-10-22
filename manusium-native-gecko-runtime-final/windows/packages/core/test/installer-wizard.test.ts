@@ -349,7 +349,8 @@ describe('steps and the console installer', () => {
     expect(octo).toContain('if ($step.Fatal) { break }');
     const depsStep = octo.slice(octo.indexOf("Key = 'stepDeps'"), octo.indexOf("Key = 'stepBuild'"));
     expect(depsStep).toContain('Fatal = $true');
-    expect(depsStep).toContain('return (Invoke-EnsureDependencies)');
+    expect(depsStep).toContain('Invoke-EnsureDependencies');
+    expect(depsStep).toContain('Repair-ElectronSandboxAcl');
   });
 });
 

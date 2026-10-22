@@ -28,7 +28,7 @@ The UI uses native labelled selects and status text. Camera testing remains opt-
 
 [Google's android-emulator-container-scripts](https://github.com/google/android-emulator-container-scripts) provides Linux/Docker/KVM packaging and a WebRTC gateway. Its requirements and GPU/KVM assumptions make it unsuitable as a direct Windows AVD plugin. Its gateway architecture is a possible future reference for remote display/control, not for local camera injection.
 
-[Genymobile/scrcpy](https://github.com/Genymobile/scrcpy) is useful for display/control and ADB workflows, but it does not provide a host camera-to-Android Camera HAL bridge. It should not be presented as a camera fix.
+ADB display/control tools are useful for device workflows, but they do not provide a host camera-to-Android Camera HAL bridge and should not be presented as a camera fix.
 
 The Android Emulator source and hardware-property documentation confirm that valid camera values include `emulated`, `webcam<N>`, and `none`: [hardware-properties.ini](https://android.googlesource.com/platform/external/qemu/+/b5b78438ae9ff3b90aafdab0f4f25585affc22fb/android/avd/hardware-properties.ini) and [Android Emulator camera support](https://developer.android.com/studio/run/emulator-use-camera).
 

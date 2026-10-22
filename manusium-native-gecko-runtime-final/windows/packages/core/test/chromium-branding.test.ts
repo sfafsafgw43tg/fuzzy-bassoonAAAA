@@ -30,7 +30,7 @@ it('brands Windows resources and relaunch names without changing legal attributi
 it('keeps the release version pins aligned with the Windows selection catalog', async () => {
   const { catalogForPlatform } = await import('../../shell/src/runtime-catalog');
   const versions = JSON.parse(fs.readFileSync(path.join(root, 'tools/chromium-versions.json'), 'utf8'));
-  expect(versions).toEqual(catalogForPlatform('win32', 'x64').filter(entry => entry.support === 'supported').map(entry => entry.version));
+  expect(versions).toEqual(catalogForPlatform('win32', 'x64').filter(entry => entry.support === 'supported' && !entry.distribution).map(entry => entry.version));
 });
 it('sets Octo taskbar identity, icon and relaunch metadata before creating windows', () => {
   const prepare = fs.readFileSync(path.join(root, 'packages/shell/src/prepare.ts'), 'utf8');

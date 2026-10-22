@@ -69,7 +69,7 @@ import { discoverEngineRuntime, EngineRunnerError } from '@octo/shell/engine-run
 import { catalogEntry, catalogForPlatform, listInstalled, installChromium, removeChromium, DEFAULT_CHROMIUM_VERSION } from '@octo/shell/runtime-catalog';
 import { discoverFirefoxRuntime, geckoCatalogEntry, installFirefoxRuntime, inspectFirefoxRuntime } from '@octo/shell/gecko-runtime';
 import { chromiumPrivacyArgs, prepareChromiumPrivacy, prepareFirefoxPrivacy } from '@octo/shell/engine-privacy';
-import { nativeBundledExtensionPaths } from './extensions';
+import { inspectLocalChromeExtension, nativeBundledExtensionPaths, toProfileChromeExtension } from './extensions';
 import { installNativeCamera, nativeCameraStatus, uninstallNativeCamera } from './native-camera';
 import { detectBrowserIntegrations, launchBrowserIntegration } from './browser-integrations';
 
@@ -2254,6 +2254,13 @@ export class Manager {
         const allowed: Partial<Profile> = {};
         if (patch.audio) allowed.audio = patch.audio;
         if (patch.addons) allowed.addons = patch.addons;
+        if (Array.isArray(patch.chromeExtensions)) {
+          allowed.chromeExtensions = patch.chromeExtensions.slice(0, 12).map((extension) => {
+            const inspected = inspectLocalChromeExtension(String(extension.path ?? ''));
+            if (inspected.id !== extension.id) throw new Error('Chrome extension identity changed; select the folder again');
+            return { ...toProfileChromeExtension(inspected), enabled: extension.enabled === true };
+          });
+        }
         if (patch.sandbox) allowed.sandbox = { ...this.profiles.get(id).sandbox, ...patch.sandbox };
         if (patch.mediaCapture) allowed.mediaCapture = patch.mediaCapture;
         if (patch.downloads) allowed.downloads = patch.downloads;
@@ -2738,7 +2745,7 @@ export class Manager {
       const body = clean(input?.body, 300);
       this.launcher?.show();
       this.launcher?.focus();
-      this.launcher?.webContents.send('mgr:toast', { title, body, source: 'Octo.su' });
+      this.launcher?.webContents.send('mgr:toast', { title, body, source: 'Octo.su', silent: input?.silent === true });
       return true;
     });
     // What the user chose last time, and the languages a device can boot in.
@@ -3598,6 +3605,13 @@ export class Manager {
       const win = BrowserWindow.fromWebContents(e.sender);
       const r = await dialog.showOpenDialog(win!, { properties: ['openDirectory', 'createDirectory'] });
       return r.canceled || !r.filePaths[0] ? null : r.filePaths[0];
+    });
+    handle('mgr:pick-chrome-extension', L, async (e) => {
+      const win = BrowserWindow.fromWebContents(e.sender);
+      const r = await dialog.showOpenDialog(win!, { properties: ['openDirectory'] });
+      if (r.canceled || !r.filePaths[0]) return null;
+      const inspected = inspectLocalChromeExtension(r.filePaths[0]);
+      return toProfileChromeExtension(inspected);
     });
     handle('mgr:move-folder-directory', L, async (_e, folder: string, root: string) => {
       this.fileProgress('move', 0, 0, '');

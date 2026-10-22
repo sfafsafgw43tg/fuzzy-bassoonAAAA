@@ -6,6 +6,7 @@
  * It intentionally does not depend on window, document, Electron, or imports.
  */
 export function serviceWorkerFingerprintPreload(config: {
+  userAgent: string;
   platform: string;
   languages: string[];
   cores: number | null;
@@ -30,6 +31,7 @@ export function serviceWorkerFingerprintPreload(config: {
       });
     } catch { /* protected platform property */ }
   };
+  define(workerNavigator, 'userAgent', config.userAgent);
   define(workerNavigator, 'platform', config.platform);
   if (config.cores) define(workerNavigator, 'hardwareConcurrency', config.cores);
   if (config.memory) define(workerNavigator, 'deviceMemory', config.memory);

@@ -80,6 +80,17 @@ export interface ProfileProxy {
   savedId: string;
 }
 
+/** User-selected unpacked Chromium extension, isolated to one Electron profile. */
+export interface ProfileChromeExtension {
+  id: string;
+  name: string;
+  version: string;
+  path: string;
+  permissions: string[];
+  hostPermissions: string[];
+  enabled: boolean;
+}
+
 /** Usage statistics shown in the profile list. */
 export interface ProfileStats {
   launches: number;
@@ -188,6 +199,8 @@ export interface Profile {
   vstudioWebOnLaunch: boolean;
   /** Enabled built-in modules / add-ons (ids from addons.ts). */
   addons: string[];
+  /** Explicitly imported, profile-local unpacked Chrome/Chromium extensions. */
+  chromeExtensions?: ProfileChromeExtension[];
   /** Encrypt engine data at rest with a profile password (vault). */
   encrypted: boolean;
   /** Delete all engine data when the last window of this profile closes. */
@@ -359,6 +372,7 @@ export function defaultProfile(kind: ProfileKind, name: string, id = newProfileI
     mobile: kind === 'phone' ? { device: 'pixel-8', orientation: 'portrait' } : { device: 'none', orientation: 'portrait' },
     vstudioWebOnLaunch: false,
     addons: kind === 'tor' ? [] : anti ? ['audio-mixer'] : [...DEFAULT_ADDONS],
+    chromeExtensions: [],
     encrypted: false,
     deleteOnClose: kind === 'temporary',
     keepHistory: anti || kind === 'personal' || kind === 'work',
@@ -480,6 +494,19 @@ export function sanitizeProfile(input: unknown): Profile {
     mobile: sanitizeMobile(p.mobile),
     vstudioWebOnLaunch: typeof p.vstudioWebOnLaunch === 'boolean' ? p.vstudioWebOnLaunch : false,
     addons: Array.isArray(p.addons) ? p.addons.filter((a) => typeof a === 'string').slice(0, 32) : base.addons,
+    chromeExtensions: Array.isArray(p.chromeExtensions) ? p.chromeExtensions.filter((extension): extension is ProfileChromeExtension => {
+      if (!extension || typeof extension !== 'object') return false;
+      const value = extension as Partial<ProfileChromeExtension>;
+      return typeof value.id === 'string' && /^chrome-local-[a-f0-9]{16}$/.test(value.id)
+        && typeof value.name === 'string' && typeof value.version === 'string'
+        && typeof value.path === 'string' && path.isAbsolute(value.path)
+        && Array.isArray(value.permissions) && Array.isArray(value.hostPermissions)
+        && typeof value.enabled === 'boolean';
+    }).slice(0, 12).map((extension) => ({
+      id: extension.id.slice(0, 80), name: extension.name.replace(/[\u0000-\u001f]/g, '').slice(0, 120), version: extension.version.slice(0, 64),
+      path: path.resolve(extension.path).slice(0, 2048), permissions: extension.permissions.filter((item) => typeof item === 'string').slice(0, 64).map((item) => item.slice(0, 256)),
+      hostPermissions: extension.hostPermissions.filter((item) => typeof item === 'string').slice(0, 64).map((item) => item.slice(0, 256)), enabled: extension.enabled,
+    })) : [],
     savePasswords: typeof p.savePasswords === 'boolean' ? p.savePasswords : base.savePasswords,
     theme: isProfileTheme(p.theme) ? p.theme : base.theme,
     browserShell,

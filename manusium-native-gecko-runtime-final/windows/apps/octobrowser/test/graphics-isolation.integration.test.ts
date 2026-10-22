@@ -90,6 +90,8 @@ it('patches worker-created OffscreenCanvas contexts and SharedWorker bootstraps'
   expect(source).toContain('const nativeSharedWorker');
   expect(source).toContain('new Proxy(nativeSharedWorker');
   expect(source).toContain('hashWorker(j ^ gpuSalt');
+  expect(source).toContain("fixedWorker('userAgent', config.userAgent)");
+  expect(source).toContain('userAgent: fp.userAgent');
 });
 
 it('registers a real per-profile Service Worker preload', () => {
@@ -101,6 +103,7 @@ it('registers a real per-profile Service Worker preload', () => {
   expect(worker).toContain('OffscreenCanvas');
   expect(worker).toContain('UNMASKED_RENDERER_WEBGL');
   expect(worker).toContain('hardwareConcurrency');
+  expect(worker).toContain("define(workerNavigator, 'userAgent', config.userAgent)");
 });
 
 it('covers Canvas exports and all common AudioBuffer/Analyser readback APIs', () => {

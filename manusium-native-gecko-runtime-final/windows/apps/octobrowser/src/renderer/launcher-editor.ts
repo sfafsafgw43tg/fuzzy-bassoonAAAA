@@ -56,7 +56,7 @@ interface Draft {
   name: string; kind: Kind; engine: BrowserEngine | ''; chromiumRuntime?: string; status: string; tags: string[]; folder: string; profileDirectory?: string; notes: string; startPages: string[];
   browserIntegration?: BrowserIntegrationId; browserExecutablePath?: string;
   homePage: string; searchEngine?: string; theme: 'dark' | 'light'; browserShell: BrowserShell; baseChromeLook: boolean; ordinaryBrowser: boolean; appMode: boolean; smartPaste: boolean; keepHistory: boolean; savePasswords: boolean; restoreSession: boolean; deleteOnClose: boolean;
-  protection: { level: Level; overrides: Record<string, unknown> }; dns: Profile['dns']; sandbox: Sandbox; mobile: Profile['mobile']; addons: string[]; vstudioWebOnLaunch: boolean;
+  protection: { level: Level; overrides: Record<string, unknown> }; dns: Profile['dns']; sandbox: Sandbox; mobile: Profile['mobile']; addons: string[]; chromeExtensions: NonNullable<Profile['chromeExtensions']>; vstudioWebOnLaunch: boolean;
   mediaCapture: Profile['mediaCapture']; enginePrivacy: EnginePrivacySettings; nativeChromium: Profile['nativeChromium'];
   fp: Fingerprint | null; proxy: ProxyDraft;
   /** Exported cookies to import (JSON / Netscape), empty = none. */
@@ -186,6 +186,7 @@ function newDraft(): Draft {
     name: '', kind: 'antidetect', engine: NEW_PROFILE_ENGINE, chromiumRuntime: '155.0.8059.39', status: '', tags: [], folder, profileDirectory: '', notes: '', startPages: [CHROMIUM_DEFAULT_START_PAGE], browserIntegration: undefined, browserExecutablePath: '', homePage: CHROMIUM_DEFAULT_START_PAGE, searchEngine: 'duckduckgo-noai', theme: 'dark', browserShell: 'octo', baseChromeLook: false, ordinaryBrowser: false, appMode: false, smartPaste: true,
     dns: { mode: 'inherit', dohTemplate: '' },
     ...kindDefaults('antidetect', S.init.addons.filter((a) => a.kind !== 'external-app').map((a) => a.id)),
+    chromeExtensions: [],
     vstudioWebOnLaunch: false,
     mediaCapture: { cameraLabel: '', microphoneLabel: '' }, enginePrivacy: structuredClone(DEFAULT_ENGINE_PRIVACY), nativeChromium: structuredClone(DEFAULT_NATIVE_CHROMIUM_CONFIG),
     fp: null,
@@ -206,7 +207,7 @@ function draftFrom(p: Profile): Draft {
   return {
     name: c.name, kind: c.kind, engine: 'electron', chromiumRuntime: c.chromiumRuntime, browserIntegration: isBrowserIntegrationId(c.browserIntegration) ? c.browserIntegration : undefined, browserExecutablePath: c.browserExecutablePath ?? '', status: c.status ?? '', tags: c.tags ?? [], folder: c.folder ?? '', profileDirectory: c.profileDirectory ?? '', notes: c.notes ?? '', startPages: c.startPages ?? [],
     homePage: c.homePage === 'octo://newtab' ? '' : c.homePage, searchEngine: c.searchEngine ?? '', theme: c.theme, browserShell: c.browserShell, baseChromeLook: c.baseChromeLook === true, ordinaryBrowser: c.ordinaryBrowser === true, appMode: c.appMode === true, smartPaste: c.smartPaste !== false, keepHistory: c.keepHistory, savePasswords: c.savePasswords === true, restoreSession: c.restoreSession, deleteOnClose: c.deleteOnClose,
-    protection: { level: c.protection.level, overrides: c.protection.overrides ?? {} }, dns: c.dns, sandbox: c.sandbox, mobile: c.mobile ?? { device: 'none', orientation: 'portrait' }, addons: c.addons,
+    protection: { level: c.protection.level, overrides: c.protection.overrides ?? {} }, dns: c.dns, sandbox: c.sandbox, mobile: c.mobile ?? { device: 'none', orientation: 'portrait' }, addons: c.addons, chromeExtensions: c.chromeExtensions ?? [],
     vstudioWebOnLaunch: c.vstudioWebOnLaunch === true,
     mediaCapture: c.mediaCapture ?? { cameraLabel: '', microphoneLabel: '' }, enginePrivacy: sanitizeEnginePrivacy(c.enginePrivacy ?? DEFAULT_ENGINE_PRIVACY), nativeChromium: structuredClone(c.nativeChromium),
     fp: c.fingerprint?.enabled ? c.fingerprint : c.kind === 'antidetect' ? c.fingerprint : null, proxy, cookies: '',
@@ -353,7 +354,7 @@ export function openEditor(p: Profile | null): void {
       const patch: Record<string, unknown> = {
         engine: 'electron', chromiumRuntime: d.chromiumRuntime, browserIntegration: d.browserIntegration, browserExecutablePath: d.browserExecutablePath?.trim() || undefined, status: d.status, tags: d.tags, folder: d.folder.trim(), profileDirectory: d.profileDirectory?.trim() || undefined, notes: d.notes, startPages: d.startPages,
         homePage: d.homePage.trim() || 'octo://newtab', searchEngine: d.searchEngine || undefined, theme: d.theme, browserShell: 'octo', baseChromeLook: false, ordinaryBrowser: d.ordinaryBrowser, appMode: d.appMode, smartPaste: d.smartPaste, keepHistory: d.keepHistory, savePasswords: d.savePasswords, restoreSession: d.restoreSession,
-        deleteOnClose: d.deleteOnClose, protection: d.protection, dns: d.dns, sandbox: d.sandbox, mobile: d.mobile, addons: d.addons,
+        deleteOnClose: d.deleteOnClose, protection: d.protection, dns: d.dns, sandbox: d.sandbox, mobile: d.mobile, addons: d.addons, chromeExtensions: d.chromeExtensions,
         vstudioWebOnLaunch: d.vstudioWebOnLaunch,
         mediaCapture: d.mediaCapture, enginePrivacy: d.enginePrivacy, nativeChromium: d.nativeChromium,
       };
@@ -2070,6 +2071,26 @@ function browser(b: HTMLElement, d: Draft, draw: () => void, summary: () => void
     const tg = toggle(set.has(a.id), 'addons.enabled', (v) => { if (v) set.add(a.id); else set.delete(a.id); d.addons = [...set]; }, a.kind === 'external-app');
     addonList.append(h('div', { class: 'addon' }, h('div', { class: 'row between' }, h('b', { text: a.name }), tg), h('div', { class: 'small muted', text: L(a.description) })));
   }
+  const localList = h('div', { class: 'addons' });
+  for (const extension of d.chromeExtensions) {
+    const enabled = toggle(extension.enabled, 'addons.enabled', (value) => { extension.enabled = value; }, false);
+    const remove = h('button', { class: 'btn small', text: 'Remove' }) as HTMLButtonElement;
+    remove.onclick = () => { d.chromeExtensions = d.chromeExtensions.filter((item) => item.id !== extension.id); draw(); };
+    const permissions = [...extension.permissions.map((item) => `permission: ${item}`), ...extension.hostPermissions.map((item) => `host: ${item}`)];
+    localList.append(h('div', { class: 'addon' },
+      h('div', { class: 'row between' }, h('b', { text: `${extension.name} ${extension.version}` }), enabled, remove),
+      h('div', { class: 'small muted', text: extension.path }),
+      h('details', {}, h('summary', { text: 'Permissions' }), h('div', { class: 'small muted', text: permissions.length ? permissions.join('\n') : 'No declared permissions' }))));
+  }
+  const addLocal = h('button', { class: 'btn small', text: 'Add local Chrome extension' }) as HTMLButtonElement;
+  addLocal.onclick = async () => {
+    const selected = await run(api.invoke<NonNullable<Profile['chromeExtensions']>[number] | null>('mgr:pick-chrome-extension'));
+    if (!selected) return;
+    if (!d.chromeExtensions.some((item) => item.id === selected.id)) d.chromeExtensions = [...d.chromeExtensions, selected];
+    draw();
+  };
+  localList.append(h('p', { class: 'hint', text: 'Only unpacked Manifest V2/V3 Chrome extensions are supported in Electron. Review permissions before saving; extensions stay isolated to this profile.' }), addLocal);
+  addonList.append(localList);
   acc.append(accordionSection(t('fp.adv.extensions'), t('fp.info.advExtensions'), addonList));
 
   // Accordion 11: Video Stream Spoofing / Camera Options

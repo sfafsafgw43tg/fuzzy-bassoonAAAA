@@ -2,7 +2,7 @@
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { bundledExtension, bundledExtensionPath, nativeBundledExtensionPaths } from '../src/main/extensions';
+import { bundledExtension, bundledExtensionPath, inspectLocalChromeExtension, nativeBundledExtensionPaths } from '../src/main/extensions';
 import { ADDONS } from '@octo/core';
 
 const root = process.cwd();
@@ -52,5 +52,23 @@ describe('native Chromium addon bundles', () => {
     expect(() => nativeBundledExtensionPaths(['clearurls'], '', true, resources)).toThrow(/invalid: clearurls/);
     fs.writeFileSync(path.join(addon, 'manifest.json'), JSON.stringify({ manifest_version: 2 }));
     expect(() => nativeBundledExtensionPaths(['clearurls'], '', true, resources)).toThrow(/unsupported: clearurls/);
+  });
+});
+
+describe('profile-local Chrome extensions', () => {
+  it('reads a valid MV3 manifest and exposes declared permissions', () => {
+    const root = fs.mkdtempSync(path.join('/tmp', 'octo-local-extension-'));
+    fs.writeFileSync(path.join(root, 'manifest.json'), JSON.stringify({
+      manifest_version: 3, name: 'Local QA tool', version: '1.2.3', permissions: ['storage', 'tabs'], host_permissions: ['https://example.test/*'],
+    }));
+    expect(inspectLocalChromeExtension(root)).toMatchObject({ name: 'Local QA tool', version: '1.2.3', permissions: ['storage', 'tabs'], hostPermissions: ['https://example.test/*'], manifestVersion: 3 });
+    expect(inspectLocalChromeExtension(root).id).toMatch(/^chrome-local-[a-f0-9]{16}$/);
+  });
+
+  it('rejects malformed and unsupported manifests', () => {
+    const root = fs.mkdtempSync(path.join('/tmp', 'octo-local-extension-invalid-'));
+    expect(() => inspectLocalChromeExtension(root)).toThrow(/missing or invalid/);
+    fs.writeFileSync(path.join(root, 'manifest.json'), JSON.stringify({ manifest_version: 1, name: 'old', version: '1' }));
+    expect(() => inspectLocalChromeExtension(root)).toThrow(/Manifest V2 or V3/);
   });
 });

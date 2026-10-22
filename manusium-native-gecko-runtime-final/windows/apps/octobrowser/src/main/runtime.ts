@@ -38,7 +38,7 @@ import { safeDownloadFilename, uniqueDownloadPath } from '@octo/shell/downloads'
 import { profilePartition, ephemeralPartition } from '@octo/shell/profile-partition';
 import { UpdateStatus } from '@octo/shell/update-manager';
 import { BrowserWindowController, Rect } from './window';
-import { bundledExtension, bundledExtensionPath, BundledExtension } from './extensions';
+import { bundledExtension, bundledExtensionPath, inspectLocalChromeExtension, BundledExtension } from './extensions';
 import { SHORTCUT_HELP } from '../shared/shortcuts';
 import { serviceWorkerFingerprintPreload } from '../preload/service-worker';
 
@@ -101,7 +101,7 @@ export class ProfileRuntime {
   sessionPartitionName(): string {
     return this.sessionPartition;
   }
-  private readonly loadedExtensions = new Map<string, { extensionId: string; extension: BundledExtension }>();
+  private readonly loadedExtensions = new Map<string, { extensionId: string; extension: BundledExtension | { addonId: string; entryPage: string } }>();
 
   constructor(
     readonly distDir: string,
@@ -636,13 +636,18 @@ export class ProfileRuntime {
     });
   }
 
-  private hasSameBundledExtensions(a: string[], b: string[]): boolean {
-    return this.bundledExtensionIds(a).sort().join('|') === this.bundledExtensionIds(b).sort().join('|');
+  private hasSameExtensions(a: Profile, b: Profile): boolean {
+    const ids = (profile: Profile) => [
+      ...this.bundledExtensionIds(profile.addons),
+      ...(profile.chromeExtensions ?? []).filter((extension) => extension.enabled).map((extension) => `${extension.id}:${extension.path}`),
+    ].sort().join('|');
+    return ids(a) === ids(b);
   }
 
   /** Load/unload bundled extensions to exactly match this profile's enabled add-ons. */
   private async syncBundledExtensions(ses: Session): Promise<void> {
-    const wanted = new Set(this.bundledExtensionIds());
+    const local = (this.profile.chromeExtensions ?? []).filter((extension) => extension.enabled);
+    const wanted = new Set([...this.bundledExtensionIds(), ...local.map((extension) => extension.id)]);
     for (const [addonId, loaded] of this.loadedExtensions) {
       if (wanted.has(addonId)) continue;
       try { ses.removeExtension(loaded.extensionId); } catch (err) { this.logger.warn('addon.extension-unload-failed', { addonId, error: String(err) }); }
@@ -652,14 +657,17 @@ export class ProfileRuntime {
     for (const addonId of wanted) {
       if (this.loadedExtensions.has(addonId)) continue;
       const extension = bundledExtension(addonId);
-      if (!extension) continue;
-      const extensionPath = bundledExtensionPath(extension, this.distDir, app.isPackaged, process.resourcesPath);
+      const localExtension = local.find((item) => item.id === addonId);
+      if (!extension && !localExtension) continue;
+      const extensionPath = localExtension
+        ? inspectLocalChromeExtension(localExtension.path).path
+        : bundledExtensionPath(extension!, this.distDir, app.isPackaged, process.resourcesPath);
       if (!fs.existsSync(path.join(extensionPath, 'manifest.json'))) {
         throw new Error(this.t('addons.packageUnavailable'));
       }
       try {
         const loaded = await ses.loadExtension(extensionPath);
-        this.loadedExtensions.set(addonId, { extensionId: loaded.id, extension });
+        this.loadedExtensions.set(addonId, { extensionId: loaded.id, extension: extension ?? { addonId, entryPage: '' } });
         this.logger.info('addon.extension-loaded', { addonId, extensionId: loaded.id, profile: this.profile.id });
       } catch (err) {
         this.logger.error('addon.extension-load-failed', { addonId, error: String(err) });
@@ -840,6 +848,7 @@ export class ProfileRuntime {
   private registerServiceWorkerFingerprintPreload(ses: Electron.Session): void {
     if (!this.fp?.enabled) return;
     const config = {
+      userAgent: this.fp.userAgent,
       platform: this.fp.platform,
       languages: this.fp.languages,
       cores: this.fp.cores,
@@ -1299,7 +1308,7 @@ export class ProfileRuntime {
         if (!p || p.id !== this.profile.id) return;
         const levelChanged = p.protection.level !== this.profile.protection.level;
         const proxyChanged = JSON.stringify(p.network) !== JSON.stringify(this.profile.network);
-        const extensionsChanged = !this.hasSameBundledExtensions(p.addons, this.profile.addons);
+        const extensionsChanged = !this.hasSameExtensions(p, this.profile);
         const baseChromeEnabled = p.baseChromeLook && !this.profile.baseChromeLook;
         const identityChanged = p.browserShell !== this.profile.browserShell;
         const fingerprintChanged = JSON.stringify(p.fingerprint) !== JSON.stringify(this.profile.fingerprint);

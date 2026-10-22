@@ -224,8 +224,8 @@ body.tab-dragging, body.tab-dragging .tab { cursor: grabbing; }
   /* Screenshot-matched Chromium palette: graphite titlebar, Chrome dark
      surfaces, and a restrained blue interaction accent. */
   --bg: #202124; --bg2: #292a2d; --panel: #292a2d; --panel2: #3c4043; --line: #3c4043;
-  --text: #e8eaed; --muted: #bdc1c6; --dim: #9aa0a6; --accent: #8ab4f8; --accent2: #aecbfa;
-  --ok: #81c995; --warn: #fdd663; --bad: #f28b82;
+  --text: #e8e8e8; --muted: #bdbdbd; --dim: #9a9a9a; --accent: #b5b5b5; --accent2: #d0d0d0;
+  --ok: #bdbdbd; --warn: #a7a7a7; --bad: #888888;
 }
 :root[data-chrome-look="on"][data-theme="light"] {
   --bg: #dedede; --bg2: #f3f3f3; --panel: #ececec; --panel2: #dedede; --line: #c1c1c1;
@@ -265,7 +265,7 @@ body.tab-dragging, body.tab-dragging .tab { cursor: grabbing; }
 :root[data-chrome-look="on"] .icon-btn { width: 30px; height: 30px; border-radius: 50%; color: #bdc1c6; }
 :root[data-chrome-look="on"] .icon-btn:hover:not(:disabled) { background: #3c4043; color: #fff; }
 :root[data-chrome-look="on"] #omnibox { height: 32px; border: 1px solid transparent; border-radius: 18px; background: #3c4043; padding: 0 8px 0 10px; box-shadow: inset 0 1px 1px #00000022; }
-:root[data-chrome-look="on"] #omnibox:focus-within { border-color: #8ab4f8; background: #202124; box-shadow: 0 0 0 1px #8ab4f866; }
+:root[data-chrome-look="on"] #omnibox:focus-within { border-color: #b5b5b5; background: #202124; box-shadow: 0 0 0 1px #b5b5b566; }
 :root[data-chrome-look="on"] #address { color: #e8eaed; }
 :root[data-chrome-look="on"] #address::selection { background: #5f6368; color: #fff; }
 :root[data-chrome-look="on"][data-theme="light"] #omnibox { border-color: var(--line); }
