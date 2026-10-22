@@ -134,6 +134,32 @@ function setHeader(headers: Record<string, string | string[]>, name: string, val
   if (value !== null) headers[name] = value;
 }
 
+const STARTUP_PROXY_TIMEOUT_MS = 5_000;
+
+/**
+ * Electron's proxy APIs can wait on the system resolver indefinitely on
+ * Windows. Startup must not depend on that external operation completing.
+ * Keep the rejection handled even when the deadline wins so a late callback
+ * cannot become an unhandled rejection.
+ */
+async function boundedElectronOperation(
+  operation: () => Promise<unknown>,
+  timeoutMs: number,
+  onError: (error: unknown) => void,
+): Promise<'ok' | 'timeout' | 'error'> {
+  let timer: NodeJS.Timeout | undefined;
+  const work = Promise.resolve().then(operation).then(
+    () => 'ok' as const,
+    (error) => { onError(error); return 'error' as const; },
+  );
+  const deadline = new Promise<'timeout'>((resolve) => {
+    timer = setTimeout(() => resolve('timeout'), timeoutMs);
+  });
+  const result = await Promise.race([work, deadline]);
+  if (timer) clearTimeout(timer);
+  return result;
+}
+
 export class ProfileSessionController {
   readonly counters = new TrafficCounters();
   readonly certs = new Map<string, CertInfo>();
@@ -204,7 +230,12 @@ export class ProfileSessionController {
    */
   async prepareNetwork(): Promise<void> {
     await this.applyProxy();
-    await this.ses.closeAllConnections();
+    const result = await boundedElectronOperation(
+      () => this.ses.closeAllConnections(),
+      STARTUP_PROXY_TIMEOUT_MS,
+      (error) => this.hooks.logger.warn('profile.proxy-close-connections-failed', { profile: this.profile.id, error: String(error) }),
+    );
+    if (result === 'timeout') this.hooks.logger.warn('profile.proxy-close-connections-timeout', { profile: this.profile.id });
   }
 
   /** Install all handlers. Call once per session. */
@@ -269,17 +300,24 @@ export class ProfileSessionController {
 
   private async applyProxy(): Promise<void> {
     const n = this.profile.network;
+    let apply: () => Promise<unknown>;
     if (n.mode === 'proxy' && (this.proxyOverride || n.proxyRules)) {
       // Under lockdown nothing is bypassed unless the user typed a bypass list
       // themselves: even loopback and plain-IP requests take the proxy, so the
       // real address is never used by accident.
       const bypass = n.proxyBypass || (this.lockdown ? '<-loopback>' : '<local>');
-      await this.ses.setProxy({ mode: 'fixed_servers', proxyRules: this.proxyOverride || n.proxyRules!, proxyBypassRules: bypass });
+      apply = () => this.ses.setProxy({ mode: 'fixed_servers', proxyRules: this.proxyOverride || n.proxyRules!, proxyBypassRules: bypass });
     } else if (n.mode === 'direct') {
-      await this.ses.setProxy({ mode: 'direct' });
+      apply = () => this.ses.setProxy({ mode: 'direct' });
     } else {
-      await this.ses.setProxy({ mode: 'system' });
+      apply = () => this.ses.setProxy({ mode: 'system' });
     }
+    const result = await boundedElectronOperation(
+      apply,
+      STARTUP_PROXY_TIMEOUT_MS,
+      (error) => this.hooks.logger.warn('profile.proxy-apply-failed', { profile: this.profile.id, error: String(error) }),
+    );
+    if (result === 'timeout') this.hooks.logger.warn('profile.proxy-apply-timeout', { profile: this.profile.id, timeoutMs: STARTUP_PROXY_TIMEOUT_MS });
     this.hooks.logger.info('profile.proxy', { profile: this.profile.id, mode: n.mode });
   }
 
