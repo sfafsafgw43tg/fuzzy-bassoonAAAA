@@ -836,9 +836,17 @@ function Test-VirtualMachineHardware {
 function Invoke-Open([string]$appId) {
   Update-SessionPath
   if (-not (Repair-ElectronSandboxAcl)) { return }
+  $devCheckout = Test-DevCheckout
   $exe = Get-AppExe $appId
   $a = $Apps[$appId]
-  if (Test-Path -LiteralPath $exe) {
+  # A source checkout must never silently launch an older packaged executable
+  # from release\. Rebuild the current Electron sources and use those sources
+  # directly; otherwise startup fixes appear to have no effect after a rebuild.
+  if ($devCheckout -and $appId -eq 'octobrowser') {
+    if (-not (Invoke-EnsureDependencies)) { Fail (T 'depsFailed' 'dependency check') }
+    Invoke-Npm @('run', 'build:browser')
+  }
+  if ((-not $devCheckout) -and (Test-Path -LiteralPath $exe)) {
     Say (T 'starting' $a.Product)
     if ($Rest -and $Rest.Count -gt 0) { Start-Process -FilePath $exe -ArgumentList $Rest -WorkingDirectory (Split-Path -Parent $exe) }
     else { Start-Process -FilePath $exe -WorkingDirectory (Split-Path -Parent $exe) }
