@@ -17,7 +17,7 @@ if errorlevel 1 goto :fail
 
 echo.
 echo SUCCESS: profile startup fix rebuilt. Launching Electron now...
-npm.cmd run start:browser
+npm.cmd run start
 if errorlevel 1 goto :fail
 exit /b 0
 
