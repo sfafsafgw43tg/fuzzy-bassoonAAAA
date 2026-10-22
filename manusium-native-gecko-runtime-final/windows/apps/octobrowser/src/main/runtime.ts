@@ -1446,9 +1446,15 @@ export function runProfileProcess(distDir: string, dataDir: string, lang: Lang, 
       try {
         await rt.start(key, quota);
       } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
         rt.logger.error('profile.start-failed', err);
-        dialog.showErrorBox('Octo.su', translate(lang, 'err.profileStart', { message: (err as Error).message }));
-        app.exit(1);
+        // A child can fail before it owns a visible BrowserWindow. A native
+        // dialog in that state is commonly hidden behind the launcher on
+        // Windows and only produces the system error sound. Route the
+        // diagnostic through the private manager channel so the existing
+        // dark in-app notification displays it reliably instead.
+        channel.send({ t: 'profile-start-failed', id: profileId, message: message.slice(0, 2000) });
+        setTimeout(() => app.exit(1), 50).unref();
       }
     });
   });

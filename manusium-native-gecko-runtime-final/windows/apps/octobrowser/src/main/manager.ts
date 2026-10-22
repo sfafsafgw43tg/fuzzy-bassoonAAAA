@@ -1190,8 +1190,9 @@ export class Manager {
     void this.onChildExit(id, null, child);
   }
 
-  private notifyProfileStartFailure(detailKey: 'err.profileStartTimeout' | 'err.profileStartSpawnFailed' | 'err.profileStartExited'): void {
-    this.launcher?.webContents.send('mgr:toast', { key: 'err.profileStart', params: { message: this.t(detailKey) }, kind: 'err' });
+  private notifyProfileStartFailure(detailKey: 'err.profileStartTimeout' | 'err.profileStartSpawnFailed' | 'err.profileStartExited', detail = ''): void {
+    const message = detail ? `${this.t(detailKey)}: ${detail.slice(0, 2000)}` : this.t(detailKey);
+    this.launcher?.webContents.send('mgr:toast', { key: 'err.profileStart', params: { message }, kind: 'err' });
   }
 
   // ------------------------------------------------------ services (IPC + REST API)
@@ -2213,6 +2214,14 @@ export class Manager {
           let quota: { id: string; limitBytes: number; usedBytes: number } | undefined;
           try { quota = this.proxyQuota(this.profiles.get(id)); } catch { /* profile removed while spawning */ }
           child.channel.send({ t: 'init', key: this.ctx.keyring.getKey().toString('base64'), proxyQuota: quota });
+        }
+        break;
+      case 'profile-start-failed':
+        if (child && m.id === id && !child.startFailed) {
+          child.startFailed = true;
+          const detail = typeof m.message === 'string' ? m.message : '';
+          this.ctx.logger.error('profile.start-failed', { profile: id, detail });
+          this.notifyProfileStartFailure('err.profileStartExited', detail);
         }
         break;
       case 'ready':
