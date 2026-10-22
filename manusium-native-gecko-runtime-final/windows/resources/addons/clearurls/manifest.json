@@ -1,0 +1,10 @@
+{
+  "manifest_version": 3,
+  "name": "Octo URL Cleaner",
+  "version": "1.0.0",
+  "description": "Removes common advertising and analytics query parameters locally.",
+  "permissions": ["declarativeNetRequest"],
+  "declarative_net_request": {
+    "rule_resources": [{ "id": "tracking-parameters", "enabled": true, "path": "rules.json" }]
+  }
+}
