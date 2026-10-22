@@ -736,10 +736,8 @@ interface Bar {
   id: string; kind: 'info' | 'warn' | 'ask'; text: string; appearance?: 'permission';
   originLabel?: string; detail?: string; permIcon?: string;
   actions: Array<{ key: string; primary?: boolean; keepOpen?: boolean; link?: boolean; run: () => void }>; timeout?: number;
-  timeoutRun?: () => void; closing?: boolean;
 }
 const bars = new Map<string, Bar>();
-const BAR_CLOSE_MS = 180;
 
 function permissionBarOpen(): boolean {
   return [...bars.values()].some((b) => b.appearance === 'permission');
@@ -798,21 +796,7 @@ function watchChromeLayers(): void {
 
 /** Remove a bar and re-check whether the chrome still has to cover the page. */
 function removeBar(id: string): void {
-  const bar = bars.get(id);
-  if (!bar) return;
-  if (bar.appearance === 'permission') {
-    if (bar.closing) return;
-    bar.closing = true;
-    renderBars();
-    window.setTimeout(() => {
-      if (bars.get(id) !== bar) return;
-      bars.delete(id);
-      renderBars();
-      syncChromeFront();
-    }, BAR_CLOSE_MS);
-    return;
-  }
-  bars.delete(id);
+  if (!bars.delete(id)) return;
   renderBars();
   syncChromeFront();
 }
@@ -820,11 +804,7 @@ function removeBar(id: string): void {
 function pushBar(b: Bar): void {
   if (shuttingDown) return;
   bars.set(b.id, b);
-  if (b.timeout) window.setTimeout(() => {
-    if (bars.get(b.id) !== b) return;
-    b.timeoutRun?.();
-    removeBar(b.id);
-  }, b.timeout);
+  if (b.timeout) window.setTimeout(() => { bars.delete(b.id); renderBars(); syncChromeFront(); }, b.timeout);
   renderBars();
 }
 
@@ -848,7 +828,7 @@ function renderBars(): void {
   if (state?.offline) all.unshift({ id: 'offline', kind: 'info', text: t('bar.offline'), actions: [{ key: 'bar.goOnline', run: () => void api.invoke('ui:settings-set', { offline: false }) }] });
   for (const b of all) {
     if (b.appearance === 'permission') {
-      const el = h('div', { class: `bar ask permission${b.closing ? ' closing' : ''}`, role: 'dialog', 'aria-label': b.text });
+      const el = h('div', { class: 'bar ask permission', role: 'dialog', 'aria-label': b.text });
       const close = h('button', { class: 'perm-close', type: 'button', title: t('common.dismiss'), 'aria-label': t('common.dismiss') });
       close.append(icon('close', 14));
       close.onclick = () => {
@@ -2822,8 +2802,6 @@ function initEvents(): void {
         { key: 'perm.deny', run: () => void api.invoke('ui:answer', q.reqId, false) },
         { key: 'perm.allow', primary: true, run: () => void api.invoke('ui:answer', q.reqId, true) },
       ],
-      timeout: 5_000,
-      timeoutRun: () => void api.invoke('ui:answer', q.reqId, false),
     });
   });
   api.on<{ fileName: string; reqId: string }>('ui:confirm-download', (q) => {
