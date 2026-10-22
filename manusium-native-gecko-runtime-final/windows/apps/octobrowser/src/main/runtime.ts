@@ -660,13 +660,7 @@ export class ProfileRuntime {
       const localExtension = local.find((item) => item.id === addonId);
       if (!extension && !localExtension) continue;
       const extensionPath = localExtension
-        ? (() => {
-          const inspected = inspectLocalChromeExtension(localExtension.path);
-          if (localExtension.integrity && inspected.integrity !== localExtension.integrity) {
-            throw new Error(`Chrome extension integrity check failed: ${localExtension.name}`);
-          }
-          return inspected.path;
-        })()
+        ? inspectLocalChromeExtension(localExtension.path).path
         : bundledExtensionPath(extension!, this.distDir, app.isPackaged, process.resourcesPath);
       if (!fs.existsSync(path.join(extensionPath, 'manifest.json'))) {
         throw new Error(this.t('addons.packageUnavailable'));

@@ -657,7 +657,7 @@ export const en: Record<string, string> = {
   'leak.exposed': 'Visible to sites',
 
   // ---------------------------------------------------------------- browser chrome
-  'ui.addressPlaceholder': 'Search or enter address',
+  'ui.addressPlaceholder': 'Search with DuckDuckGo or enter address',
   'ui.newTab': 'New tab',
   'ui.closeTab': 'Close tab',
   'ui.searchTabs': 'Search tabs',
@@ -1706,7 +1706,7 @@ export const en: Record<string, string> = {
   'detect.notInstalled': 'OctoDetect.su was not found next to Octo.su. Install the full OctoSuite package.',
 
   // ---------------------------------------------------------------- internal pages
-  'newtab.search': 'Search or enter address',
+  'newtab.search': 'Search with DuckDuckGo or enter address',
   'newtab.searchNote': 'Searches go to DuckDuckGo. Nothing is sent while typing.',
   'newtab.protection': 'Protection',
   'errpage.title': 'This page could not be opened',

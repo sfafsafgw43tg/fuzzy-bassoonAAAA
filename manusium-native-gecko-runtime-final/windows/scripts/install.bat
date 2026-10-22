@@ -1,16 +1,30 @@
 @echo off
 rem OctoSuite installer entrypoint.
-rem All setup logic lives in lib\octo.ps1; this wrapper handles visibility.
+rem All setup logic lives in lib\octo.ps1; this wrapper handles elevation and visibility.
 setlocal EnableExtensions DisableDelayedExpansion
 set "OCTO_DIR=%~dp0"
 set "OCTO_PS=%SystemRoot%\System32\WindowsPowerShell\v1.0\powershell.exe"
 if not exist "%OCTO_PS%" set "OCTO_PS=powershell.exe"
 if not exist "%OCTO_DIR%lib\octo.ps1" goto missing_files
+if not exist "%OCTO_DIR%lib\elevate-installer.ps1" goto missing_files
+
+rem Elevate before hiding the console so UAC is never silently bypassed.
+if /I "%~1"=="-Elevated" goto choose_visibility
+fltmc >nul 2>&1
+if not errorlevel 1 goto choose_visibility
+goto request_elevation
+
+:request_elevation
+if "%~1"=="" (set "OCTO_ELEVATE_ARGS=__OCTO_NO_ARGS__") else (set "OCTO_ELEVATE_ARGS=%*")
+echo [OctoSuite] Requesting administrator permission...
+"%OCTO_PS%" -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%OCTO_DIR%lib\elevate-installer.ps1" -BatchPath "%~f0" -WorkingDirectory "%OCTO_DIR%" %OCTO_ELEVATE_ARGS%
+set "OCTO_RC=%ERRORLEVEL%"
+if not "%OCTO_RC%"=="0" echo [OctoSuite] Administrator elevation failed or was cancelled. Exit code: %OCTO_RC%
+if not defined OCTO_NOPAUSE pause
+endlocal & exit /b %OCTO_RC%
 
 :choose_visibility
-rem Start normally without administrator rights. Individual privileged actions
-rem (drivers, Visual Studio modification, and ACL repair) request UAC only when
-rem Windows requires it; ordinary setup stays in the user's account.
+rem Only an explicit background request (-Background) starts immediately without a startup elevation handoff.
 set "OCTO_WANTS_BACKGROUND="
 echo %* | find /i "-background" >nul 2>&1 && set "OCTO_WANTS_BACKGROUND=1"
 echo %* | find /i "-nogui" >nul 2>&1 && set "OCTO_WANTS_BACKGROUND=1"
