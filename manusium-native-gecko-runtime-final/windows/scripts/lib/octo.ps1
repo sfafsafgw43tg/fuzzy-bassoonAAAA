@@ -926,21 +926,7 @@ function Invoke-Open([string]$appId) {
 
     return
   }
-  if (Test-Path -LiteralPath $electronCmd) {
-    if (-not (Test-Path -LiteralPath $appMain)) { Fail (T 'notBuilt') }
-    Say (T 'devMode')
-    # electron.cmd is a command interpreter wrapper. Hide it explicitly so a
-    # source checkout has the same GUI-only launch as an installed build.
-
-    $proc = Start-Process -FilePath $electronCmd -ArgumentList $argString -WorkingDirectory $InstallRoot -WindowStyle Hidden -PassThru
-    Start-Sleep -Milliseconds 600
-    if ($proc.HasExited -and $proc.ExitCode -ne 0) {
-      Fail "Electron exited unexpectedly with code $($proc.ExitCode). Check %LOCALAPPDATA%\OctoSuite\logs."
-    }
-
-    return
-  }
-  Fail (T 'notInstalled' $a.Product $InstallRoot)
+  Fail 'The branded Octo.su development executable is unavailable. Run npm run brand:electron:windows, then start Octo.su again. Raw electron.exe is intentionally not used.'
 }
 
 function Find-Installer([string[]]$dirs) {
@@ -2450,8 +2436,11 @@ function Get-ElectronLauncherExe([string]$appId) {
     $branded = Join-Path $InstallRoot 'node_modules\electron\dist\Octo.su.exe'
     if (Test-Path -LiteralPath $branded -PathType Leaf) { return $branded }
   }
-  $managed = Join-Path $InstallRoot 'node_modules\electron\dist\electron.exe'
-  if (Test-Path -LiteralPath $managed -PathType Leaf) { return $managed }
+  # Never return package-managed electron.exe for the browser UI. Windows then
+  # registers the taskbar item as "Electron" and its Open file location points
+  # to a stale node_modules checkout. The branded copy is prepared above; if it
+  # is unavailable, fail with the setup diagnostic instead of launching raw
+  # Electron and creating another broken pinned item.
   return $null
 }
 

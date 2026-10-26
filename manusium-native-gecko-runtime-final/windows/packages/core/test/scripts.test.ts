@@ -159,9 +159,11 @@ describe('maintenance scripts', () => {
     expect(ps1Text).toContain('function Start-VisibleSetup');
     expect(ps1Text).toContain('function Test-Ready');
     expect(ps1Text).toContain("if (-not (Start-VisibleSetup)) { return }");
-    // Electron's development launcher is a .cmd wrapper; it must not reveal a
-    // command window after the hidden suite launcher has handed off to the app.
-    expect(ps1Text).toMatch(/Start-Process -FilePath \$electron[^\r\n]*-WindowStyle Hidden/);
+    // Development startup must use the branded Octo.su executable, never the
+    // package-managed electron.exe/cmd that creates an Electron taskbar item.
+    expect(ps1Text).toContain("node_modules\\electron\\dist\\Octo.su.exe");
+    expect(ps1Text).toContain('Raw electron.exe is intentionally not used');
+    expect(ps1Text).not.toMatch(/Start-Process -FilePath \$electronCmd/);
   });
 
   it('root forwarders exist for install.bat, run.bat, start.bat, and open.bat', () => {
