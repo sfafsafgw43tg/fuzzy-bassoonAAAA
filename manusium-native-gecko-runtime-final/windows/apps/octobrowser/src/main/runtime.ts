@@ -240,9 +240,6 @@ export class ProfileRuntime {
     } catch (error) {
       this.logger.error('window.chrome-load-failed-before-ready', { error: String(error) });
     }
-    this.logger.info('profile.chrome-ready', { profile: this.profile.id });
-    this.channel.send({ t: 'ready' });
-
     // Proxy with credentials Chromium cannot use (SOCKS auth) -> local bridge.
     await this.startupWithin('proxy bridge', this.startProxyBridge(), 8_000, undefined);
     // Route the session before the first exit-IP lookup. Without this ordering,
@@ -1475,6 +1472,11 @@ export function runProfileProcess(distDir: string, dataDir: string, lang: Lang, 
     const quota = m.proxyQuota as { id: string; limitBytes: number; usedBytes: number } | undefined;
     void app.whenReady().then(async () => {
       try {
+        // The Electron child is trusted and its local shell is ready at this point.
+        // Signal the manager before profile-specific renderer/session work so a
+        // slow cache, GPU, or page load can never leave the launcher stuck at
+        // STARTING. ProfileRuntime still reports any real construction failure.
+        channel.send({ t: 'ready' });
         // Keep construction inside the same failure boundary as start(). A
         // malformed profile, unreadable settings file, or Electron session
         // setup error must reach the manager instead of becoming an
