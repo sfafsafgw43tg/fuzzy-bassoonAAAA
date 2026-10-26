@@ -4,6 +4,7 @@
  * The same executable runs in two roles:
  *   (no flag)                 -> profile MANAGER / launcher (single instance)
  *   --profile-process=<id>    -> browser process of one profile (spawned by the manager)
+ *                               with --profile-data-dir supplied by that manager
  */
 import { app, dialog, protocol } from 'electron';
 import { Logger, ProfileManager, effectiveSettings, createSettingsStore, sanitizeProfile, newProfileId } from '@octo/core';

@@ -1141,10 +1141,13 @@ export class Manager {
       args.push(`--remote-debugging-port=${debugPort}`, '--remote-debugging-address=127.0.0.1');
       this.debugPorts.set(p.id, debugPort);
     } else this.debugPorts.delete(p.id);
-    // Ephemeral session (Windows Sandbox / tests): there is no bootstrap.json, so the
-    // child must get the same throw-away data folder and language as the manager.
+    // Pass the manager's resolved data directory explicitly. The child must not
+    // rediscover it from bootstrap.json: packaged and portable installs can have
+    // different AppData/executable locations, which previously made the child
+    // exit before opening its IPC channel. Values are passed as argv entries,
+    // never through a shell; the encryption key remains IPC-only.
     const st = this.ctx.prep.state;
-    if (this.ctx.prep.ephemeral && st) args.push(`--ephemeral-data-dir=${st.baseDir}`, `--lang-choice=${st.language}`);
+    if (st) args.push(`--profile-data-dir=${st.dataDir}`, `--lang-choice=${st.language}`);
     if (this.ctx.settings.load().ui.virtualBoxMode || process.env.OCTO_VM_MODE === '1') {
       args.push('--disable-gpu', '--vm-mode');
     }

@@ -152,14 +152,20 @@ export function prepareApp(appId: AppId, distDir: string, opts: PrepareOptions =
   if (isGraphicsBlocked) disabledFeatures.push('WebGPU');
 
   let state: BootstrapState | null;
+  const explicitDataDir = argValue('profile-data-dir');
   const ephemeralDir = argValue('ephemeral-data-dir');
-  if (ephemeralDir && path.isAbsolute(ephemeralDir)) {
+  const handoffDir = explicitDataDir && path.isAbsolute(explicitDataDir)
+    ? explicitDataDir
+    : ephemeralDir && path.isAbsolute(ephemeralDir)
+      ? path.join(ephemeralDir, info.dataSubdir)
+      : undefined;
+  if (handoffDir) {
     const lang = argValue('lang-choice');
     state = {
       schema: 1,
       language: isLang(lang) ? lang : 'en',
-      baseDir: ephemeralDir,
-      dataDir: path.join(ephemeralDir, info.dataSubdir),
+      baseDir: explicitDataDir ? path.dirname(handoffDir) : (ephemeralDir as string),
+      dataDir: handoffDir,
       firstRunAt: new Date().toISOString(),
     };
   } else {
