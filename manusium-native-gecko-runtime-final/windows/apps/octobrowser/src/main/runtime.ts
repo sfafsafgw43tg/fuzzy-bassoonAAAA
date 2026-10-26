@@ -1474,14 +1474,23 @@ export function runProfileProcess(distDir: string, dataDir: string, lang: Lang, 
     const key = Buffer.from(m.key, 'base64');
     const quota = m.proxyQuota as { id: string; limitBytes: number; usedBytes: number } | undefined;
     void app.whenReady().then(async () => {
-      const rt = new ProfileRuntime(distDir, dataDir, lang, profileId, channel);
       try {
+        // Keep construction inside the same failure boundary as start(). A
+        // malformed profile, unreadable settings file, or Electron session
+        // setup error must reach the manager instead of becoming an
+        // unhandled rejection followed by a generic startup timeout.
+        const rt = new ProfileRuntime(distDir, dataDir, lang, profileId, channel);
         await rt.start(key, quota);
       } catch (err) {
-        rt.logger.error('profile.start-failed', err);
-        dialog.showErrorBox('Octo.su', translate(lang, 'err.profileStart', { message: (err as Error).message }));
+        const message = err instanceof Error ? err.message : String(err);
+        try { channel.send({ t: 'profile-start-failed', message: message.slice(0, 500) }); } catch { /* manager may already be gone */ }
+        try { new Logger(new DataLayout(dataDir).logs, 'octobrowser-profiles').error('profile.start-failed', err); } catch { /* keep shutdown deterministic */ }
         app.exit(1);
       }
+    }).catch((err) => {
+      const message = err instanceof Error ? err.message : String(err);
+      try { channel.send({ t: 'profile-start-failed', message: message.slice(0, 500) }); } catch { /* manager may already be gone */ }
+      app.exit(1);
     });
   });
   // Only now is the init listener in place. The manager waits for this

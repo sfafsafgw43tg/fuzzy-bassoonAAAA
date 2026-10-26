@@ -2215,6 +2215,13 @@ export class Manager {
           child.channel.send({ t: 'init', key: this.ctx.keyring.getKey().toString('base64'), proxyQuota: quota });
         }
         break;
+      case 'profile-start-failed':
+        if (child && typeof m.message === 'string') {
+          child.startFailed = true;
+          this.ctx.logger.error('profile.child-start-failed', new Error(m.message));
+          this.notifyProfileStartFailure('err.profileStartExited');
+        }
+        break;
       case 'ready':
         if (child) {
           child.ready = true;
