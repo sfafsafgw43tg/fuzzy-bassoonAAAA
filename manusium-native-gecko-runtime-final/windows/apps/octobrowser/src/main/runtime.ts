@@ -1471,6 +1471,13 @@ export function runProfileProcess(distDir: string, dataDir: string, lang: Lang, 
   // Profile isolation is enforced by the manager and the per-profile Chromium
   // user-data directory lock instead.
   let started = false;
+  const runtimePromise = app.whenReady().then(() => {
+    const rt = new ProfileRuntime(distDir, dataDir, lang, profileId, channel);
+    // Show the native shell independently of the encrypted initialization key.
+    // A delayed pipe handshake must never make Windows appear to do nothing.
+    rt.primeStartupWindow();
+    return rt;
+  });
   const timeout = setTimeout(() => { if (!started) app.exit(2); }, 20_000); // no key from the manager => exit
   channel.onMessage((m) => {
     if (m.t !== 'init' || started || typeof m.key !== 'string') return;
@@ -1478,18 +1485,8 @@ export function runProfileProcess(distDir: string, dataDir: string, lang: Lang, 
     clearTimeout(timeout);
     const key = Buffer.from(m.key, 'base64');
     const quota = m.proxyQuota as { id: string; limitBytes: number; usedBytes: number } | undefined;
-    void app.whenReady().then(async () => {
+    void runtimePromise.then(async (rt) => {
       try {
-        // Keep construction inside the same failure boundary as start(). A
-        // malformed profile, unreadable settings file, or Electron session
-        // setup error must reach the manager instead of becoming an
-        // unhandled rejection followed by a generic startup timeout.
-        const rt = new ProfileRuntime(distDir, dataDir, lang, profileId, channel);
-        // Create the native shell before profile services (adblock, proxy,
-        // settings, and storage) can block. The manager now receives readiness
-        // only after a real profile window exists, not merely after Electron
-        // starts its child process.
-        rt.primeStartupWindow();
         channel.send({ t: 'ready' });
         await rt.start(key, quota);
       } catch (err) {

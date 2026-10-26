@@ -175,9 +175,20 @@ export function openParentPipeChannel(pipeName: string): MessageChannel {
 export function openChildPipeChannel(pipeName: string): MessageChannel {
   if (!validPipeName(pipeName)) throw new Error('invalid profile IPC pipe');
   const channel = new PipeChannel();
-  const socket = net.createConnection(pipeName);
-  socket.on('connect', () => channel.attach(socket));
-  socket.on('error', () => undefined);
+  let attempts = 0;
+  const connect = (): void => {
+    if (channel.isClosed || attempts++ >= 200) return;
+    const socket = net.createConnection(pipeName);
+    let connected = false;
+    socket.on('connect', () => { connected = true; channel.attach(socket); });
+    socket.on('error', () => {
+      if (!connected) {
+        socket.destroy();
+        setTimeout(connect, 100);
+      }
+    });
+  };
+  connect();
   return channel;
 }
 

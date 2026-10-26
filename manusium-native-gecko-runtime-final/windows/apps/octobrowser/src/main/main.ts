@@ -55,14 +55,10 @@ if (runCliVerifyIfRequested('octobrowser')) {
         const fingerprintUsesWebgpu = p.fingerprint?.enabled === true
           && p.fingerprint.webgpu !== 'off'
           && p.fingerprint.webgpu !== 'disable';
-        // A page-level WebGL overlay cannot spoof a context that Chromium
-        // refused to create because the host adapter is blocklisted. Keep
-        // graphics available for profiles that explicitly expose WebGL; the
-        // preload still controls the values sites observe. Do not apply this
-        // to the global graphics-block mode or to profiles with WebGL off.
-        if (fingerprintUsesWebgl && s.webgl === 'allow') {
-          switches.push(['ignore-gpu-blocklist']);
-        }
+        // Do not bypass Chromium's GPU blocklist. That switch is rejected by
+        // the controlled-switch policy and caused profile preparation to abort
+        // before the child could create its window. WebGL exposure remains
+        // governed by the profile setting and normal Chromium GPU selection.
         if (appSettings.privacyRuntime.graphicsExposure === 'block' && !fingerprintUsesWebgl && !fingerprintUsesWebgpu) {
           // Honest containment: disable GPU-backed web graphics; never replace it
           // with a fabricated renderer or an unsafe software GPU.
