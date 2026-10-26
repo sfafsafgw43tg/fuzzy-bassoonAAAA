@@ -1,6 +1,6 @@
 #include "FrameBuffer.h"
 
-#include "../../octo-camera/feed_protocol.h"
+#include "feed_protocol.h"
 
 #include <algorithm>
 #include <chrono>
