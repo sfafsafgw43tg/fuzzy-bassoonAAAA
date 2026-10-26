@@ -60,6 +60,8 @@ export class ProfileRuntime {
   readonly layout: DataLayout;
   readonly logger: Logger;
   readonly settings: VersionedStore<AppSettings>;
+  /** Validated app settings snapshot for this process; avoids repeated disk reads during startup. */
+  private readonly startupSettings: AppSettings;
   controller!: ProfileSessionController;
   private data!: ProfileData;
   private secrets!: SecretStore;
@@ -115,7 +117,8 @@ export class ProfileRuntime {
     this.layout = new DataLayout(dataDir);
     this.logger = new Logger(this.layout.logs, 'octobrowser-profiles');
     this.settings = createSettingsStore(this.layout);
-    const persistence = this.settings.load().privacyRuntime.sessionPersistence;
+    this.startupSettings = this.settings.load();
+    const persistence = this.startupSettings.privacyRuntime.sessionPersistence;
     this.sessionPartition = persistence === 'ephemeral' ? ephemeralPartition() : profilePartition(profileId);
     this.profile = new ProfileManager(this.layout).get(profileId);
     this.adblock = new AdblockService(this.layout.filters, path.join(distDir, 'assets', 'baseline-filters.txt'), this.logger);
@@ -186,7 +189,7 @@ export class ProfileRuntime {
     // "Save passwords" is kept by the app itself: metadata in config/passwords.json,
     // the password only in this profile's encrypted secret store.
     this.passwords = new PasswordStore(this.layout, this.secrets);
-    const s = this.settings.load();
+    const s = this.startupSettings;
     this.logger.setMode(s.logs.mode);
 
     // DNS for this profile (own process => own resolver config).
@@ -220,7 +223,7 @@ export class ProfileRuntime {
       onBlocked: (wc) => { for (const w of this.windows.values()) w.countBlocked(wc); },
       onTrafficDelta: (bytesIn, bytesOut) => this.recordProxyTraffic(bytesIn, bytesOut),
       isTrafficAllowed: () => this.canUseProxyTraffic(),
-      isOffline: () => this.settings.load().offline,
+      isOffline: () => this.startupSettings.offline,
     });
     // Establish the manager handshake as soon as the trusted local chrome is
     // usable. Proxy bridges, geo-IP checks, fingerprint resolution, extension
@@ -269,7 +272,12 @@ export class ProfileRuntime {
     // Bundled extensions are loaded only for profiles that explicitly enabled
     // them. Their extension storage therefore stays inside this profile's own
     // Chromium user-data directory rather than the manager or another profile.
-    await this.startupWithin('extension synchronization', this.syncBundledExtensions(ses), 8_000, undefined);
+    // Cookie restoration does not depend on extension loading, so run both
+    // bounded tasks concurrently instead of adding their latencies together.
+    await Promise.all([
+      this.startupWithin('extension synchronization', this.syncBundledExtensions(ses), 8_000, undefined),
+      this.startupWithin('cookie restoration', this.applyQueuedCookies(), 8_000, undefined),
+    ]);
     this.logger.info('fingerprint.resolution', { profile: this.profile.id, enabled: this.fp.enabled, mobile: 'none', os: this.fp.enabled ? this.fp.os : 'native' });
 
     // Proxy authentication from the encrypted secret store only.
@@ -285,9 +293,6 @@ export class ProfileRuntime {
         cb();
       }
     });
-
-    // Cookies imported in the launcher while the profile was closed.
-    await this.startupWithin('cookie restoration', this.applyQueuedCookies(), 8_000, undefined);
 
     // Restore previous session or open the home page.
     let urls: string[] = [];
