@@ -1,6 +1,6 @@
 {
   "name": "octosuite",
-  "version": "0.2.1",
+  "version": "0.2.3",
   "private": true,
   "description": "OctoSuite: Octo.su multi-engine browser and OctoDetect.su privacy audit tool for Windows 10/11 and Linux x64/Debian",
   "license": "MPL-2.0",
