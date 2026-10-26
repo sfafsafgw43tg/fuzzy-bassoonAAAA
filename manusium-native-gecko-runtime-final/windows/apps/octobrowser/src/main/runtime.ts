@@ -156,6 +156,22 @@ export class ProfileRuntime {
     }
   }
 
+  /** Keep optional startup services from preventing the local profile window from opening. */
+  private async startupWithin<T>(label: string, work: Promise<T>, timeoutMs: number, fallback: T): Promise<T> {
+    let timer: NodeJS.Timeout | undefined;
+    try {
+      return await Promise.race([
+        work,
+        new Promise<T>((resolve) => { timer = setTimeout(() => resolve(fallback), timeoutMs); }),
+      ]);
+    } catch (error) {
+      this.logger.warn('profile.startup-step-failed', { step: label, error: String(error) });
+      return fallback;
+    } finally {
+      if (timer) clearTimeout(timer);
+    }
+  }
+
   // ---------------------------------------------------------------- start
 
   async start(key: Buffer, quota?: { id: string; limitBytes: number; usedBytes: number }): Promise<void> {
@@ -228,13 +244,13 @@ export class ProfileRuntime {
     this.channel.send({ t: 'ready' });
 
     // Proxy with credentials Chromium cannot use (SOCKS auth) -> local bridge.
-    await this.startProxyBridge();
+    await this.startupWithin('proxy bridge', this.startProxyBridge(), 8_000, undefined);
     // Route the session before the first exit-IP lookup. Without this ordering,
     // a non-bridged HTTP proxy could briefly resolve locale through the host IP.
-    await this.controller.prepareNetwork();
+    await this.startupWithin('network preparation', this.controller.prepareNetwork(), 8_000, undefined);
     // Resolve the saved profile identity only after the profile route is active.
     // Auto locale/timezone/geolocation values therefore use the profile's exit IP.
-    const geo = await this.geoForFingerprint();
+    const geo = await this.startupWithin('geo-IP resolution', this.geoForFingerprint(), 8_000, undefined);
     this.fp = this.profile.ordinaryBrowser
       ? { kind: 'disabled', enabled: false }
       : resolveFingerprint(this.profile.fingerprint, geo, this.lang);
@@ -248,12 +264,12 @@ export class ProfileRuntime {
       : process.argv.some((arg) => arg === '--headless' || arg.startsWith('--headless='))
         ? nativeUserAgent
         : cleanUserAgent(nativeUserAgent);
-    await this.controller.install(profileUserAgent, this.fp.enabled ? (this.fp.acceptLanguage ?? '') : '');
+    await this.startupWithin('profile identity installation', this.controller.install(profileUserAgent, this.fp.enabled ? (this.fp.acceptLanguage ?? '') : ''), 8_000, undefined);
 
     // Bundled extensions are loaded only for profiles that explicitly enabled
     // them. Their extension storage therefore stays inside this profile's own
     // Chromium user-data directory rather than the manager or another profile.
-    await this.syncBundledExtensions(ses);
+    await this.startupWithin('extension synchronization', this.syncBundledExtensions(ses), 8_000, undefined);
     this.logger.info('fingerprint.resolution', { profile: this.profile.id, enabled: this.fp.enabled, mobile: 'none', os: this.fp.enabled ? this.fp.os : 'native' });
 
     // Proxy authentication from the encrypted secret store only.
@@ -271,7 +287,7 @@ export class ProfileRuntime {
     });
 
     // Cookies imported in the launcher while the profile was closed.
-    await this.applyQueuedCookies();
+    await this.startupWithin('cookie restoration', this.applyQueuedCookies(), 8_000, undefined);
 
     // Restore previous session or open the home page.
     let urls: string[] = [];
