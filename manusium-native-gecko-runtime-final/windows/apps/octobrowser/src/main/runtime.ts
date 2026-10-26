@@ -213,7 +213,17 @@ export class ProfileRuntime {
     this.registerIpc();
     this.channel.onMessage((m) => void this.onManagerMessage(m));
     const initialWindow = this.openWindow([], true);
-    await initialWindow.whenChromeReady();
+    try {
+      // A renderer load can hang on a damaged cache, GPU initialization issue,
+      // or stale packaged bundle. The native window is already visible, so do
+      // not hold the manager handshake behind that renderer indefinitely.
+      await Promise.race([
+        initialWindow.whenChromeReady(),
+        new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
+      ]);
+    } catch (error) {
+      this.logger.error('window.chrome-load-failed-before-ready', { error: String(error) });
+    }
     this.logger.info('profile.chrome-ready', { profile: this.profile.id });
     this.channel.send({ t: 'ready' });
 
