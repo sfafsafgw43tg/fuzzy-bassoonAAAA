@@ -1460,11 +1460,11 @@ export function runProfileProcess(distDir: string, dataDir: string, lang: Lang, 
     app.exit(3); // not started by the manager
     return;
   }
-  // Exactly one process per profile (Chromium also locks the userData folder).
-  if (!app.requestSingleInstanceLock()) {
-    app.exit(0);
-    return;
-  }
+  // The manager already owns Electron's application-wide single-instance lock.
+  // A profile child must not request it again: Electron would treat the child
+  // as a second launcher instance and exit before sending channel-ready.
+  // Profile isolation is enforced by the manager and the per-profile Chromium
+  // user-data directory lock instead.
   let started = false;
   const timeout = setTimeout(() => { if (!started) app.exit(2); }, 20_000); // no key from the manager => exit
   channel.onMessage((m) => {
