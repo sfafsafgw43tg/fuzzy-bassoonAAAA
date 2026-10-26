@@ -30,7 +30,7 @@ import { openSaveCard } from './save-card';
 import type { FingerprintProbeSnapshot } from './fingerprint-probe';
 import { FINGERPRINT_TEST_SITES, type FingerprintTestSiteId } from '../shared/fingerprint-test-sites';
 import { AdblockService } from '@octo/shell/adblock';
-import { type MessageChannel, Message, openChildChannel } from '@octo/shell/channel';
+import { type MessageChannel, Message, openChildChannel, openChildPipeChannel } from '@octo/shell/channel';
 import { handle } from '@octo/shell/ipc';
 import { acceptLanguages, cleanUserAgent } from '@octo/shell/prepare';
 import { PermissionKind, ProfileSessionController, DownloadInfo } from '@octo/shell/session-privacy';
@@ -93,6 +93,8 @@ export class ProfileRuntime {
   private pendingProxyUsage = 0;
   /** Immutable for this launch. Ephemeral sessions never use a persist: partition. */
   private sessionPartition = '';
+  /** Native profile shell primed before slow profile services initialize. */
+  private startupWindow: BrowserWindowController | null = null;
   /** Add-on id → extension id, scoped to this profile process's session. */
   private profileSession(): Session {
     return session.fromPartition(this.sessionPartition);
@@ -228,7 +230,8 @@ export class ProfileRuntime {
     // before the profile route and identity are configured below.
     this.registerIpc();
     this.channel.onMessage((m) => void this.onManagerMessage(m));
-    const initialWindow = this.openWindow([], true);
+    const initialWindow = this.startupWindow ?? this.openWindow([], true);
+    this.startupWindow = null;
     try {
       // A renderer load can hang on a damaged cache, GPU initialization issue,
       // or stale packaged bundle. The native window is already visible, so do
@@ -450,6 +453,11 @@ export class ProfileRuntime {
     this.windows.set(w.chromeId, w);
     this.lastFocused = w;
     return w;
+  }
+
+  /** Create the visible native shell before profile services are allowed to block. */
+  primeStartupWindow(): void {
+    if (!this.startupWindow) this.startupWindow = this.openWindow([], true);
   }
 
   /** Create a destination first, then transfer the live native page view. */
@@ -1448,11 +1456,11 @@ export class ProfileRuntime {
 }
 
 /** Entry point for --profile-process=<id>. */
-export function runProfileProcess(distDir: string, dataDir: string, lang: Lang, profileId: string): void {
+export function runProfileProcess(distDir: string, dataDir: string, lang: Lang, profileId: string, pipeName?: string): void {
   protocol.registerSchemesAsPrivileged([{ scheme: 'octo', privileges: { standard: true, secure: true } }]);
   let channel: MessageChannel;
   try {
-    channel = openChildChannel(); // private Node IPC channel from the manager
+    channel = pipeName ? openChildPipeChannel(pipeName) : openChildChannel(); // private local pipe from the manager
   } catch {
     app.exit(3); // not started by the manager
     return;
@@ -1472,16 +1480,17 @@ export function runProfileProcess(distDir: string, dataDir: string, lang: Lang, 
     const quota = m.proxyQuota as { id: string; limitBytes: number; usedBytes: number } | undefined;
     void app.whenReady().then(async () => {
       try {
-        // The Electron child is trusted and its local shell is ready at this point.
-        // Signal the manager before profile-specific renderer/session work so a
-        // slow cache, GPU, or page load can never leave the launcher stuck at
-        // STARTING. ProfileRuntime still reports any real construction failure.
-        channel.send({ t: 'ready' });
         // Keep construction inside the same failure boundary as start(). A
         // malformed profile, unreadable settings file, or Electron session
         // setup error must reach the manager instead of becoming an
         // unhandled rejection followed by a generic startup timeout.
         const rt = new ProfileRuntime(distDir, dataDir, lang, profileId, channel);
+        // Create the native shell before profile services (adblock, proxy,
+        // settings, and storage) can block. The manager now receives readiness
+        // only after a real profile window exists, not merely after Electron
+        // starts its child process.
+        rt.primeStartupWindow();
+        channel.send({ t: 'ready' });
         await rt.start(key, quota);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);

@@ -7,7 +7,8 @@
  *                               with --profile-data-dir supplied by that manager
  */
 import { app, dialog, protocol } from 'electron';
-import { Logger, ProfileManager, effectiveSettings, createSettingsStore, sanitizeProfile, newProfileId } from '@octo/core';
+import * as path from 'node:path';
+import { DataLayout, Logger, ProfileManager, effectiveSettings, createSettingsStore, sanitizeProfile, newProfileId } from '@octo/core';
 import { argValue, hasFlag, prepareApp, relaunchArgsWithout, resetPreparedApp } from '@octo/shell/prepare';
 import { hardenApp } from '@octo/shell/hardening';
 import { setTrustedRoot } from '@octo/shell/ipc';
@@ -73,12 +74,16 @@ if (runCliVerifyIfRequested('octobrowser')) {
       }
     },
   });
-  if (!prep.state) {
+  const managerDataDir = argValue('profile-data-dir');
+  const profilePipe = argValue('profile-ipc');
+  const profileDataDir = prep.state?.dataDir ?? (managerDataDir && path.isAbsolute(managerDataDir) ? managerDataDir : undefined);
+  const profileLanguage = prep.state?.language ?? (argValue('lang-choice') === 'pl' ? 'pl' : 'en');
+  if (!profileDataDir) {
     app.exit(3); // not configured - must be started by the manager
   } else {
-    const layout = prep.layout!;
+    const layout = prep.layout ?? new DataLayout(profileDataDir);
     app.whenReady().then(() => hardenApp(new Logger(layout.logs, 'octobrowser-profiles'))).catch(() => undefined);
-    runProfileProcess(distDir, prep.state.dataDir, prep.state.language, profileId);
+    runProfileProcess(distDir, profileDataDir, profileLanguage, profileId, profilePipe);
   }
 } else {
   // ---------------------------------------------------------- manager role

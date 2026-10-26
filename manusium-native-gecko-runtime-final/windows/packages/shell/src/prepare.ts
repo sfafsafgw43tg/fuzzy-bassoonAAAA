@@ -137,10 +137,10 @@ export function prepareApp(appId: AppId, distDir: string, opts: PrepareOptions =
     app.commandLine.appendSwitch('disable-gpu');
     app.commandLine.appendSwitch('disable-gpu-compositing');
     app.commandLine.appendSwitch('in-process-gpu');
-    if (isVmMode) {
-      app.commandLine.appendSwitch('disable-software-rasterizer');
-      app.commandLine.appendSwitch('disable-gpu-rasterization');
-    }
+    // Keep Chromium's software rasterizer available. Disabling both hardware
+    // acceleration and software rasterization leaves WebContentsView renderers
+    // alive but unable to create a visible profile window on some Windows/VM
+    // graphics stacks. Hardware GPU use is already disabled above.
   }
 
   // Force the Chromium sandbox for EVERY renderer (UI and web pages).

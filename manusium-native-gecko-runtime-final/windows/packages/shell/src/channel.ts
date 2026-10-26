@@ -12,6 +12,7 @@
  */
 import type { ChildProcess } from 'node:child_process';
 import type { Readable, Writable } from 'node:stream';
+import * as net from 'node:net';
 
 export type Message = { t: string; [k: string]: unknown };
 
@@ -127,6 +128,57 @@ export function openParentChannel(proc: ChildProcess): IpcChannel {
 export function openChildChannel(): IpcChannel {
   if (typeof process.send !== 'function') throw new Error('profile IPC channel missing');
   return new IpcChannel(process as unknown as IpcPeer);
+}
+
+/** Named-pipe transport used when Electron does not expose Node's IPC API. */
+class PipeChannel extends MessageDispatcher implements MessageChannel {
+  private socket: net.Socket | null = null;
+  private queued: Message[] = [];
+  private closed = false;
+  private closeHandlers: Array<() => void> = [];
+  attach(socket: net.Socket): void {
+    if (this.socket || this.closed) { socket.destroy(); return; }
+    this.socket = socket;
+    const line = new JsonLineChannel(socket, socket);
+    line.onMessage((m) => this.deliver(m));
+    line.onClose(() => this.markClosed());
+    for (const m of this.queued.splice(0)) line.send(m);
+  }
+  onClose(fn: () => void): void { if (this.closed) fn(); else this.closeHandlers.push(fn); }
+  get isClosed(): boolean { return this.closed; }
+  send(m: Message): void {
+    if (this.closed) return;
+    if (!this.socket) { if (this.queued.length < MAX_PENDING_MESSAGES) this.queued.push(m); return; }
+    try { this.socket.write(`${JSON.stringify(m)}\n`); } catch { this.markClosed(); }
+  }
+  private markClosed(): void {
+    if (this.closed) return;
+    this.closed = true;
+    for (const h of this.closeHandlers.splice(0)) { try { h(); } catch {} }
+  }
+}
+
+function validPipeName(name: string): boolean {
+  const prefix = String.raw`\\.\pipe\octo-profile-`;
+  return name.startsWith(prefix) && /^[a-f0-9]{32}$/.test(name.slice(prefix.length));
+}
+
+export function openParentPipeChannel(pipeName: string): MessageChannel {
+  if (!validPipeName(pipeName)) throw new Error('invalid profile IPC pipe');
+  const channel = new PipeChannel();
+  const server = net.createServer((socket) => { channel.attach(socket); server.close(); });
+  server.on('error', () => undefined);
+  server.listen(pipeName);
+  return channel;
+}
+
+export function openChildPipeChannel(pipeName: string): MessageChannel {
+  if (!validPipeName(pipeName)) throw new Error('invalid profile IPC pipe');
+  const channel = new PipeChannel();
+  const socket = net.createConnection(pipeName);
+  socket.on('connect', () => channel.attach(socket));
+  socket.on('error', () => undefined);
+  return channel;
 }
 
 /**

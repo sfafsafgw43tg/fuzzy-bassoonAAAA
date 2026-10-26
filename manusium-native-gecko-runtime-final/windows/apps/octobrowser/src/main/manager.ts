@@ -31,7 +31,7 @@ import { randomBytes } from 'node:crypto';
 import * as net from 'node:net';
 import { ApiBackend, ApiError, ApiServer } from './api-server';
 import { AdblockService } from '@octo/shell/adblock';
-import { type Message, type MessageChannel, channelStdio, openParentChannel } from '@octo/shell/channel';
+import { type Message, type MessageChannel, openParentPipeChannel } from '@octo/shell/channel';
 import { FINGERPRINT_TEST_SITES, type FingerprintTestSiteId } from '../shared/fingerprint-test-sites';
 import type { FingerprintAuditReport, FingerprintAuditResponse } from '../shared/fingerprint-audit-types';
 import { AppContext } from '@octo/shell/context';
@@ -1154,8 +1154,10 @@ export class Manager {
     // Node's inherited IPC channel is private to this manager/child pair. A browser
     // profile is a GUI child, never a console tool: stdout/stderr stay ignored so
     // source builds do not leave a Command Prompt visible on Windows.
-    const proc = spawn(process.execPath, args, { stdio: channelStdio(false), windowsHide: true, env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined } });
-    const channel = openParentChannel(proc);
+    const pipeName = `\\\\.\\pipe\\octo-profile-${randomBytes(16).toString('hex')}`;
+    const channel = openParentPipeChannel(pipeName);
+    args.push(`--profile-ipc=${pipeName}`);
+    const proc = spawn(process.execPath, args, { stdio: ['ignore', 'ignore', 'ignore'], windowsHide: true, env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined } });
     let resolveReady!: (ready: boolean) => void;
     const readyPromise = new Promise<boolean>((resolve) => { resolveReady = resolve; });
     const child: Child = { proc, channel, ready: false, readyPromise, resolveReady, startedAt: Date.now() };
