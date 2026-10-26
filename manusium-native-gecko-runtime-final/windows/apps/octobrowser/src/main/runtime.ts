@@ -204,6 +204,19 @@ export class ProfileRuntime {
       isTrafficAllowed: () => this.canUseProxyTraffic(),
       isOffline: () => this.settings.load().offline,
     });
+    // Establish the manager handshake as soon as the trusted local chrome is
+    // usable. Proxy bridges, geo-IP checks, fingerprint resolution, extension
+    // sync, and cookie restoration may be slow or unavailable; none of them
+    // should leave the profile row stuck in STARTING while the local window is
+    // already open. Keep this shell empty so no external page can navigate
+    // before the profile route and identity are configured below.
+    this.registerIpc();
+    this.channel.onMessage((m) => void this.onManagerMessage(m));
+    const initialWindow = this.openWindow([], true);
+    await initialWindow.whenChromeReady();
+    this.logger.info('profile.chrome-ready', { profile: this.profile.id });
+    this.channel.send({ t: 'ready' });
+
     // Proxy with credentials Chromium cannot use (SOCKS auth) -> local bridge.
     await this.startProxyBridge();
     // Route the session before the first exit-IP lookup. Without this ordering,
@@ -250,9 +263,6 @@ export class ProfileRuntime {
     // Cookies imported in the launcher while the profile was closed.
     await this.applyQueuedCookies();
 
-    this.registerIpc();
-    this.channel.onMessage((m) => void this.onManagerMessage(m));
-
     // Restore previous session or open the home page.
     let urls: string[] = [];
     if (this.profile.restoreSession && !this.profile.deleteOnClose) {
@@ -272,13 +282,9 @@ export class ProfileRuntime {
       .slice(0, 20);
     if (!urls.length && this.profile.homePage) urls.push(this.profile.homePage);
     urls.push(...startPages);
-    const initialWindow = this.openWindow(urls);
-    // A profile is ready only once a visible browser window has loaded its
-    // trusted chrome. This keeps the launcher from showing STOP for a hidden
-    // or failed-to-load profile window.
-    await initialWindow.whenChromeReady();
+    const openUrls = urls.length ? urls : [initialWindow.defaultNewTabUrl()];
+    for (const url of openUrls) initialWindow.newTab(url, { active: true });
     this.logger.info('profile.started', { profile: this.profile.id, kind: this.profile.kind, level: this.profile.protection.level, sandbox: this.profile.sandbox.mode });
-    this.channel.send({ t: 'ready' });
 
     app.on('before-quit', (e) => {
       if (this.quitting) return;

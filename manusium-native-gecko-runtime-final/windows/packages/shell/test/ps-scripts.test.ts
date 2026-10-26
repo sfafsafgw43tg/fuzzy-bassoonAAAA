@@ -61,8 +61,8 @@ describe('install.bat covers every dependency', () => {
     expect(installBat).toContain('OCTO_WANTS_BACKGROUND');
     expect(installBat).toContain('hidden.vbs');
     expect(installBat).toContain('-Background');
-    expect(installBat).toContain('starts immediately without a startup elevation handoff');
-    expect(installBat).toContain('elevate-installer.ps1');
+    expect(installBat).toContain('does not require Administrator at startup');
+    expect(source).toContain('elevate-installer.ps1');
     expect(source).toContain('Visual Studio modification requires administrator rights');
     expect(source).toContain('-Verb RunAs');
   });
