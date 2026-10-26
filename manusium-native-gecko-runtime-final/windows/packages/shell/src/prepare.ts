@@ -13,6 +13,7 @@
  *     disposable sandbox, bootstrap.json is never written.
  */
 import { app } from 'electron';
+import { createHash } from 'node:crypto';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -71,12 +72,19 @@ export function prepareApp(appId: AppId, distDir: string, opts: PrepareOptions =
   const info = APPS[appId];
   app.setName(info.productName);
   if (process.platform === 'win32') {
-    app.setAppUserModelId(info.appUserModelId);
+    // Windows caches taskbar/relaunch metadata by AppUserModelId. A fixed ID
+    // for development builds makes a moved checkout inherit the old
+    // node_modules\electron\dist location, so Explorer's "Open file location"
+    // points at a deleted drive. Keep release IDs stable, but isolate each
+    // development Electron executable by a short hash of its real path.
+    const devSuffix = createHash('sha1').update(path.resolve(process.execPath).toLowerCase()).digest('hex').slice(0, 10);
+    const taskbarAppId = app.isPackaged ? info.appUserModelId : `${info.appUserModelId}.Dev.${devSuffix}`;
+    app.setAppUserModelId(taskbarAppId);
     // A window icon alone does not change Explorer's taskbar context menu.
     // Set explicit relaunch metadata even for development electron.exe launches.
     app.on('browser-window-created', (_event, window) => {
       window.setAppDetails({
-        appId: info.appUserModelId,
+        appId: taskbarAppId,
         appIconPath: path.join(distDir, 'assets', 'icon.ico'),
         appIconIndex: 0,
         relaunchDisplayName: info.productName,
