@@ -40,7 +40,7 @@ rem Remember the console code page, switch to UTF-8 for PowerShell output, resto
 set "OCTO_CP="
 for /f "tokens=2 delims=:." %%a in ('chcp') do set "OCTO_CP=%%a"
 chcp 65001 >nul 2>&1
-"%OCTO_PS%" -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%OCTO_DIR%lib\octo.ps1" install %*
+"%OCTO_PS%" -NoLogo -NoProfile -ExecutionPolicy Bypass -File "%~dp0lib\octo.ps1" install %*
 set "OCTO_RC=%ERRORLEVEL%"
 if defined OCTO_CP chcp %OCTO_CP% >nul 2>&1
 if not defined OCTO_NOPAUSE pause
