@@ -933,14 +933,16 @@ function openPanel(p: Panel | null, custom?: () => void, title?: string): void {
     const finish = () => {
       if (panel !== null) return;
       panelElement.classList.add('hidden');
+      panelElement.classList.remove('popout-closing');
       clear(body);
       requestAnimationFrame(reportLayout);
     };
     if (tabMotionEnabled()) {
+      panelElement.classList.add('popout-closing');
       const motion = panelElement.animate([
-        { opacity: 1, transform: 'translateX(0)' },
-        { opacity: 0, transform: 'translateX(18px)' },
-      ], { duration: 120, easing: 'cubic-bezier(.4,0,1,1)' });
+        { opacity: 1, transform: 'translate3d(0,0,0) scale(1)' },
+        { opacity: 0, transform: 'translate3d(0,8px,0) scale(.98)' },
+      ], { duration: 150, easing: 'cubic-bezier(.4,0,1,1)' });
       void motion.finished.then(finish, finish);
     } else finish();
     return;
@@ -950,7 +952,8 @@ function openPanel(p: Panel | null, custom?: () => void, title?: string): void {
   const switchingTool = panel !== null && panel !== p && !panelElement.classList.contains('hidden') && tabMotionEnabled();
   panel = p;
   panelCoversContent = false;
-  panelElement.classList.remove('hidden', 'popout');
+  panelElement.classList.remove('hidden', 'popout-closing');
+  panelElement.classList.add('popout');
   panelElement.setAttribute('role', 'complementary');
   panelElement.removeAttribute('aria-modal');
   clear(body);
@@ -2721,6 +2724,9 @@ function initEvents(): void {
     if (passwordsPopoutOpen && !$('passwordsPopout').contains(target)) closePasswordsPopout();
     if (pageInfoOpen && !$('pageInfo').contains(target) && !$('secIcon').contains(target)) closePageInfo();
     if (translateOpen && !$('translateBar').contains(target) && !$('translateBtn').contains(target)) closeTranslateBar();
+    // Tool settings are floating popouts; clicks outside retract them without
+    // affecting the native page view underneath.
+    if (panel && !$('panel').contains(target) && !$('status').contains(target)) openPanel(null);
   };
   document.addEventListener('pointerdown', dismissPopups);
   document.addEventListener('mousedown', dismissPopups);

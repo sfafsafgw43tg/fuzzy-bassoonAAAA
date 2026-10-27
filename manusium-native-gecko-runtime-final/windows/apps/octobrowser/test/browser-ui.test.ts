@@ -72,6 +72,16 @@ describe('browser entry UI', () => {
     expect(browser).toContain('dismissAllPopouts();');
   });
 
+  it('uses an animated floating popout for browser tools without changing page layout', () => {
+    expect(browser).toContain("panelElement.classList.add('popout');");
+    expect(browser).toContain("panelElement.classList.add('popout-closing');");
+    expect(browser).toContain("if (panel && !$('panel').contains(target)");
+    expect(browserCss).toContain('position: absolute; z-index: 70;');
+    expect(browserCss).toContain('@keyframes popout-in');
+    expect(browserCss).toContain('@media (prefers-reduced-motion: reduce)');
+    expect(browserCss).toContain('#panel:has(.settings-media) { width:min(480px,calc(100vw - 24px)); }');
+  });
+
   it('renders both winter themes as sparse, soft, breezy snowfall', () => {
     expect(launcherCss).toContain(':root[data-app-theme="winterNight"] body::before,\n:root[data-app-theme="winterDay"] body::before');
     expect(launcherCss).toContain('seasonal-snowfall-random 83s linear infinite alternate');
@@ -257,12 +267,12 @@ describe('browser entry UI', () => {
 
   it('uses compact retractable drawers without blacking out the live page', () => {
     expect(browser).toContain("mk('stMenu', 'menu', 'ui.menu', toggleChromeMenu)");
-    expect(browser).toContain("panelElement.classList.remove('hidden', 'popout')");
+    expect(browser).toContain("panelElement.classList.add('popout')");
     expect(browser).toContain('panelCoversContent = false');
     expect(browser).toContain('password-saving-toggle');
     expect(browserCss).toContain('.chrome-menu { position: fixed');
-    expect(browserCss).toContain('Every browser tool—including Passwords, Downloads and Settings—is a compact');
-    expect(browserCss).not.toContain('#panel.popout');
+    expect(browserCss).toContain('Browser tools are floating popouts');
+    expect(browserCss).toContain('#panel.popout');
     expect(browserCss).not.toContain(':root[data-chrome-look="on"] .chrome-menu {');
   });
 
