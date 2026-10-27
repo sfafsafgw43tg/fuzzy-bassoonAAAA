@@ -30,7 +30,7 @@ import { openSaveCard } from './save-card';
 import type { FingerprintProbeSnapshot } from './fingerprint-probe';
 import { FINGERPRINT_TEST_SITES, type FingerprintTestSiteId } from '../shared/fingerprint-test-sites';
 import { AdblockService } from '@octo/shell/adblock';
-import { type MessageChannel, Message, openChildChannel, openChildPipeChannel } from '@octo/shell/channel';
+import { type MessageChannel, Message, openChildChannel } from '@octo/shell/channel';
 import { handle } from '@octo/shell/ipc';
 import { acceptLanguages, cleanUserAgent } from '@octo/shell/prepare';
 import { PermissionKind, ProfileSessionController, DownloadInfo } from '@octo/shell/session-privacy';
@@ -1508,11 +1508,13 @@ export class ProfileRuntime {
 }
 
 /** Entry point for --profile-process=<id>. */
-export function runProfileProcess(distDir: string, dataDir: string, lang: Lang, profileId: string, pipeName?: string): void {
+export function runProfileProcess(distDir: string, dataDir: string, lang: Lang, profileId: string): void {
   protocol.registerSchemesAsPrivileged([{ scheme: 'octo', privileges: { standard: true, secure: true } }]);
   let channel: MessageChannel;
   try {
-    channel = pipeName ? openChildPipeChannel(pipeName) : openChildChannel(); // private local pipe from the manager
+    // The manager supplies Electron/Node's inherited private IPC channel.
+    // Keep startup on the same transport as the tested channel contract.
+    channel = openChildChannel();
   } catch {
     app.exit(3); // not started by the manager
     return;

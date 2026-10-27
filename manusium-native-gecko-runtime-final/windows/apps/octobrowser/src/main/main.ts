@@ -79,7 +79,6 @@ if (runCliVerifyIfRequested('octobrowser')) {
     },
   });
   const managerDataDir = argValue('profile-data-dir');
-  const profilePipe = argValue('profile-ipc');
   const profileDataDir = prep.state?.dataDir ?? (managerDataDir && path.isAbsolute(managerDataDir) ? managerDataDir : undefined);
   const profileLanguage = prep.state?.language ?? (argValue('lang-choice') === 'pl' ? 'pl' : 'en');
   if (!profileDataDir) {
@@ -87,7 +86,7 @@ if (runCliVerifyIfRequested('octobrowser')) {
   } else {
     const layout = prep.layout ?? new DataLayout(profileDataDir);
     app.whenReady().then(() => hardenApp(new Logger(layout.logs, 'octobrowser-profiles'))).catch(() => undefined);
-    runProfileProcess(distDir, profileDataDir, profileLanguage, profileId, profilePipe);
+    runProfileProcess(distDir, profileDataDir, profileLanguage, profileId);
   }
 } else {
   // ---------------------------------------------------------- manager role

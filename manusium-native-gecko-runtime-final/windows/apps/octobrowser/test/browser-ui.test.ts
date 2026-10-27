@@ -220,6 +220,14 @@ describe('browser entry UI', () => {
     expect(manager).toContain('NativeChromiumTabs.connect(debugPort)');
   });
 
+  it('uses the tested inherited IPC transport for Electron profile startup', () => {
+    expect(manager).toContain("channelStdio(false)");
+    expect(manager).toContain('openParentChannel(proc)');
+    expect(manager).not.toContain('openParentPipeChannel');
+    expect(runtime).toContain('openChildChannel()');
+    expect(runtime).not.toContain('openChildPipeChannel');
+  });
+
   it('gives native Chromium a real new-tab fallback and applies the selected search engine', () => {
     expect(manager).toContain('prepareChromiumSearchPreference(profileFolder');
     expect(manager).toContain("const CHROMIUM_DEFAULT_SEARCH_URL = 'https://noai.duckduckgo.com/'");
