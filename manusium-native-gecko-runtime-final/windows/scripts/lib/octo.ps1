@@ -165,6 +165,11 @@ $Messages = @{
     depsChecking      = 'Checking project dependencies...'
     depsNodeMissing   = 'Node.js was not found in PATH (Node.js >= 22.12 is required).'
     depsFailed        = 'Installing project dependencies failed (exit code {0}). Read the messages above, then open the app again.'
+    aclChecking       = 'Checking Electron sandbox permissions...'
+    aclSkipping       = 'User-writable install path detected; skipping ACL elevation: {0}'
+    aclRepairing      = 'Repairing Electron sandbox permissions ({0}/{1}): {2}'
+    aclVerifying      = 'Verifying Electron sandbox permissions...'
+    aclFailed         = 'Electron sandbox permissions could not be repaired without elevation. Choose a user-writable install folder or run setup as administrator.'
     ghBuilding        = 'Building both apps (npm run build)...'
     ghDevDone         = 'Development checkout updated and rebuilt.'
     ghNpmMissing      = 'npm was not found in PATH (Node.js >= 22.12 is required).'
@@ -404,6 +409,11 @@ $Messages = @{
     depsChecking      = 'Sprawdzanie zależności projektu...'
     depsNodeMissing   = 'Nie znaleziono Node.js w PATH (wymagany Node.js >= 22.12).'
     depsFailed        = 'Instalacja zależności projektu nie powiodła się (kod {0}). Odczytaj komunikaty powyżej i otwórz aplikację ponownie.'
+    aclChecking       = 'Sprawdzanie uprawnień piaskownicy Electron...'
+    aclSkipping       = 'Wykryto folder zapisywalny dla użytkownika; pomijam podnoszenie uprawnień ACL: {0}'
+    aclRepairing      = 'Naprawianie uprawnień piaskownicy Electron ({0}/{1}): {2}'
+    aclVerifying      = 'Weryfikowanie uprawnień piaskownicy Electron...'
+    aclFailed         = 'Nie udało się naprawić uprawnień piaskownicy Electron bez podnoszenia uprawnień. Wybierz folder zapisywalny dla użytkownika albo uruchom konfigurację jako administrator.'
     ghBuilding        = 'Budowanie obu aplikacji (npm run build)...'
     ghDevDone         = 'Kopia deweloperska zaktualizowana i zbudowana.'
     ghNpmMissing      = 'Nie znaleziono npm w PATH (wymagany Node.js >= 22.12).'
@@ -2295,6 +2305,20 @@ function Test-FolderWritable([string]$dir) {
   } catch { return $false }
 }
 
+function Test-UserWritableInstallRoot {
+  $root = $null
+  try { $root = [IO.Path]::GetFullPath($InstallRoot).TrimEnd('\') } catch { return $false }
+  $userRoots = @($env:LOCALAPPDATA, $env:APPDATA, $env:USERPROFILE) |
+    Where-Object { $_ } |
+    ForEach-Object { try { [IO.Path]::GetFullPath([string]$_).TrimEnd('\') } catch { $null } }
+  foreach ($base in $userRoots) {
+    if (($root -eq $base -or $root.StartsWith($base + '\', [StringComparison]::OrdinalIgnoreCase)) -and (Test-FolderWritable $root)) {
+      return $true
+    }
+  }
+  return $false
+}
+
 # Where SDK packages are installed: the first writable candidate, otherwise the
 # per-user SDK folder. Never Program Files.
 function Get-AndroidInstallRoot {
@@ -2502,6 +2526,15 @@ function Repair-ElectronSandboxAcl {
   # read/execute access. A copied npm cache can carry a restrictive ACL and
   # then fail with 0x80000003 before the launcher can create a window.
   try {
+    Say (T 'aclChecking') 'Cyan'
+    Write-Progress -Id 731 -Activity (T 'aclChecking') -Status $InstallRoot -PercentComplete 5
+    if (Test-UserWritableInstallRoot) {
+      Write-Log 'info' "Skipped Electron sandbox ACL elevation for user-writable install path: $InstallRoot"
+      Write-Progress -Id 731 -Activity (T 'aclChecking') -Status (T 'aclSkipping' $InstallRoot) -PercentComplete 100
+      Say (T 'aclSkipping' $InstallRoot) 'Green'
+      return $true
+    }
+
     # The sandbox checks every parent directory while opening the child. The
     # old implementation validated only dist, so a checkout under a custom
     # folder could still crash with ERR_FAILED even after a successful repair.
@@ -2516,7 +2549,11 @@ function Repair-ElectronSandboxAcl {
       $cursor = $next
     }
 
+    $chainIndex = 0
     $missing = @($chain | Where-Object {
+      $chainIndex++
+      $percent = [Math]::Min(45, 10 + [int](35 * $chainIndex / [Math]::Max(1, $chain.Count)))
+      Write-Progress -Id 731 -Activity (T 'aclChecking') -Status $_ -PercentComplete $percent
       $text = (& icacls.exe $_ 2>&1 | Out-String)
       $text -notmatch 'S-1-15-2-1|ALL APPLICATION PACKAGES'
     })
@@ -2525,7 +2562,10 @@ function Repair-ElectronSandboxAcl {
     # Start-Process joins an ArgumentList array into one command line. Quote
     # both the path and SID/rights token or paths with spaces produce ERROR_INVALID_PARAMETER (87).
     $lastExit = $null
+    $repairIndex = 0
     foreach ($target in $missing) {
+      $repairIndex++
+      Write-Progress -Id 731 -Activity (T 'aclChecking') -Status (T 'aclRepairing' $repairIndex $missing.Count $target) -PercentComplete (45 + [int](35 * $repairIndex / [Math]::Max(1, $missing.Count)))
       $isRuntimeTree = $target -eq $dist
       $rights = if ($isRuntimeTree) { '(OI)(CI)(RX)' } else { '(RX)' }
       $aclArguments = ('"{0}" /grant:r "*S-1-15-2-1:{1}"' -f $target, $rights)
@@ -2533,6 +2573,7 @@ function Repair-ElectronSandboxAcl {
       $lastExit = $result.ExitCode
       if ($lastExit -ne 0) { throw "icacls failed for '$target' with exit code $lastExit." }
     }
+    Write-Progress -Id 731 -Activity (T 'aclChecking') -Status (T 'aclVerifying') -PercentComplete 90
     $unrepaired = @($chain | Where-Object {
       $text = (& icacls.exe $_ 2>&1 | Out-String)
       $text -notmatch 'S-1-15-2-1|ALL APPLICATION PACKAGES'
@@ -2545,6 +2586,8 @@ function Repair-ElectronSandboxAcl {
   } catch {
     Warn "Electron cannot start because its sandbox ACL is missing. Run setup as administrator and repair '$dist'. $($_.Exception.Message)"
     return $false
+  } finally {
+    Write-Progress -Id 731 -Activity (T 'aclChecking') -Completed -ErrorAction SilentlyContinue
   }
 }
 

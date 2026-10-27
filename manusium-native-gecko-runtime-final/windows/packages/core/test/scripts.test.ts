@@ -127,6 +127,11 @@ describe('maintenance scripts', () => {
     expect(ps1Text).toContain("Key = 'stepDeps'; Required = $true; Fatal = $true; Action = {");
     expect(ps1Text).toContain('if (-not (Invoke-EnsureDependencies)) { return $false }');
     expect(ps1Text).toContain('return (Repair-ElectronSandboxAcl)');
+    expect(ps1Text).toContain('function Test-UserWritableInstallRoot');
+    expect(ps1Text).toContain("T 'aclSkipping'");
+    expect(ps1Text).toContain('Write-Progress -Id 731');
+    expect(ps1Text).toContain("T 'aclRepairing'");
+    expect(ps1Text).toContain("T 'aclVerifying'");
     expect(ps1Text).not.toContain('.octo-lock-sha256');
   });
 
