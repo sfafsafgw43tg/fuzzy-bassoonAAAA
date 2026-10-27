@@ -166,7 +166,7 @@ $Messages = @{
     depsNodeMissing   = 'Node.js was not found in PATH (Node.js >= 22.12 is required).'
     depsFailed        = 'Installing project dependencies failed (exit code {0}). Read the messages above, then open the app again.'
     aclChecking       = 'Checking Electron sandbox permissions...'
-    aclSkipping       = 'User-writable install path detected; skipping ACL elevation: {0}'
+    aclSkipping       = 'Writable install path detected; skipping ACL elevation: {0}'
     aclRepairing      = 'Repairing Electron sandbox permissions ({0}/{1}): {2}'
     aclVerifying      = 'Verifying Electron sandbox permissions...'
     aclFailed         = 'Electron sandbox permissions could not be repaired without elevation. Choose a user-writable install folder or run setup as administrator.'
@@ -410,7 +410,7 @@ $Messages = @{
     depsNodeMissing   = 'Nie znaleziono Node.js w PATH (wymagany Node.js >= 22.12).'
     depsFailed        = 'Instalacja zależności projektu nie powiodła się (kod {0}). Odczytaj komunikaty powyżej i otwórz aplikację ponownie.'
     aclChecking       = 'Sprawdzanie uprawnień piaskownicy Electron...'
-    aclSkipping       = 'Wykryto folder zapisywalny dla użytkownika; pomijam podnoszenie uprawnień ACL: {0}'
+    aclSkipping       = 'Wykryto folder zapisywalny; pomijam podnoszenie uprawnień ACL: {0}'
     aclRepairing      = 'Naprawianie uprawnień piaskownicy Electron ({0}/{1}): {2}'
     aclVerifying      = 'Weryfikowanie uprawnień piaskownicy Electron...'
     aclFailed         = 'Nie udało się naprawić uprawnień piaskownicy Electron bez podnoszenia uprawnień. Wybierz folder zapisywalny dla użytkownika albo uruchom konfigurację jako administrator.'
@@ -2306,17 +2306,10 @@ function Test-FolderWritable([string]$dir) {
 }
 
 function Test-UserWritableInstallRoot {
-  $root = $null
-  try { $root = [IO.Path]::GetFullPath($InstallRoot).TrimEnd('\') } catch { return $false }
-  $userRoots = @($env:LOCALAPPDATA, $env:APPDATA, $env:USERPROFILE) |
-    Where-Object { $_ } |
-    ForEach-Object { try { [IO.Path]::GetFullPath([string]$_).TrimEnd('\') } catch { $null } }
-  foreach ($base in $userRoots) {
-    if (($root -eq $base -or $root.StartsWith($base + '\', [StringComparison]::OrdinalIgnoreCase)) -and (Test-FolderWritable $root)) {
-      return $true
-    }
-  }
-  return $false
+  # Location alone is not a reliable elevation test: a developer checkout can
+  # legitimately live on E:\ or another data volume. Probe the actual install
+  # root instead. Protected roots fail the probe and retain the elevated path.
+  return (Test-FolderWritable $InstallRoot)
 }
 
 # Where SDK packages are installed: the first writable candidate, otherwise the
