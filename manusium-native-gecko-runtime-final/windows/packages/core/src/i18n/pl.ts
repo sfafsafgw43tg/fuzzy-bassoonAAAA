@@ -785,6 +785,12 @@ export const pl: Record<string, string> = {
 
   // ---------------------------------------------------------------- dodatki
   'addons.intro': 'Natywne narzędzia i sprawdzone rozszerzenia dołączone lokalnie. Przed włączeniem otwórz Szczegóły, aby sprawdzić dokładnie, do czego dodatek ma dostęp.',
+  'addons.reload': 'Przeładuj',
+  'addons.profileExtensions': 'Rozszerzenia profilu',
+  'addons.loaded': 'Załadowane',
+  'addons.notLoaded': 'Niezaładowane',
+  'addons.noProfileExtensions': 'Ten profil nie ma lokalnych rozszerzeń Chrome. Dodaj je w edytorze profilu.',
+  'addons.actionFailed': 'Akcja dodatku nie powiodła się: {message}',
   'addons.enabled': 'Włączony',
   'addons.openWorkspace': 'Otwórz obszar pracy',
   'addons.packageUnavailable': 'Pliki dołączonego dodatku są niedostępne. Napraw lub zainstaluj ponownie Octo, a następnie spróbuj ponownie.',

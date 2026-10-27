@@ -23,6 +23,7 @@ export interface LocalChromeExtensionManifest {
   name: string;
   version: string;
   path: string;
+  entryPage: string;
   permissions: string[];
   hostPermissions: string[];
   manifestVersion: 2 | 3;
@@ -54,11 +55,30 @@ export function inspectLocalChromeExtension(extensionPath: string): LocalChromeE
   const version = typeof manifest.version === 'string' ? manifest.version.trim().slice(0, 64) : '';
   if (!name || !version) throw new Error('Chrome extension manifest must declare name and version');
   const digest = crypto.createHash('sha256').update(resolved.toLowerCase()).digest('hex').slice(0, 16);
-  return { id: `chrome-local-${digest}`, name, version, path: resolved, permissions: cleanStrings(manifest.permissions), hostPermissions: cleanStrings(manifest.host_permissions), manifestVersion };
+  const optionsUi = manifest.options_ui && typeof manifest.options_ui === 'object' ? manifest.options_ui as Record<string, unknown> : undefined;
+  const entryPage = typeof manifest.options_page === 'string' ? manifest.options_page
+    : typeof optionsUi?.page === 'string' ? optionsUi.page : '';
+  const safeEntryPage = entryPage.replace(/^[\\/]+/, '').replace(/\\/g, '/');
+  if (safeEntryPage.includes('..') || safeEntryPage.includes('\u0000')) throw new Error('Chrome extension workspace path is unsafe');
+  return { id: `chrome-local-${digest}`, name, version, path: resolved, entryPage: safeEntryPage, permissions: cleanStrings(manifest.permissions), hostPermissions: cleanStrings(manifest.host_permissions), manifestVersion };
 }
 
 export function toProfileChromeExtension(manifest: LocalChromeExtensionManifest): ProfileChromeExtension {
   return { id: manifest.id, name: manifest.name, version: manifest.version, path: manifest.path, permissions: manifest.permissions, hostPermissions: manifest.hostPermissions, enabled: true };
+}
+
+/** Load a validated local extension through Electron's session API. */
+export async function loadLocalChromeExtension(
+  ses: { loadExtension: (extensionPath: string) => Promise<{ id: string }> },
+  extensionPath: string,
+): Promise<{ manifest: LocalChromeExtensionManifest; extensionId: string; optionsUrl: string | null }> {
+  const manifest = inspectLocalChromeExtension(extensionPath);
+  const loaded = await ses.loadExtension(manifest.path);
+  return {
+    manifest,
+    extensionId: loaded.id,
+    optionsUrl: manifest.entryPage ? `chrome-extension://${loaded.id}/${manifest.entryPage}` : null,
+  };
 }
 
 export function bundledExtension(addonId: string): BundledExtension | undefined {

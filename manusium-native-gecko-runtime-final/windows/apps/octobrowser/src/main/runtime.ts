@@ -38,7 +38,7 @@ import { safeDownloadFilename, uniqueDownloadPath } from '@octo/shell/downloads'
 import { profilePartition, ephemeralPartition } from '@octo/shell/profile-partition';
 import { UpdateStatus } from '@octo/shell/update-manager';
 import { BrowserWindowController, Rect } from './window';
-import { bundledExtension, bundledExtensionPath, inspectLocalChromeExtension, BundledExtension } from './extensions';
+import { bundledExtension, bundledExtensionPath, inspectLocalChromeExtension, loadLocalChromeExtension, BundledExtension } from './extensions';
 import { SHORTCUT_HELP } from '../shared/shortcuts';
 import { serviceWorkerFingerprintPreload } from '../preload/service-worker';
 
@@ -708,9 +708,11 @@ export class ProfileRuntime {
         throw new Error(this.t('addons.packageUnavailable'));
       }
       try {
-        const loaded = await ses.loadExtension(extensionPath);
-        this.loadedExtensions.set(addonId, { extensionId: loaded.id, extension: extension ?? { addonId, entryPage: '' } });
-        this.logger.info('addon.extension-loaded', { addonId, extensionId: loaded.id, profile: this.profile.id });
+        const loaded = localExtension
+          ? await loadLocalChromeExtension(ses, extensionPath)
+          : { extensionId: (await ses.loadExtension(extensionPath)).id, manifest: null, optionsUrl: null };
+        this.loadedExtensions.set(addonId, { extensionId: loaded.extensionId, extension: extension ?? { addonId, entryPage: loaded.manifest?.entryPage ?? '' } });
+        this.logger.info('addon.extension-loaded', { addonId, extensionId: loaded.extensionId, profile: this.profile.id });
       } catch (err) {
         this.logger.error('addon.extension-load-failed', { addonId, error: String(err) });
         throw new Error(this.t('addons.loadFailed'));
@@ -732,6 +734,7 @@ export class ProfileRuntime {
   private openBundledExtension(addonId: string): void {
     const loaded = this.loadedExtensions.get(addonId);
     if (!loaded) throw new Error(this.t('addons.packageUnavailable'));
+    if (!loaded.extension.entryPage) throw new Error('This add-on does not provide a workspace page.');
     const url = `chrome-extension://${loaded.extensionId}/${loaded.extension.entryPage}`;
     (this.lastFocused ?? this.openWindow()).newTab(url);
   }
@@ -1102,6 +1105,43 @@ export class ProfileRuntime {
     });
     handle('ui:open-addon', L, (_e, id: string) => {
       this.openBundledExtension(String(id));
+      return true;
+    });
+    handle('ui:addons-state', L, () => ({
+      local: (this.profile.chromeExtensions ?? []).map((extension) => {
+        const inspected = inspectLocalChromeExtension(extension.path);
+        return {
+          id: extension.id,
+          name: extension.name,
+          version: extension.version,
+          path: extension.path,
+          manifestVersion: inspected.manifestVersion,
+          permissions: extension.permissions,
+          hostPermissions: extension.hostPermissions,
+          enabled: extension.enabled === true,
+          loaded: this.loadedExtensions.has(extension.id),
+        };
+      }),
+      loaded: [...this.loadedExtensions.keys()],
+    }));
+    handle('ui:addons-reload', L, async (_e) => {
+      await this.syncBundledExtensions(this.profileSession());
+      this.pushAll();
+      return true;
+    });
+    handle('ui:profile-extension', L, async (_e, id: string, on: boolean) => {
+      const previous = this.profile;
+      const extensions = (previous.chromeExtensions ?? []).map((extension) => extension.id === id ? { ...extension, enabled: on === true } : extension);
+      if (!extensions.some((extension) => extension.id === id)) throw new Error('unknown profile extension');
+      this.profile = { ...previous, chromeExtensions: extensions };
+      try {
+        await this.syncBundledExtensions(this.profileSession());
+      } catch (err) {
+        this.profile = previous;
+        throw err;
+      }
+      this.requestProfileUpdate({ chromeExtensions: extensions });
+      this.pushAll();
       return true;
     });
     handle('ui:audio', L, (_e, patch: { muted?: boolean; volume?: number; outputDeviceId?: string }) => {

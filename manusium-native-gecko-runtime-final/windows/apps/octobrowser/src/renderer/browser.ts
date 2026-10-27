@@ -41,6 +41,14 @@ interface AddonInfo {
   id: string; name: string; description: { en: string; pl: string }; version: string; license: string;
   permissions: Array<{ en: string; pl: string }>; source: string; kind: string; status: string; integrity: { en: string; pl: string };
 }
+interface LocalExtensionInfo {
+  id: string; name: string; version: string; path: string; manifestVersion: 2 | 3;
+  permissions: string[]; hostPermissions: string[]; enabled: boolean; loaded: boolean;
+}
+interface AddonsRuntimeState {
+  local: LocalExtensionInfo[];
+  loaded: string[];
+}
 interface DownloadInfo {
   id: string; fileName: string; savePath: string; url: string;
   state: 'choosing-location' | 'downloading' | 'paused' | 'scanning' | 'completed' | 'cancelled' | 'failed';
@@ -989,7 +997,7 @@ async function renderPanel(p: Panel): Promise<void> {
       case 'traffic': await renderTraffic(false); panelTimer = window.setInterval(() => void renderTraffic(false), 1000); break;
       case 'audio': renderAudio(body); break;
       case 'privacy': await renderPrivacy(body); break;
-      case 'addons': renderAddons(body); break;
+      case 'addons': await renderAddons(body); break;
       case 'downloads': await renderDownloads(body); break;
       case 'bookmarks': await renderBookmarks(body); break;
       case 'history': await renderHistory(body, ''); break;
@@ -1179,17 +1187,39 @@ async function renderPrivacy(body: HTMLElement): Promise<void> {
     h('p', { class: 'note small', text: t('security.malwareNotice') }));
 }
 
-function renderAddons(body: HTMLElement): void {
+async function renderAddons(body: HTMLElement): Promise<void> {
   if (!state) return;
   const enabled = new Set(state.profile.addons);
   const isTor = state.profile.level === 'tor';
-  body.append(h('p', { class: 'small muted', text: t('addons.intro') }));
+  const runtime = await api.invoke<AddonsRuntimeState>('ui:addons-state');
+  const header = h('div', { class: 'row between' },
+    h('p', { class: 'small muted', text: t('addons.intro') }),
+    (() => {
+      const reload = h('button', { class: 'btn small', text: t('addons.reload') }) as HTMLButtonElement;
+      reload.onclick = async () => {
+        reload.disabled = true;
+        try {
+          await api.invoke('ui:addons-reload');
+          clear(body);
+          await renderAddons(body);
+        } catch (err) {
+          toast('addons.actionFailed', { message: String((err as Error).message ?? err) });
+        } finally { reload.disabled = false; }
+      };
+      return reload;
+    })(),
+  );
+  body.append(header);
   for (const a of addons) {
     const on = enabled.has(a.id);
     const sw = h('input', { type: 'checkbox', checked: on, disabled: isTor || a.kind === 'external-app' });
     sw.onchange = () => {
       if (sw.checked && !confirmPermissions(a)) { sw.checked = false; return; }
-      void api.invoke('ui:addon', a.id, sw.checked);
+      const next = sw.checked;
+      void api.invoke('ui:addon', a.id, next).catch((err: Error) => {
+        sw.checked = !next;
+        toast('addons.actionFailed', { message: err.message });
+      });
     };
     const perms = h('ul', { class: 'small' });
     for (const p of a.permissions) perms.append(h('li', { text: L(p) }));
@@ -1200,10 +1230,37 @@ function renderAddons(body: HTMLElement): void {
     const openWorkspace = a.kind === 'extension'
       ? h('button', { class: 'btn small', disabled: !on, text: t('addons.openWorkspace') }) as HTMLButtonElement
       : null;
-    if (openWorkspace) openWorkspace.onclick = () => void api.invoke('ui:open-addon', a.id);
+    if (openWorkspace) openWorkspace.onclick = () => void api.invoke('ui:open-addon', a.id).catch((err: Error) => toast('addons.actionFailed', { message: err.message }));
     body.append(h('div', { class: 'addon' },
       h('div', { class: 'addon-head' }, h('b', { text: a.name }), h('label', { class: 'switch' }, sw, h('span', {}))),
       h('div', { class: 'small', text: L(a.description) }), openWorkspace, details));
+  }
+  if (runtime.local.length) {
+    const localList = h('div', { class: 'addons' });
+    localList.append(h('h3', { text: t('addons.profileExtensions') }));
+    for (const extension of runtime.local) {
+      const permissions = [...extension.permissions.map((p) => `permission: ${p}`), ...extension.hostPermissions.map((p) => `host: ${p}`)];
+      const toggle = h('input', { type: 'checkbox', checked: extension.enabled, disabled: isTor });
+      toggle.onchange = () => {
+        const next = toggle.checked;
+        void api.invoke('ui:profile-extension', extension.id, next).catch((err: Error) => {
+          toggle.checked = !next;
+          toast('addons.actionFailed', { message: err.message });
+        });
+      };
+      const open = h('button', { class: 'btn small', text: t('addons.openWorkspace'), disabled: !extension.enabled || !extension.loaded }) as HTMLButtonElement;
+      open.onclick = () => void api.invoke('ui:open-addon', extension.id).catch((err: Error) => toast('addons.actionFailed', { message: err.message }));
+      localList.append(h('div', { class: 'addon' },
+        h('div', { class: 'addon-head' }, h('b', { text: `${extension.name} ${extension.version}` }), h('label', { class: 'switch' }, toggle, h('span', {}))),
+        h('div', { class: 'small muted', text: `${extension.path} · MV${extension.manifestVersion}` }),
+        h('div', { class: 'small', text: `${t('addons.status')}: ${extension.loaded ? t('addons.loaded') : t('addons.notLoaded')}` }),
+        h('div', { class: 'small muted', text: permissions.length ? `${t('addons.permissions')}: ${permissions.join(', ')}` : `${t('addons.permissions')}: none` }),
+        open,
+      ));
+    }
+    body.append(localList);
+  } else {
+    body.append(h('p', { class: 'note small', text: t('addons.noProfileExtensions') }));
   }
   if (isTor) body.append(h('p', { class: 'note small', text: t('addons.torNote') }));
 }

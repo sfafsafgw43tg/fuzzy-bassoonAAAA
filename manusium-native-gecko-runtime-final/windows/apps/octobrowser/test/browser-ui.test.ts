@@ -258,6 +258,17 @@ describe('browser entry UI', () => {
     expect(browser).toContain("api.invoke('ui:close-window')");
   });
 
+  it('opens Addons as a working profile-local manager instead of dropping IPC errors', () => {
+    expect(browser).toContain("mk('stAddons', 'puzzle', 'panel.addons', () => openPanel('addons'))");
+    expect(browser).toContain("await api.invoke<AddonsRuntimeState>('ui:addons-state')");
+    expect(browser).toContain("api.invoke('ui:addons-reload')");
+    expect(browser).toContain("api.invoke('ui:profile-extension', extension.id, next)");
+    expect(browser).toContain("toast('addons.actionFailed'");
+    expect(runtime).toContain("handle('ui:addons-state', L");
+    expect(runtime).toContain("handle('ui:addons-reload', L");
+    expect(runtime).toContain("handle('ui:profile-extension', L");
+  });
+
   it('does not nag on ordinary canvas reads and silently enforces Strict mode', () => {
     expect(pageShim).not.toContain("detail: { type: 'canvas-access' }");
     expect(tabPreload).not.toContain("ipcRenderer.invoke('page:canvas-access'");

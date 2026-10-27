@@ -786,6 +786,12 @@ export const en: Record<string, string> = {
 
   // ---------------------------------------------------------------- add-ons
   'addons.intro': 'Native tools and reviewed locally bundled extensions. Open Details before enabling to see exactly what an add-on can access.',
+  'addons.reload': 'Reload',
+  'addons.profileExtensions': 'Profile extensions',
+  'addons.loaded': 'Loaded',
+  'addons.notLoaded': 'Not loaded',
+  'addons.noProfileExtensions': 'No local Chrome extensions are configured for this profile. Add one from the profile editor.',
+  'addons.actionFailed': 'Add-on action failed: {message}',
   'addons.enabled': 'Enabled',
   'addons.openWorkspace': 'Open workspace',
   'addons.packageUnavailable': 'The bundled add-on files are unavailable. Repair or reinstall Octo, then try again.',

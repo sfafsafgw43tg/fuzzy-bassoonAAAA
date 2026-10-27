@@ -1,8 +1,9 @@
 /** Bundled WebExtension metadata and source layout. */
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import * as path from 'node:path';
 import { describe, expect, it } from 'vitest';
-import { bundledExtension, bundledExtensionPath, inspectLocalChromeExtension, nativeBundledExtensionPaths } from '../src/main/extensions';
+import { bundledExtension, bundledExtensionPath, inspectLocalChromeExtension, loadLocalChromeExtension, nativeBundledExtensionPaths } from '../src/main/extensions';
 import { ADDONS } from '@octo/core';
 
 const root = process.cwd();
@@ -36,7 +37,7 @@ describe('bundled PrOximAl Editor extension', () => {
 
 describe('native Chromium addon bundles', () => {
   it('resolves only application-owned MV3 bundles', () => {
-    const resources = fs.mkdtempSync(path.join('/tmp', 'octo-addons-'));
+    const resources = fs.mkdtempSync(path.join(os.tmpdir(), 'octo-addons-'));
     const addon = path.join(resources, 'addons', 'dark-pages');
     fs.mkdirSync(addon, { recursive: true });
     fs.writeFileSync(path.join(addon, 'manifest.json'), JSON.stringify({ manifest_version: 3, name: 'test', version: '1.0.0' }));
@@ -44,7 +45,7 @@ describe('native Chromium addon bundles', () => {
   });
 
   it('fails clearly when a reviewed bundle is absent or malformed', () => {
-    const resources = fs.mkdtempSync(path.join('/tmp', 'octo-addons-invalid-'));
+    const resources = fs.mkdtempSync(path.join(os.tmpdir(), 'octo-addons-invalid-'));
     expect(() => nativeBundledExtensionPaths(['dark-pages'], '', true, resources)).toThrow(/missing: dark-pages/);
     const addon = path.join(resources, 'addons', 'clearurls');
     fs.mkdirSync(addon, { recursive: true });
@@ -57,16 +58,32 @@ describe('native Chromium addon bundles', () => {
 
 describe('profile-local Chrome extensions', () => {
   it('reads a valid MV3 manifest and exposes declared permissions', () => {
-    const root = fs.mkdtempSync(path.join('/tmp', 'octo-local-extension-'));
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'octo-local-extension-'));
     fs.writeFileSync(path.join(root, 'manifest.json'), JSON.stringify({
-      manifest_version: 3, name: 'Local QA tool', version: '1.2.3', permissions: ['storage', 'tabs'], host_permissions: ['https://example.test/*'],
+      manifest_version: 3, name: 'Local QA tool', version: '1.2.3', options_ui: { page: 'options/index.html' }, permissions: ['storage', 'tabs'], host_permissions: ['https://example.test/*'],
     }));
-    expect(inspectLocalChromeExtension(root)).toMatchObject({ name: 'Local QA tool', version: '1.2.3', permissions: ['storage', 'tabs'], hostPermissions: ['https://example.test/*'], manifestVersion: 3 });
+    expect(inspectLocalChromeExtension(root)).toMatchObject({ name: 'Local QA tool', version: '1.2.3', entryPage: 'options/index.html', permissions: ['storage', 'tabs'], hostPermissions: ['https://example.test/*'], manifestVersion: 3 });
     expect(inspectLocalChromeExtension(root).id).toMatch(/^chrome-local-[a-f0-9]{16}$/);
   });
 
+  it('loads a validated MV3 extension and produces a navigable options URL', async () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'octo-local-extension-load-'));
+    fs.mkdirSync(path.join(root, 'options'));
+    fs.writeFileSync(path.join(root, 'options', 'index.html'), '<title>Options</title>');
+    fs.writeFileSync(path.join(root, 'manifest.json'), JSON.stringify({
+      manifest_version: 3, name: 'Loaded QA tool', version: '2.0.0', options_ui: { page: 'options/index.html' }, permissions: ['storage'],
+    }));
+    const calls: string[] = [];
+    const loaded = await loadLocalChromeExtension({
+      loadExtension: async (extensionPath) => { calls.push(extensionPath); return { id: 'loaded-qa-tool' }; },
+    }, root);
+    expect(calls).toEqual([root]);
+    expect(loaded.extensionId).toBe('loaded-qa-tool');
+    expect(loaded.optionsUrl).toBe('chrome-extension://loaded-qa-tool/options/index.html');
+  });
+
   it('rejects malformed and unsupported manifests', () => {
-    const root = fs.mkdtempSync(path.join('/tmp', 'octo-local-extension-invalid-'));
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'octo-local-extension-invalid-'));
     expect(() => inspectLocalChromeExtension(root)).toThrow(/missing or invalid/);
     fs.writeFileSync(path.join(root, 'manifest.json'), JSON.stringify({ manifest_version: 1, name: 'old', version: '1' }));
     expect(() => inspectLocalChromeExtension(root)).toThrow(/Manifest V2 or V3/);
