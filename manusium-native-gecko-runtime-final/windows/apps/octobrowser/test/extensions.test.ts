@@ -66,6 +66,14 @@ describe('profile-local Chrome extensions', () => {
     expect(inspectLocalChromeExtension(root).id).toMatch(/^chrome-local-[a-f0-9]{16}$/);
   });
 
+  it('prefers an MV3 action popup for the toolbar window', () => {
+    const root = fs.mkdtempSync(path.join(os.tmpdir(), 'octo-local-extension-popup-'));
+    fs.writeFileSync(path.join(root, 'manifest.json'), JSON.stringify({
+      manifest_version: 3, name: 'Popup QA tool', version: '1.0.0', action: { default_popup: 'popup.html' }, options_ui: { page: 'options/index.html' },
+    }));
+    expect(inspectLocalChromeExtension(root)).toMatchObject({ entryPage: 'popup.html' });
+  });
+
   it('loads a validated MV3 extension and produces a navigable options URL', async () => {
     const root = fs.mkdtempSync(path.join(os.tmpdir(), 'octo-local-extension-load-'));
     fs.mkdirSync(path.join(root, 'options'));

@@ -730,13 +730,13 @@ export class ProfileRuntime {
     }
   }
 
-  /** Open a reviewed extension's declared local workspace in an ordinary profile tab. */
+  /** Open a reviewed extension's declared local workspace in a separate profile window. */
   private openBundledExtension(addonId: string): void {
     const loaded = this.loadedExtensions.get(addonId);
     if (!loaded) throw new Error(this.t('addons.packageUnavailable'));
     if (!loaded.extension.entryPage) throw new Error('This add-on does not provide a workspace page.');
     const url = `chrome-extension://${loaded.extensionId}/${loaded.extension.entryPage}`;
-    (this.lastFocused ?? this.openWindow()).newTab(url);
+    this.openWindow([url], true);
   }
 
   /** State shared by all windows of this profile (profile badge, status icons). */

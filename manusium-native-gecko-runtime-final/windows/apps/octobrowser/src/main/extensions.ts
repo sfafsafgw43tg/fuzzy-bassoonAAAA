@@ -56,8 +56,12 @@ export function inspectLocalChromeExtension(extensionPath: string): LocalChromeE
   if (!name || !version) throw new Error('Chrome extension manifest must declare name and version');
   const digest = crypto.createHash('sha256').update(resolved.toLowerCase()).digest('hex').slice(0, 16);
   const optionsUi = manifest.options_ui && typeof manifest.options_ui === 'object' ? manifest.options_ui as Record<string, unknown> : undefined;
-  const entryPage = typeof manifest.options_page === 'string' ? manifest.options_page
-    : typeof optionsUi?.page === 'string' ? optionsUi.page : '';
+  const action = manifest.action && typeof manifest.action === 'object' ? manifest.action as Record<string, unknown> : undefined;
+  const browserAction = manifest.browser_action && typeof manifest.browser_action === 'object' ? manifest.browser_action as Record<string, unknown> : undefined;
+  const entryPage = typeof action?.default_popup === 'string' ? action.default_popup
+    : typeof browserAction?.default_popup === 'string' ? browserAction.default_popup
+      : typeof manifest.options_page === 'string' ? manifest.options_page
+        : typeof optionsUi?.page === 'string' ? optionsUi.page : '';
   const safeEntryPage = entryPage.replace(/^[\\/]+/, '').replace(/\\/g, '/');
   if (safeEntryPage.includes('..') || safeEntryPage.includes('\u0000')) throw new Error('Chrome extension workspace path is unsafe');
   return { id: `chrome-local-${digest}`, name, version, path: resolved, entryPage: safeEntryPage, permissions: cleanStrings(manifest.permissions), hostPermissions: cleanStrings(manifest.host_permissions), manifestVersion };

@@ -256,6 +256,31 @@ function renderAddress(): void {
   bc.textContent = tab ? String(tab.blocked) : '';
 }
 
+let extensionToolbarRequest = 0;
+async function renderExtensionToolbar(): Promise<void> {
+  const mount = $('extensionButtons');
+  if (!mount || !state) return;
+  const request = ++extensionToolbarRequest;
+  const runtime = await api.invoke<AddonsRuntimeState>('ui:addons-state').catch(() => null);
+  if (request !== extensionToolbarRequest || !state) return;
+  clear(mount);
+  const enabled = new Set(state.profile.addons);
+  const items = [
+    ...addons.filter((addon) => addon.kind === 'extension' && enabled.has(addon.id)).map((addon) => ({ id: addon.id, name: addon.name })),
+    ...(runtime?.local ?? []).filter((extension) => extension.enabled && extension.loaded).map((extension) => ({ id: extension.id, name: extension.name })),
+  ];
+  for (const item of items) {
+    const button = h('button', { class: 'icon-btn extension-action', title: item.name, 'aria-label': item.name }) as HTMLButtonElement;
+    button.append(icon('puzzle', 15));
+    button.onclick = (event) => {
+      event.stopPropagation();
+      dismissAllPopouts();
+      void api.invoke('ui:open-addon', item.id).catch((err: Error) => toast('addons.actionFailed', { message: err.message }));
+    };
+    mount.append(button);
+  }
+}
+
 function renderStatus(): void {
   if (!state) return;
   const p = state.profile;
@@ -282,6 +307,7 @@ function renderStatus(): void {
   const vertical = usesVerticalTabs();
   document.body.classList.toggle('vertical', vertical);
   $('vtabs').classList.toggle('hidden', !vertical);
+  void renderExtensionToolbar();
 }
 
 // ------------------------------------------------------------------ tabs
