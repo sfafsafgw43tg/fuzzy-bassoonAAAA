@@ -228,6 +228,12 @@ describe('browser entry UI', () => {
     expect(runtime).not.toContain('openChildPipeChannel');
   });
 
+  it('forwards the controlled software-rendering switches to profile children', () => {
+    expect(manager).toContain("process.argv.includes('--disable-gpu')");
+    expect(manager).toContain("'--disable-gpu-compositing'");
+    expect(manager).toContain("'--use-gl=disabled'");
+  });
+
   it('gives native Chromium a real new-tab fallback and applies the selected search engine', () => {
     expect(manager).toContain('prepareChromiumSearchPreference(profileFolder');
     expect(manager).toContain("const CHROMIUM_DEFAULT_SEARCH_URL = 'https://noai.duckduckgo.com/'");

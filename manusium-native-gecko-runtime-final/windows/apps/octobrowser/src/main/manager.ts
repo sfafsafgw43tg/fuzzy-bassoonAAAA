@@ -1136,6 +1136,13 @@ export class Manager {
   private spawnProfile(p: Profile, debugPort?: number): void {
     const args = app.isPackaged ? [] : [app.getAppPath()];
     args.push(`--profile-process=${p.id}`);
+    // A manager launched with --disable-gpu must propagate the controlled
+    // software-rendering switches to the profile child as well; otherwise the
+    // launcher can open while the actual browser window still hits the GPU
+    // virtualization failure.
+    if (process.argv.includes('--disable-gpu')) {
+      args.push('--disable-gpu', '--disable-gpu-compositing', '--use-gl=disabled');
+    }
     if (debugPort) {
       // Automation (API): Chrome DevTools Protocol on loopback for Puppeteer / Playwright.
       args.push(`--remote-debugging-port=${debugPort}`, '--remote-debugging-address=127.0.0.1');
