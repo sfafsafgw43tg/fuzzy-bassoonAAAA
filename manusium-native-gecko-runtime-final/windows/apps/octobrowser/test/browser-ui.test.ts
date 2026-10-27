@@ -80,6 +80,9 @@ describe('browser entry UI', () => {
     expect(browserCss).toContain('@keyframes popout-in');
     expect(browserCss).toContain('@media (prefers-reduced-motion: reduce)');
     expect(browserCss).toContain('#panel:has(.settings-media) { width:min(480px,calc(100vw - 24px)); }');
+    expect(browserCss).toContain('#panel:has(.browser-settings-panel) { width: min(760px, calc(100vw - 24px));');
+    expect(browser).toContain('setContentCovered(true);');
+    expect(browser).toContain('setContentCovered(false);');
   });
 
   it('renders both winter themes as sparse, soft, breezy snowfall', () => {

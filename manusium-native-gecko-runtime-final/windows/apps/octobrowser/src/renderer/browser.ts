@@ -966,6 +966,10 @@ function openPanel(p: Panel | null, custom?: () => void, title?: string): void {
     // into a black modal backdrop or navigating to a full settings page.
     const finish = () => {
       if (panel !== null) return;
+      // Native tab views are composited above renderer CSS. Restore them only
+      // after the closing animation has completed, otherwise the panel appears
+      // as a shadow behind the page view and its controls cannot be clicked.
+      setContentCovered(false);
       panelElement.classList.add('hidden');
       panelElement.classList.remove('popout-closing');
       clear(body);
@@ -986,6 +990,10 @@ function openPanel(p: Panel | null, custom?: () => void, title?: string): void {
   const switchingTool = panel !== null && panel !== p && !panelElement.classList.contains('hidden') && tabMotionEnabled();
   panel = p;
   panelCoversContent = false;
+  // BrowserWindow/WebContents native views always paint above HTML z-index.
+  // Hide the native page while trusted settings/add-on tools are open so the
+  // renderer-owned panel is visible and receives pointer/keyboard events.
+  setContentCovered(true);
   panelElement.classList.remove('hidden', 'popout-closing');
   panelElement.classList.add('popout');
   panelElement.setAttribute('role', 'complementary');
