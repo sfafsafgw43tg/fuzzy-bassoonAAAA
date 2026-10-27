@@ -18,7 +18,8 @@ if (!skipNativeRuntimeVerify) {
 runNode('build-icons.mjs');
 runNode('build.mjs');
 for (const app of ['octobrowser', 'octodetect']) {
-  const result = spawnSync(process.execPath, [path.join(root, 'node_modules/electron-builder/cli.js'), '--win', '--x64', '--dir', '--projectDir', path.join(root, 'apps', app)], { cwd: root, stdio: 'inherit', shell: false });
+  const output = path.join(root, 'release', app);
+  const result = spawnSync(process.execPath, [path.join(root, 'node_modules/electron-builder/cli.js'), '--win', '--x64', '--dir', '--config.directories.output=' + output, '--projectDir', path.join(root, 'apps', app)], { cwd: root, stdio: 'inherit', shell: false });
   if (result.error || result.status !== 0) throw new Error(`Packaging ${app} failed: ${result.error?.message ?? result.status}`);
 }
 if (!skipNativeRuntimeVerify) runNode('chromium-versions.mjs', ['verify-packaged']);
