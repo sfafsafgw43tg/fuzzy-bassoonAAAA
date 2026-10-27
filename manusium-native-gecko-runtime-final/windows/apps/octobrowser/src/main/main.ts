@@ -21,6 +21,14 @@ const distDir = __dirname;
 setTrustedRoot(distDir);
 const profileId = argValue('profile-process');
 const factoryReset = hasFlag('factory-reset');
+// Electron receives switches after the app path inconsistently across launchers.
+// Apply the explicit diagnostic switch before app readiness so Chromium does not
+// start a broken GPU child before the manager or first-run window is created.
+if (hasFlag('disable-gpu')) {
+  app.disableHardwareAcceleration();
+  app.commandLine.appendSwitch('disable-gpu');
+  app.commandLine.appendSwitch('disable-gpu-compositing');
+}
 
 if (runCliVerifyIfRequested('octobrowser')) {
   // ------------------------------------------ headless release verification (scripts)

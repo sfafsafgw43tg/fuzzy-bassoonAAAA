@@ -9,6 +9,13 @@ export function serviceWorkerFingerprintPreload(config: {
   userAgent: string;
   platform: string;
   languages: string[];
+  uaPlatform: string;
+  uaPlatformVersion: string;
+  uaArchitecture: string;
+  uaBitness: string;
+  uaModel: string;
+  uaBrands: Array<{ brand: string; version: string }>;
+  uaFullVersionList: Array<{ brand: string; version: string }>;
   cores: number | null;
   memory: number | null;
   webgl: 'off' | 'real' | 'noise';
@@ -19,6 +26,10 @@ export function serviceWorkerFingerprintPreload(config: {
   const G = globalThis as unknown as Record<string, unknown>;
   const navigatorValue = G.navigator as Record<string, unknown> | undefined;
   const workerNavigator = (G.WorkerNavigator as { prototype?: object } | undefined)?.prototype;
+  // A service-worker preload can execute more than once during a worker
+  // lifecycle. Mark wrappers so repeated execution never creates proxy/wrapper
+  // chains that confuse prototype auditors or recurse through apply traps.
+  const WRAPPED = Symbol.for('octo.service-worker-native-wrapper');
   const define = (target: object | undefined, property: string, value: unknown): void => {
     if (!target) return;
     const descriptor = Object.getOwnPropertyDescriptor(target, property);
@@ -40,6 +51,31 @@ export function serviceWorkerFingerprintPreload(config: {
     define(workerNavigator, 'languages', languages);
     define(workerNavigator, 'language', languages[0]);
   }
+  const userAgentData = Object.freeze({
+    brands: Object.freeze(config.uaBrands.map((item) => ({ brand: item.brand, version: item.version }))),
+    mobile: false,
+    platform: config.uaPlatform,
+    toJSON: () => ({
+      brands: config.uaBrands.map((item) => ({ brand: item.brand, version: item.version })),
+      mobile: false,
+      platform: config.uaPlatform,
+    }),
+    getHighEntropyValues: async (hints: string[]) => {
+      const requested = new Set(Array.isArray(hints) ? hints : []);
+      const values: Record<string, unknown> = {
+        architecture: config.uaArchitecture,
+        bitness: config.uaBitness,
+        brands: config.uaBrands.map((item) => ({ brand: item.brand, version: item.version })),
+        fullVersionList: config.uaFullVersionList.map((item) => ({ brand: item.brand, version: item.version })),
+        mobile: false,
+        model: config.uaModel,
+        platform: config.uaPlatform,
+        platformVersion: config.uaPlatformVersion,
+      };
+      return Object.fromEntries(Object.entries(values).filter(([key]) => !requested.size || requested.has(key)));
+    },
+  });
+  define(workerNavigator, 'userAgentData', userAgentData);
 
   let state = config.seed >>> 0;
   const hash = (a: number, b = 0): number => {
@@ -64,8 +100,12 @@ export function serviceWorkerFingerprintPreload(config: {
     const wrap = (name: string, implementation: (args: unknown[], original: (...a: unknown[]) => unknown) => unknown): void => {
       const original = object[name];
       if (typeof original !== 'function') return;
+      if ((original as unknown as Record<PropertyKey, unknown>)[WRAPPED] === true) return;
       const wrapped = (...args: unknown[]) => implementation(args, (...next) => Reflect.apply(original as (...a: unknown[]) => unknown, context, next));
-      try { Object.defineProperty(object, name, { configurable: true, writable: true, value: wrapped }); } catch { /* protected context */ }
+      try {
+        Object.defineProperty(wrapped, WRAPPED, { value: true, configurable: false });
+        Object.defineProperty(object, name, { configurable: true, writable: true, value: wrapped });
+      } catch { /* protected context */ }
     };
     wrap('getParameter', (args, original) => {
       const p = Number(args[0]);
@@ -113,8 +153,12 @@ export function serviceWorkerFingerprintPreload(config: {
     const descriptor = Object.getOwnPropertyDescriptor(prototype, name);
     if (!descriptor || typeof descriptor.value !== 'function') return;
     const original = descriptor.value as (...a: unknown[]) => unknown;
+    if ((original as unknown as Record<PropertyKey, unknown>)[WRAPPED] === true) return;
     const wrapped = new Proxy(original, { apply: (_target, self, args) => implementation(args as unknown[], (...next) => Reflect.apply(original, self, next)) });
-    try { Object.defineProperty(prototype, name, { ...descriptor, value: wrapped }); } catch { /* protected prototype */ }
+    try {
+      Object.defineProperty(wrapped, WRAPPED, { value: true, configurable: false });
+      Object.defineProperty(prototype, name, { ...descriptor, value: wrapped });
+    } catch { /* protected prototype */ }
   };
   const offscreen = (G.OffscreenCanvas as { prototype?: object } | undefined)?.prototype;
   if (config.webgl === 'off') {

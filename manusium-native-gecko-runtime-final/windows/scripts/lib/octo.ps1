@@ -1,4 +1,4 @@
-﻿# scripts/lib/octo.ps1
+# scripts/lib/octo.ps1
 #
 # Shared implementation of the OctoSuite maintenance scripts (scripts\*.bat).
 # Target: Windows PowerShell 5.1 (built into Windows 10/11) - no PS7 syntax.
@@ -2501,27 +2501,47 @@ function Repair-ElectronSandboxAcl {
   # Electron sandboxed child processes require ALL APPLICATION PACKAGES
   # read/execute access. A copied npm cache can carry a restrictive ACL and
   # then fail with 0x80000003 before the launcher can create a window.
-  $aclText = (& icacls.exe $dist 2>&1 | Out-String)
-  if ($aclText -match 'S-1-15-2-1|ALL APPLICATION PACKAGES') { return $true }
   try {
+    # The sandbox checks every parent directory while opening the child. The
+    # old implementation validated only dist, so a checkout under a custom
+    # folder could still crash with ERR_FAILED even after a successful repair.
+    $chain = @()
+    $cursor = [IO.Path]::GetFullPath($dist)
+    $volumeRoot = [IO.Path]::GetPathRoot($cursor)
+    while ($cursor -and $cursor.StartsWith($volumeRoot, [StringComparison]::OrdinalIgnoreCase)) {
+      $chain += $cursor
+      if ($cursor -eq $volumeRoot) { break }
+      $next = Split-Path -Parent $cursor
+      if ($next -eq $cursor) { break }
+      $cursor = $next
+    }
+
+    $missing = @($chain | Where-Object {
+      $text = (& icacls.exe $_ 2>&1 | Out-String)
+      $text -notmatch 'S-1-15-2-1|ALL APPLICATION PACKAGES'
+    })
+    if ($missing.Count -eq 0) { return $true }
+
     # Start-Process joins an ArgumentList array into one command line. Quote
     # both the path and SID/rights token or paths with spaces produce ERROR_INVALID_PARAMETER (87).
-    $aclAttempts = @(
-      ('"{0}" /grant "*S-1-15-2-1:(OI)(CI)(RX)" /T /C' -f $dist),
-      ('"{0}" /grant:r "*S-1-15-2-1:(OI)(CI)(RX)" /T /C' -f $dist)
-    )
     $lastExit = $null
-    foreach ($aclArguments in $aclAttempts) {
+    foreach ($target in $missing) {
+      $isRuntimeTree = $target -eq $dist
+      $rights = if ($isRuntimeTree) { '(OI)(CI)(RX)' } else { '(RX)' }
+      $aclArguments = ('"{0}" /grant:r "*S-1-15-2-1:{1}"' -f $target, $rights)
       $result = Start-Process -FilePath 'icacls.exe' -ArgumentList $aclArguments -WorkingDirectory $InstallRoot -Verb RunAs -Wait -PassThru
       $lastExit = $result.ExitCode
-      if ($lastExit -ne 0) { continue }
-      $verified = (& icacls.exe $dist 2>&1 | Out-String)
-      if ($verified -match 'S-1-15-2-1|ALL APPLICATION PACKAGES') {
-        Write-Log 'info' "Repaired Electron sandbox ACL: $dist"
-        return $true
-      }
+      if ($lastExit -ne 0) { throw "icacls failed for '$target' with exit code $lastExit." }
     }
-    throw "icacls could not apply the Electron sandbox ACL (last exit code $lastExit)."
+    $unrepaired = @($chain | Where-Object {
+      $text = (& icacls.exe $_ 2>&1 | Out-String)
+      $text -notmatch 'S-1-15-2-1|ALL APPLICATION PACKAGES'
+    })
+    if ($unrepaired.Count -eq 0) {
+      Write-Log 'info' "Repaired Electron sandbox ACL path: $dist"
+      return $true
+    }
+    throw "icacls did not verify the Electron sandbox ACL on: $($unrepaired -join ', ') (last exit code $lastExit)."
   } catch {
     Warn "Electron cannot start because its sandbox ACL is missing. Run setup as administrator and repair '$dist'. $($_.Exception.Message)"
     return $false
