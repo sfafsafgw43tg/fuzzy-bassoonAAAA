@@ -495,7 +495,7 @@ describe('Windows esbuild install-loop regression', () => {
     const log: string[] = [];
     expect(verifyNativePackageArtifacts(root, { platform: 'win32', arch: 'x64', run: () => 5, log: (line: string) => log.push(line) })).toBe(false);
     expect(log.join('\n')).toContain('exit 5');
-    expect(log.join('\n')).toContain('esbuild/bin/esbuild --version');
+    expect(log.join('\n')).toContain(path.join(root, 'node_modules', 'esbuild', 'bin', 'esbuild') + ' --version');
   });
 });
 

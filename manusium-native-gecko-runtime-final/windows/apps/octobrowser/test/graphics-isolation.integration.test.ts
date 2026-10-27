@@ -5,7 +5,8 @@
  */
 import { describe, expect, it } from 'vitest';
 import { spawn } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { readFileSync, unlinkSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import * as path from 'node:path';
 
 const electronBinary = process.env.OCTO_ELECTRON_BINARY;
@@ -20,22 +21,46 @@ type Observation = {
 };
 
 const child = String.raw`
-const { app, BrowserWindow } = require('electron');
+const { app, BrowserWindow, ipcMain } = require('electron');
 const block = process.argv.includes('--block');
+ipcMain.on('octo:get-tab-config', (event) => { event.returnValue = undefined; });
 if (block) {
   app.disableHardwareAcceleration();
   app.commandLine.appendSwitch('disable-gpu');
   app.commandLine.appendSwitch('disable-gpu-compositing');
+  app.commandLine.appendSwitch('disable-webgl');
+  app.commandLine.appendSwitch('disable-3d-apis');
   app.commandLine.appendSwitch('disable-features', 'WebGPU');
 }
 app.whenReady().then(async () => {
+  const tabConfig = Buffer.from(JSON.stringify({
+    canvas: 'allow', hw: 'allow', hwValues: { hardwareConcurrency: 4, deviceMemory: 8 },
+    volume: 1, sinkId: '', cameraLabel: '', microphoneLabel: '',
+    fp: {
+      enabled: true, platform: 'Win32', brands: [{ brand: 'Chromium', version: '44' }],
+      fullVersionList: [{ brand: 'Chromium', version: '44.0.0.0' }], uaFullVersion: '44.0.0.0',
+      chPlatform: 'Windows', platformVersion: '10.0.0', architecture: 'x86', bitness: '64',
+      languages: ['en-US'], cores: 4, memory: 8,
+      screen: { width: 1920, height: 1080, availWidth: 1920, availHeight: 1040 },
+      windowSize: { width: 1920, height: 1040 }, deviceScaleFactor: 1,
+      webglVendor: 'Test Vendor', webglRenderer: 'Test Renderer', canvas: 'allow',
+      webgl: block ? 'off' : 'real', audio: 'real', clientRects: 'real', fonts: 'real',
+      webgpu: 'real', webrtcMode: 'real', webrtcIp: '', mediaDevices: null,
+      doNotTrack: false, battery: 'real', mobile: false, model: '', formFactor: 'Desktop', seed: 1234,
+      userAgent: 'Mozilla/5.0 (Windows NT 10.0; Win64; x64)',
+    },
+  }), 'utf8').toString('base64');
   const win = new BrowserWindow({ show: false, webPreferences: {
     sandbox: true, contextIsolation: true, nodeIntegration: false,
-    webgl: !block, preload: undefined,
+    preload: process.env.OCTO_TAB_PRELOAD || undefined,
+    additionalArguments: ['--octo-cfg=' + tabConfig],
+    webgl: !block,
   }});
-  await win.loadURL('data:text/html,<canvas id="c"></canvas>');
-  const result = await win.webContents.executeJavaScript(String.raw
-decodeURIComponent('${encodeURIComponent(`(async () => {
+  await Promise.race([
+    win.loadURL('data:text/html,<canvas id="c"></canvas>'),
+    new Promise((_, reject) => setTimeout(() => reject(new Error('loadURL timeout')), 10000)),
+  ]);
+  const result = await win.webContents.executeJavaScript(${JSON.stringify(`(async () => {
   const c = document.getElementById('c');
   const gl = c.getContext('webgl');
   const gl2 = c.getContext('webgl2');
@@ -43,31 +68,42 @@ decodeURIComponent('${encodeURIComponent(`(async () => {
   if (navigator.gpu) { try { gpu = await navigator.gpu.requestAdapter() ? 'adapter' : 'null'; } catch { gpu = 'error'; } }
   let workerWebgl = null;
   if (typeof Worker === 'function' && typeof OffscreenCanvas === 'function') {
-    workerWebgl = await new Promise((resolve) => {
+    workerWebgl = await Promise.race([new Promise((resolve) => {
       const src = 'onmessage = () => { const c = new OffscreenCanvas(1,1); postMessage(!!(c.getContext("webgl") || c.getContext("webgl2"))); }';
       const w = new Worker(URL.createObjectURL(new Blob([src], { type: 'text/javascript' })));
       w.onmessage = (e) => { resolve(e.data); w.terminate(); }; w.postMessage(0);
-    });
+    }), new Promise((resolve) => setTimeout(() => resolve(null), 5000))]);
   }
   return { webgl: !!gl, webgl2: !!gl2, debugRenderer: !!(gl && gl.getExtension('WEBGL_debug_renderer_info')), gpu, workerWebgl };
-})()`)}')
-  );
+})()`)})
   console.log(JSON.stringify(result));
   app.exit(0);
-}).catch(() => app.exit(2));
+}).catch((error) => { console.error(String(error)); app.exit(2); });
 `;
 
 function observe(mode: 'native' | 'block'): Promise<Observation> {
   if (!electronBinary) throw new Error('OCTO_ELECTRON_BINARY is required');
   return new Promise((resolve, reject) => {
-    const args = ['-e', child];
+    const scriptPath = path.join(tmpdir(), `octo-graphics-${process.pid}-${mode}.cjs`);
+    writeFileSync(scriptPath, child, 'utf8');
+    const args = [scriptPath];
     if (mode === 'block') args.push('--block');
-    const p = spawn(electronBinary, args, { env: { ...process.env, ELECTRON_RUN_AS_NODE: undefined }, windowsHide: true });
+    const p = spawn(electronBinary, args, {
+      env: {
+        ...process.env,
+        ELECTRON_RUN_AS_NODE: undefined,
+        OCTO_TAB_PRELOAD: path.resolve(__dirname, '..', 'dist', 'preload-tab.js'),
+      },
+      windowsHide: true,
+    });
     let output = '';
+    let errorOutput = '';
     p.stdout.on('data', (chunk) => { output += String(chunk); });
+    p.stderr.on('data', (chunk) => { errorOutput += String(chunk); });
     p.on('error', reject);
     p.on('close', (code) => {
-      if (code !== 0) return reject(new Error(`Electron exited ${code}: ${output}`));
+      try { unlinkSync(scriptPath); } catch { /* best effort */ }
+      if (code !== 0) return reject(new Error(`Electron exited ${code}; stdout: ${output}; stderr: ${errorOutput}; command: ${electronBinary} ${args.join(' ')}`));
       try { resolve(JSON.parse(output.trim().split('\n').pop() || '') as Observation); } catch (e) { reject(e); }
     });
   });
@@ -136,8 +172,9 @@ it('does not let the app-level graphics block force Basic Render Driver for enab
 
 it('keeps a WebGL context available when an enabled fingerprint profile needs the overlay', () => {
   const source = readFileSync(path.resolve(__dirname, '..', 'src', 'main', 'main.ts'), 'utf8');
-  expect(source).toContain("fingerprintUsesWebgl && s.webgl === 'allow'");
-  expect(source).toContain("switches.push(['ignore-gpu-blocklist'])");
+  expect(source).toContain("p.fingerprint?.enabled === true && p.fingerprint.webgl !== 'off'");
+  expect(source).toContain("appSettings.privacyRuntime.graphicsExposure === 'block'");
+  expect(source).not.toContain("switches.push(['ignore-gpu-blocklist'])");
   const windowSource = readFileSync(path.resolve(__dirname, '..', 'src', 'main', 'window.ts'), 'utf8');
   expect(windowSource).toContain("p.fingerprint?.enabled === true && p.fingerprint.webgl !== 'off'");
 });

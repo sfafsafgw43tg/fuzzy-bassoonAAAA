@@ -100,21 +100,10 @@ export function pageShim(c: PageConfig, eventName: string): void {
   const hook = <T extends Fn>(orig: T, impl: (target: T, self: unknown, args: unknown[]) => unknown): T => {
     if ((orig as unknown as Record<PropertyKey, unknown>)[WRAPPED] === true) return orig;
     let p: T;
-    p = new Proxy(orig, {
-      apply: (t, s, a) => impl(t, s, a as unknown[]),
-      setPrototypeOf: (target, next) => {
-        // Native callable objects reject a self-referential prototype cycle
-        // with TypeError. Forwarding this operation through a Proxy instead
-        // allows the cycle and later fails as RangeError/recursion, which is
-        // precisely what CreepJS reports as a prototype lie.
-        if (next && typeof next === 'object' && Object.getPrototypeOf(next) === p) return false;
-        // The __proto__ probe assigns a second Proxy around the callable.
-        // Reject that mutation as native functions do, rather than allowing
-        // the target's prototype to become another callable proxy.
-        if (typeof next === 'function' && next !== Object.getPrototypeOf(target)) return false;
-        return Reflect.setPrototypeOf(target, next);
-      },
-    });
+    // Keep all non-call traps native. A custom setPrototypeOf trap changes the
+    // observable error/return contract of ordinary functions and causes
+    // prototype auditors to report lies or recurse through proxy chains.
+    p = new Proxy(orig, { apply: (t, s, a) => impl(t, s, a as unknown[]) });
     try { dP(p, WRAPPED, { value: true, configurable: false }); } catch { /* native callable may reject metadata */ }
     return p;
   };
@@ -122,15 +111,17 @@ export function pageShim(c: PageConfig, eventName: string): void {
   const getter = (proto: object | undefined, prop: string, fn: (self: unknown, orig: () => unknown) => unknown): void => {
     if (!proto) return;
     const d = gOPD(proto, prop);
+    if (!d) return;
     const origGet = d?.get;
     const fallbackGet = () => d?.value;
     const baseGet = (origGet || fallbackGet) as Fn;
     if ((baseGet as unknown as Record<PropertyKey, unknown>)[WRAPPED] === true) return;
     try {
       dP(proto, prop, {
-        configurable: true,
-        enumerable: true,
+        configurable: d.configurable,
+        enumerable: d.enumerable,
         get: hook(baseGet, (t, s, a) => fn(s, () => (origGet ? R.apply(t, s, a) : d?.value))),
+        ...(d.set ? { set: d.set } : {}),
       });
     } catch { /* ignore */ }
   };

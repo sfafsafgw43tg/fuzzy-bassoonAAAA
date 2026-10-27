@@ -53,7 +53,13 @@ describe('Chromium runtime catalog', () => {
       }
       fs.mkdirSync(path.join(source, 'locales'), { recursive: true });
       fs.writeFileSync(path.join(source, 'locales', 'en-US.pak'), 'locale');
-      execFileSync('zip', ['-q', '-r', archive, archiveRoot], { cwd: work });
+      if (process.platform === 'win32') {
+        const psArchiveRoot = archiveRoot.replace(/'/g, "''");
+        const psArchive = archive.replace(/'/g, "''");
+        execFileSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', `Compress-Archive -LiteralPath '${psArchiveRoot}' -DestinationPath '${psArchive}' -Force`], { cwd: work });
+      } else {
+        execFileSync('zip', ['-q', '-r', archive, archiveRoot], { cwd: work });
+      }
       const archiveSha256 = crypto.createHash('sha256').update(fs.readFileSync(archive)).digest('hex');
       const entry = { ...CHROMIUM_CATALOG.find((candidate) => candidate.distribution === 'ungoogled-chromium')!, version: '155.0.8059.39-test', archiveRoot, archiveSha256 };
       const previous = process.env.OCTO_CHROMIUM_ARCHIVE;

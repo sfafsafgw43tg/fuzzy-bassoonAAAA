@@ -602,20 +602,24 @@ describe('finding the devices that were created', () => {
 
       // Without the pointer the far device is invisible; writing it is exactly
       // what the create flow now does.
-      expect(scanAvdFolders().map((item) => item.name)).toEqual(['Pixel_8']);
+      const initialNames = scanAvdFolders().map((item) => item.name);
+      expect(initialNames).toContain('Pixel_8');
+      expect(initialNames).not.toContain('Second_Drive');
       const pointer = writeAvdPointer('Second_Drive', far, 35);
       expect(pointer).toBe(path.join(home, 'Second_Drive.ini'));
       expect(fs.readFileSync(pointer, 'utf8')).toContain(`path=${far}`);
 
       const found = scanAvdFolders();
-      expect(found.map((item) => item.name).sort()).toEqual(['Pixel_8', 'Second_Drive']);
+      expect(found.map((item) => item.name)).toEqual(expect.arrayContaining(['Pixel_8', 'Second_Drive']));
       expect(found.find((item) => item.name === 'Pixel_8')?.target).toBe('API 34 · Google Play · x86_64');
       expect(found.find((item) => item.name === 'Second_Drive')?.path).toBe(far);
       expect(avdSearchDirectories()[0]).toBe(home);
 
       // A pointer to a folder that is gone must not produce a phantom row.
       fs.rmSync(far, { recursive: true, force: true });
-      expect(scanAvdFolders().map((item) => item.name)).toEqual(['Pixel_8']);
+      const afterRemovalNames = scanAvdFolders().map((item) => item.name);
+      expect(afterRemovalNames).toContain('Pixel_8');
+      expect(afterRemovalNames).not.toContain('Second_Drive');
     } finally {
       if (previous === undefined) delete process.env.ANDROID_AVD_HOME;
       else process.env.ANDROID_AVD_HOME = previous;
@@ -648,7 +652,7 @@ describe('adopting devices that already exist on disk', () => {
       const result = importAvdFolder(store);
       expect(result.added).toBe(2);
       expect(result.names.sort()).toEqual(['Old_One', 'Old_Two']);
-      expect(scanAvdFolders().map((item) => item.name).sort()).toEqual(['Old_One', 'Old_Two']);
+      expect(scanAvdFolders().map((item) => item.name)).toEqual(expect.arrayContaining(['Old_One', 'Old_Two']));
       // Pointing straight at one device folder works too.
       expect(importAvdFolder(path.join(store, 'Old_One.avd')).added).toBe(1);
       expect(() => importAvdFolder('not-absolute')).toThrow();

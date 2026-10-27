@@ -257,11 +257,11 @@ export class ProfileRuntime {
     this.fp = this.profile.ordinaryBrowser
       ? { kind: 'disabled', enabled: false }
       : resolveFingerprint(this.profile.fingerprint, geo, this.lang);
-    this.registerServiceWorkerFingerprintPreload(ses);
+    await this.registerServiceWorkerFingerprintPreload(ses);
     this.mobile = null;
     const nativeUserAgent = ses.getUserAgent();
     const profileUserAgent = this.fp.enabled
-      ? this.fp.userAgent
+      ? cleanUserAgent(this.fp.userAgent)
       // Keep a real --headless test process truthful. Normal GUI Electron
       // profiles use Chromium-compatible identity without Electron tokens.
       : process.argv.some((arg) => arg === '--headless' || arg.startsWith('--headless='))
@@ -412,7 +412,7 @@ export class ProfileRuntime {
       ? { kind: 'disabled', enabled: false }
       : resolveFingerprint(this.profile.fingerprint, geo, this.lang);
     this.mobile = null;
-    this.controller.updateIdentity(this.fp.enabled ? this.fp.userAgent : null, this.fp.enabled ? (this.fp.acceptLanguage ?? '') : '');
+    this.controller.updateIdentity(this.fp.enabled ? cleanUserAgent(this.fp.userAgent) : null, this.fp.enabled ? (this.fp.acceptLanguage ?? '') : '');
   }
 
   /** Geo facts for "auto" fingerprint values: fresh exit check, else the last stored one. */
@@ -887,7 +887,7 @@ export class ProfileRuntime {
    * so generate a profile-scoped, data-only bootstrap after fingerprint
    * resolution and register it before the first profile window is created.
    */
-  private registerServiceWorkerFingerprintPreload(ses: Electron.Session): void {
+  private async registerServiceWorkerFingerprintPreload(ses: Electron.Session): Promise<void> {
     if (!this.fp?.enabled) return;
     const config = {
       userAgent: this.fp.userAgent,
@@ -905,7 +905,7 @@ export class ProfileRuntime {
       fs.mkdirSync(this.layout.temp, { recursive: true });
       const source = `(${serviceWorkerFingerprintPreload.toString()})(${JSON.stringify(config)});\n`;
       fs.writeFileSync(filePath, source, { encoding: 'utf8', mode: 0o600 });
-      ses.registerPreloadScript({
+      await ses.registerPreloadScript({
         id: `octo-service-worker-fingerprint-${this.profile.id}`,
         type: 'service-worker',
         filePath,
