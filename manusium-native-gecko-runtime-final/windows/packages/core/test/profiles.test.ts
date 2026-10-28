@@ -368,6 +368,44 @@ describe('ProfileManager', () => {
     expect(fs.existsSync(path.join(target.layout.profileEngineDir(created.id), 'Cookies'))).toBe(false);
   });
 
+  it('round-trips Windows Sandbox and proxy settings in an encrypted settings export', async () => {
+    const source = setup();
+    const target = setup();
+    const p = source.pm.create({
+      name: 'Sandbox and proxy',
+      kind: 'custom',
+      patch: {
+        sandbox: {
+          mode: 'windows-sandbox',
+          clipboard: 'block',
+          camera: false,
+          microphone: false,
+          externalDevices: false,
+          shareDownloads: true,
+        },
+        network: {
+          mode: 'proxy',
+          proxyRules: 'http=127.0.0.1:8080;https=127.0.0.1:8080',
+          proxyBypass: '<local>',
+          lockdown: true,
+          proxy: { type: 'http', host: '127.0.0.1', port: 8080, changeIpUrl: '', name: 'QA proxy', savedId: '' },
+        },
+      },
+    });
+    const out = path.join(source.layout.root, 'sandbox-settings.octobackup');
+    const phrase = generateMnemonic();
+    await source.pm.exportBundle([p.id], phrase, out, false);
+    const [created] = await target.pm.importBundle(out, phrase);
+    expect(created.sandbox).toEqual(p.sandbox);
+    expect(created.network).toEqual(expect.objectContaining({
+      mode: 'proxy',
+      proxyRules: p.network.proxyRules,
+      proxyBypass: '<local>',
+      lockdown: true,
+    }));
+    expect(created.network.proxy).toEqual(p.network.proxy);
+  });
+
   it('profile data (bookmarks/history) is encrypted per profile', () => {
     const { layout, pm } = setup();
     const key = generateKey();

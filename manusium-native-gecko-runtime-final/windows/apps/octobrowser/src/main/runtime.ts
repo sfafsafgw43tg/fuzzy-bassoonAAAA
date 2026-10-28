@@ -730,7 +730,7 @@ export class ProfileRuntime {
   }
 
   /** Open a reviewed extension's declared local workspace in an ordinary profile tab. */
-  private openBundledExtension(addonId: string, page: 'entry' | 'options' = 'entry'): void {
+  private openBundledExtension(addonId: string, page: 'entry' | 'options' = 'entry'): string {
     const loaded = this.loadedExtensions.get(addonId);
     if (!loaded) throw new Error(this.t('addons.packageUnavailable'));
     const entryPage = page === 'options' && 'optionsPage' in loaded.extension && loaded.extension.optionsPage
@@ -738,6 +738,7 @@ export class ProfileRuntime {
       : loaded.extension.entryPage;
     const url = `chrome-extension://${loaded.extensionId}/${entryPage}`;
     (this.lastFocused ?? this.openWindow()).newTab(url);
+    return url;
   }
 
   /** State shared by all windows of this profile (profile badge, status icons). */
@@ -1128,7 +1129,7 @@ export class ProfileRuntime {
       const current = this.profile.chromeExtensions ?? [];
       const target = current.find((item) => item.id === String(id));
       if (!target) return false;
-      if (action === 'open' || action === 'options') { this.openBundledExtension(target.id, action === 'options' ? 'options' : 'entry'); return true; }
+      if (action === 'open' || action === 'options') return this.openBundledExtension(target.id, action === 'options' ? 'options' : 'entry');
       const next = action === 'remove'
         ? current.filter((item) => item.id !== target.id)
         : current.map((item) => item.id === target.id ? { ...item, enabled: !item.enabled } : item);
