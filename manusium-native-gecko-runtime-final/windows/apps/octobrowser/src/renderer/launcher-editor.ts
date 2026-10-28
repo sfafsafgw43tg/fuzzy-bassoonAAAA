@@ -2113,6 +2113,12 @@ function browser(b: HTMLElement, d: Draft, draw: () => void, summary: () => void
   // Isolation & Sandbox
   const sb = d.sandbox;
   const isoModeHint = h('p', { class: 'hint', text: sb.mode === 'isolated-vm' ? t('iso.mode.isolatedVmDesc') : (S.init.windowsSandbox ? t('sandbox.hint') : t('sandbox.hintNoWsb')) });
+  const windowsSandboxToggle = toggle(sb.mode === 'windows-sandbox', 'sandbox.windowsSandbox', (enabled) => {
+    sb.mode = enabled ? 'windows-sandbox' : 'restricted';
+    isoModeHint.textContent = S.init.windowsSandbox ? t('sandbox.hint') : t('sandbox.hintNoWsb');
+    summary();
+    draw();
+  }, !S.init.windowsSandbox);
   const isoModeSelect = select(sb.mode, [
     ['none', t('iso.mode.none')],
     ['restricted', t('iso.mode.restricted')],
@@ -2124,6 +2130,7 @@ function browser(b: HTMLElement, d: Draft, draw: () => void, summary: () => void
     summary();
   });
   b.append(section(t('edit.tab.sandbox'),
+    windowsSandboxToggle,
     field('iso.mode', isoModeSelect),
     isoModeHint,
     field('iso.clipboard', select(sb.clipboard, [['allow', t('iso.clipboard.allow')], ['write-only', t('iso.clipboard.write-only')], ['block', t('iso.clipboard.block')]], (v) => { sb.clipboard = v; })),

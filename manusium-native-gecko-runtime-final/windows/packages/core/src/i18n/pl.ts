@@ -472,6 +472,7 @@ export const pl: Record<string, string> = {
   'sandbox.hint': 'Piaskownica Windows uruchamia jednorazową kopię Octo; po zamknięciu wszystko jest usuwane.',
   'sandbox.hintNoWsb': 'Piaskownica Windows jest tu niedostępna; zamiast niej zostanie użyty tryb ograniczony.',
   'sandbox.testVersion': 'wersja testowa',
+  'sandbox.windowsSandbox': 'Uruchamiaj ten profil w piaskownicy systemu Windows',
   'sandbox.unavailable': 'Piaskownica Windows jest niedostępna na tym komputerze, więc profil uruchomiono w trybie ograniczonym.',
   'sandbox.vpnWarning': 'Wykryto aktywny VPN. Piaskarnica systemu Windows ma własny przełącznik wirtualny, a filtry niektórych klientów VPN (zwłaszcza z funkcją „kill switch”) mogą w niej blokować sieć. Jeśli wewnątrz piaskownicy strony się nie ładują, dodaj Piaskarnicę do wyjątków VPN (split tunnelling) albo uruchom profil w trybie ograniczonym.',
   'close.title': 'Zamknąć przeglądarkę?',

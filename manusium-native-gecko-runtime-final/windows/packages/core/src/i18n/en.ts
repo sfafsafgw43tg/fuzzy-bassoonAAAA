@@ -473,6 +473,7 @@ export const en: Record<string, string> = {
   'sandbox.hint': 'Windows Sandbox runs a disposable copy of Octo; everything is erased when it closes.',
   'sandbox.hintNoWsb': 'Windows Sandbox is not available here; restricted mode will be used instead.',
   'sandbox.testVersion': 'test version',
+  'sandbox.windowsSandbox': 'Run this profile in Windows Sandbox',
   'sandbox.unavailable': 'Windows Sandbox is not available on this computer, so the profile was started in restricted mode instead.',
   'sandbox.vpnWarning': 'An active VPN was detected. Windows Sandbox uses its own virtual switch and the filters of some VPN clients (especially with a kill switch) can block networking inside it. If pages do not load inside the sandbox, add Windows Sandbox to the VPN split-tunnelling exceptions or run the profile in restricted mode instead.',
   'close.title': 'Close browser?',
