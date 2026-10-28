@@ -265,13 +265,15 @@ const ENGINE_OVERRIDES: Array<{ key: string; type: 'enum'; values: string[] }> =
 
 // ------------------------------------------------------------------ dialog
 
-type Tab = 'general' | 'advanced' | 'browser' | 'mobile' | 'notes' | 'mass';
+type Tab = 'general' | 'privacy' | 'advanced' | 'browser' | 'mobile' | 'notes' | 'mass';
 
 export function openEditor(p: Profile | null): void {
   const d = p ? draftFrom(p) : newDraft();
   const creating = !p;
   let tab: Tab = 'general';
   let busy = false;
+  let rotationUsername = '';
+  let rotationPassword = '';
   const mass: MassDraft = { text: '', os: 'windows11', type: 'http', prefix: '' };
 
   modal(creating ? t('ui.createProfile') : t('profile.editTitle', { name: p!.name }), (box) => {
@@ -285,7 +287,7 @@ export function openEditor(p: Profile | null): void {
     let drawnTab = '';
     const draw = () => {
       clear(tabs);
-      const TABS: Array<[Tab, string]> = [['general', 'edit.tab.general'], ['advanced', 'ui.tab.advanced'], ['browser', 'ui.tab.browser']];
+      const TABS: Array<[Tab, string]> = [['general', 'edit.tab.general'], ['privacy', 'edit.tab.privacy'], ['advanced', 'ui.tab.advanced'], ['browser', 'ui.tab.browser']];
       if (d.mobile.device !== 'none' && d.kind !== 'phone') TABS.push(['mobile', 'edit.tab.mobile']);
       TABS.push(['notes', 'ui.tab.notes']);
       if (tab === 'mobile' && (d.mobile.device === 'none' || d.kind === 'phone')) tab = 'advanced';
@@ -299,6 +301,7 @@ export function openEditor(p: Profile | null): void {
       const prevScrollTop = tabChanged ? 0 : main.scrollTop;
       clear(main);
       if (tab === 'general') general(main, d, creating, p, draw, summary);
+      if (tab === 'privacy') privacyPanel(main, d, p, renewFp, () => rotationUsername, (v) => { rotationUsername = v; }, () => rotationPassword, (v) => { rotationPassword = v; });
       if (tab === 'advanced') advanced(main, d, draw, summary, p);
       if (tab === 'browser') browser(main, d, draw, summary);
       if (tab === 'mobile') mobile(main, d, summary);
@@ -381,6 +384,59 @@ export function openEditor(p: Profile | null): void {
       if (!d.fp && d.kind !== 'tor') { d.fp = fp; draw(); }
     }).catch(() => undefined);
   }, 'editor');
+}
+
+function privacyPanel(
+  b: HTMLElement,
+  d: Draft,
+  p: Profile | null,
+  renewFp: () => Promise<void>,
+  getUser: () => string,
+  setUser: (value: string) => void,
+  getPassword: () => string,
+  setPassword: (value: string) => void,
+): void {
+  const sandboxModes: Array<[Sandbox['mode'], string]> = [
+    ['none', t('iso.mode.none')], ['restricted', t('iso.mode.restricted')],
+    ['windows-sandbox', t('iso.mode.windows-sandbox')], ['isolated-vm', t('iso.mode.isolated-vm')],
+  ];
+  const sandbox = select<Sandbox['mode']>(d.sandbox.mode, sandboxModes, (value) => { d.sandbox.mode = value; });
+  const proxyMode = d.proxy.mode === 'none' ? t('proxy.none') : d.proxy.mode === 'saved' ? t('proxy.saved') : t('proxy.new');
+  const fpEnabled = !!d.fp?.enabled;
+  const fpToggle = toggle(fpEnabled, 'privacyPanel.fingerprintEnabled', (enabled) => {
+    if (!enabled) { if (d.fp) d.fp = { ...d.fp, enabled: false }; b.dispatchEvent(new Event('privacy-redraw')); return; }
+    void renewFp();
+  });
+  const user = input(getUser(), { autocomplete: 'username', maxlength: '256', placeholder: t('privacyPanel.username') }, setUser);
+  const password = input(getPassword(), { type: 'password', autocomplete: 'new-password', maxlength: '1024', placeholder: t('privacyPanel.password') }, setPassword);
+  const rotate = h('button', { type: 'button', class: 'btn small primary' }, icon('refreshCircle', 15), h('span', { text: t('privacyPanel.rotate') }));
+  rotate.onclick = async () => {
+    if (!p) { toast(t('privacyPanel.rotateNeedsProfile'), 'err'); return; }
+    const result = await run(api.invoke<{ ok: boolean }>('mgr:proxy-rotate-credentials', p.id, getUser(), getPassword()));
+    if (result?.ok) { setPassword(''); password.value = ''; toast(t('privacyPanel.rotateSaved'), 'ok'); }
+  };
+  b.append(
+    section(t('privacyPanel.title'), h('p', { class: 'hint', text: t('privacyPanel.hint') })),
+    section(t('privacyPanel.sandbox'),
+      frow(t('privacyPanel.sandboxMode'), sandbox),
+      toggle(d.sandbox.clipboard !== 'block', 'sandbox.clipboard', (enabled) => { d.sandbox.clipboard = enabled ? 'allow' : 'block'; }),
+      toggle(d.sandbox.camera, 'sandbox.camera', (enabled) => { d.sandbox.camera = enabled; }),
+      toggle(d.sandbox.microphone, 'sandbox.microphone', (enabled) => { d.sandbox.microphone = enabled; }),
+      toggle(d.sandbox.externalDevices, 'sandbox.devices', (enabled) => { d.sandbox.externalDevices = enabled; }),
+      toggle(d.sandbox.shareDownloads, 'sandbox.shareDownloads', (enabled) => { d.sandbox.shareDownloads = enabled; }),
+    ),
+    section(t('privacyPanel.proxy'),
+      h('div', { class: 'status-card' }, h('strong', { text: proxyMode }), h('p', { class: 'hint', text: t('privacyPanel.proxyStatus') })),
+      frow(t('proxy.lockdown'), toggle(d.proxy.lockdown, 'proxy.lockdown', (enabled) => { d.proxy.lockdown = enabled; d.proxy.lockdownChanged = true; })),
+      h('p', { class: 'hint', text: p?.network.hasProxyCredentials ? t('proxy.currentWithCreds') : t('proxy.notChecked') }),
+    ),
+    section(t('privacyPanel.fingerprint'),
+      fpToggle,
+      h('p', { class: 'hint', text: fpEnabled ? `${osLabel(d.fp?.os ?? 'windows11')} · ${d.fp?.webglInfo?.renderer ?? t('fp.webglGpuHidden')}` : t('privacyPanel.fingerprintDisabled') }),
+      frow(t('privacyPanel.webrtc'), select<string>(d.fp?.webrtc?.mode ?? 'default', [['default', t('enginePrivacy.webRtc.default')], ['disable_non_proxied_udp', t('enginePrivacy.webRtc.disableUdp')], ['disabled', t('enginePrivacy.webRtc.disabled')]], (value) => { if (d.fp) d.fp = { ...d.fp, webrtc: { ...d.fp.webrtc, mode: value as Fingerprint['webrtc']['mode'] } }; })),
+    ),
+    section(t('privacyPanel.rotateTitle'), h('p', { class: 'hint', text: t('privacyPanel.rotateHint') }), frow(t('privacyPanel.username'), user), frow(t('privacyPanel.password'), password), rotate),
+  );
 }
 
 /** Draft proxy -> ProxyInput for the main process, or an error message. */

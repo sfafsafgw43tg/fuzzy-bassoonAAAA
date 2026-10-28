@@ -3339,6 +3339,17 @@ export class Manager {
       const updated = this.updateProfile(id, { ...fields, network: { ...(fields.network ?? this.profiles.get(id).network), hasProxyCredentials: ctx.secrets.has(`proxy:${id}`) } }, proxy);
       return updated;
     });
+    handle('mgr:proxy-rotate-credentials', L, (_e, id: string, username: string, password: string) => {
+      const profile = this.profiles.get(String(id));
+      if (profile.network.mode !== 'proxy') throw new Error(this.t('proxy.err.noProxy'));
+      const user = String(username ?? '').trim().slice(0, 256);
+      const secret = String(password ?? '').slice(0, 1024);
+      if (!user || !secret || /[\u0000-\u001f]/.test(user) || /[\u0000-\u001f]/.test(secret)) throw new Error(this.t('proxy.err.credentials'));
+      ctx.secrets.set(`proxy:${profile.id}`, JSON.stringify({ username: user, password: secret }));
+      this.profiles.update(profile.id, { network: { ...profile.network, hasProxyCredentials: true } });
+      this.pushProfiles();
+      return { ok: true, profileId: profile.id, rotatedAt: new Date().toISOString() };
+    });
     handle('mgr:duplicate', L, (_e, id: string, name: string, withData: boolean) => {
       if (withData && this.isRunning(id)) throw new Error(this.t('err.closeProfileFirst'));
       const p = this.profiles.duplicate(id, String(name).slice(0, 64), !!withData);

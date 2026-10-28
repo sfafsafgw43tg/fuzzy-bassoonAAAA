@@ -25,6 +25,26 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  windows-sandbox:
+    name: Windows Sandbox smoke test
+    runs-on: windows-2022
+    timeout-minutes: 20
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - name: Install dependencies
+        run: npm ci
+      - name: Validate Sandbox generator and launch guard
+        run: npm test -- packages/core/test/sandbox.test.ts packages/shell/test/winutil-sandbox.test.ts
+      - name: Probe live Windows Sandbox when enabled by the runner
+        shell: pwsh
+        run: ./tools/ci/windows-sandbox-ci.ps1
+
   windows:
     runs-on: windows-latest
     timeout-minutes: 75
