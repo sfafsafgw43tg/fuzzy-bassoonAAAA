@@ -83,6 +83,8 @@ describe('browser entry UI', () => {
     expect(browserCss).toContain('#panel:has(.browser-settings-panel) { width: min(760px, calc(100vw - 24px));');
     expect(browser).toContain('setContentCovered(true);');
     expect(browser).toContain('setContentCovered(false);');
+    expect(windowController).toContain('installWebglIdentityFallback');
+    expect(windowController).toContain('fingerprint.webgl-fallback-failed');
   });
 
   it('renders both winter themes as sparse, soft, breezy snowfall', () => {

@@ -62,7 +62,7 @@ bundled into Octo.su and OctoDetect.su.
 | Package | Version | License | Source | File |
 |---|---|---|---|---|
 ${rows.join('\n')}
-| Electron | 44.7.0 | MIT | https://github.com/electron/electron | LICENSE.electron.txt (next to the .exe) |
+| Electron | 44.9.3 | MIT | https://github.com/electron/electron | LICENSE.electron.txt (next to the .exe) |
 | Chromium | bundled with Electron | BSD-3-Clause and others | https://www.chromium.org | LICENSES.chromium.html (next to the .exe) |
 
 ## Data downloaded at runtime (not bundled)

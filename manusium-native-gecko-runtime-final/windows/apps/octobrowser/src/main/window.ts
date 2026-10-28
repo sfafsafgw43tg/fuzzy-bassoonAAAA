@@ -400,6 +400,53 @@ export class BrowserWindowController {
     this.win.contentView.addChildView(view);
   }
 
+  /**
+   * Safety net for Electron builds where executeInMainWorld is unavailable or
+   * rejects during a sandboxed navigation. The normal tab preload remains the
+   * primary implementation; this idempotent main-world patch only guarantees
+   * that the selected WebGL identity is not replaced by the host adapter.
+   */
+  private installWebglIdentityFallback(wc: WebContents): void {
+    const fp = this.rt.fp;
+    if (!fp?.enabled || fp.webgl === 'off' || !fp.webglVendor || !fp.webglRenderer) return;
+    const vendor = JSON.stringify(fp.webglVendor);
+    const renderer = JSON.stringify(fp.webglRenderer);
+    const source = `(function(){
+      if (window.__octoWebglIdentityFallback) return;
+      window.__octoWebglIdentityFallback = true;
+      var vendor=${vendor}, renderer=${renderer};
+      var patch=function(C){
+        var P=C&&C.prototype; if(!P||P.__octoWebglIdentityFallback) return;
+        var original=P.getParameter; if(typeof original!=='function') return;
+        var getParameter=function(p){
+          if(p===0x1f00||p===0x9245) return vendor;
+          if(p===0x1f01||p===0x9246) return renderer;
+          return original.apply(this,arguments);
+        };
+        try{Object.defineProperty(P,'getParameter',{configurable:true,writable:true,value:getParameter});}catch(e){return;}
+        var getExtension=P.getExtension;
+        if(typeof getExtension==='function'){
+          var wrapped=function(name){
+            var ext=getExtension.apply(this,arguments);
+            if(name!=='WEBGL_debug_renderer_info') return ext;
+            var target=ext||{};
+            return new Proxy(target,{get:function(t,k){
+              if(k==='UNMASKED_VENDOR_WEBGL') return 0x9245;
+              if(k==='UNMASKED_RENDERER_WEBGL') return 0x9246;
+              return Reflect.get(t,k);
+            }});
+          };
+          try{Object.defineProperty(P,'getExtension',{configurable:true,writable:true,value:wrapped});}catch(e){}
+        }
+        try{Object.defineProperty(P,'__octoWebglIdentityFallback',{value:true,configurable:false});}catch(e){}
+      };
+      patch(window.WebGLRenderingContext); patch(window.WebGL2RenderingContext);
+    })();`;
+    void wc.executeJavaScript(source, true).catch((error) => {
+      this.rt.logger.warn('fingerprint.webgl-fallback-failed', { error: String(error) });
+    });
+  }
+
   private wireTab(t: Tab, wc: WebContents): void {
     // A live WebContentsView can move between browser windows. Every callback
     // resolves its current owner at event time so detachment never leaves page
@@ -408,6 +455,7 @@ export class BrowserWindowController {
     const update = () => owner().pushTab(t);
     wc.on('did-start-loading', () => { t.loading = true; update(); });
     wc.on('did-stop-loading', () => { t.loading = false; update(); });
+    wc.on('dom-ready', () => this.installWebglIdentityFallback(wc));
     wc.on('page-title-updated', (_e, title) => { t.title = title; update(); });
     wc.on('page-favicon-updated', (_e, favs) => { t.favicon = favs.find((f) => /^(https:|data:image\/)/.test(f)) ?? ''; update(); });
     wc.on('did-navigate', (_e, url) => {

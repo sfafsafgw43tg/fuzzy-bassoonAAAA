@@ -5,7 +5,7 @@ appId: su.octo.browser
 productName: Octo.su
 executableName: Octo.su
 copyright: Copyright © 2026 OctoSuite contributors
-electronVersion: 44.7.0
+electronVersion: 44.9.3
 directories:
   output: ../../release/octobrowser
   buildResources: build-resources
