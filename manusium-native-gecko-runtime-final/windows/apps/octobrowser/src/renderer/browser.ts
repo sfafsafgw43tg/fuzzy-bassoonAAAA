@@ -43,7 +43,7 @@ interface AddonInfo {
 }
 interface LocalExtensionInfo {
   id: string; name: string; version: string; path: string; manifestVersion: 2 | 3;
-  permissions: string[]; hostPermissions: string[]; enabled: boolean; loaded: boolean;
+  permissions: string[]; hostPermissions: string[]; entryPage: string; enabled: boolean; loaded: boolean;
 }
 interface AddonsRuntimeState {
   local: LocalExtensionInfo[];
@@ -267,7 +267,7 @@ async function renderExtensionToolbar(): Promise<void> {
   const enabled = new Set(state.profile.addons);
   const items = [
     ...addons.filter((addon) => addon.kind === 'extension' && enabled.has(addon.id)).map((addon) => ({ id: addon.id, name: addon.name })),
-    ...(runtime?.local ?? []).filter((extension) => extension.enabled && extension.loaded).map((extension) => ({ id: extension.id, name: extension.name })),
+    ...(runtime?.local ?? []).filter((extension) => extension.enabled && extension.loaded && extension.entryPage).map((extension) => ({ id: extension.id, name: extension.name })),
   ];
   for (const item of items) {
     const button = h('button', { class: 'icon-btn extension-action', title: item.name, 'aria-label': item.name }) as HTMLButtonElement;

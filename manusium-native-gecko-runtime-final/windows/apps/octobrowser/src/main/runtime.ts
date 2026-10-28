@@ -1125,6 +1125,7 @@ export class ProfileRuntime {
           manifestVersion: inspected.manifestVersion,
           permissions: extension.permissions,
           hostPermissions: extension.hostPermissions,
+          entryPage: inspected.entryPage,
           enabled: extension.enabled === true,
           loaded: this.loadedExtensions.has(extension.id),
         };

@@ -101,7 +101,9 @@ export function serviceWorkerFingerprintPreload(config: {
       const original = object[name];
       if (typeof original !== 'function') return;
       if ((original as unknown as Record<PropertyKey, unknown>)[WRAPPED] === true) return;
-      const wrapped = (...args: unknown[]) => implementation(args, (...next) => Reflect.apply(original as (...a: unknown[]) => unknown, context, next));
+      const wrapped = function (this: unknown, ...args: unknown[]) {
+        return implementation(args, (...next) => Reflect.apply(original as (...a: unknown[]) => unknown, this, next));
+      };
       try {
         Object.defineProperty(wrapped, WRAPPED, { value: true, configurable: false });
         Object.defineProperty(object, name, { configurable: true, writable: true, value: wrapped });
@@ -160,6 +162,13 @@ export function serviceWorkerFingerprintPreload(config: {
       Object.defineProperty(prototype, name, { ...descriptor, value: wrapped });
     } catch { /* protected prototype */ }
   };
+  // Patch both WebGL prototypes and OffscreenCanvas. Chromium normally exposes
+  // service-worker WebGL through OffscreenCanvas, but some versions create a
+  // context whose methods are inherited from the WebGL prototypes. The old
+  // branch only patched one of those paths, so CreepJS could still read the
+  // host adapter (often SwiftShader) from a worker-created context.
+  wrapContext((G.WebGLRenderingContext as { prototype?: object } | undefined)?.prototype);
+  wrapContext((G.WebGL2RenderingContext as { prototype?: object } | undefined)?.prototype);
   const offscreen = (G.OffscreenCanvas as { prototype?: object } | undefined)?.prototype;
   if (config.webgl === 'off') {
     replace(offscreen, 'getContext', (args, original) => ['webgl', 'webgl2', 'experimental-webgl', 'experimental-webgl2'].includes(String(args[0] ?? '').toLowerCase()) ? null : original(...args));
@@ -168,9 +177,6 @@ export function serviceWorkerFingerprintPreload(config: {
       const context = original(...args);
       return ['webgl', 'webgl2', 'experimental-webgl', 'experimental-webgl2'].includes(String(args[0] ?? '').toLowerCase()) ? wrapContext(context) : context;
     });
-  } else {
-    wrapContext((G.WebGLRenderingContext as { prototype?: object } | undefined)?.prototype);
-    wrapContext((G.WebGL2RenderingContext as { prototype?: object } | undefined)?.prototype);
   }
   void navigatorValue;
 }
