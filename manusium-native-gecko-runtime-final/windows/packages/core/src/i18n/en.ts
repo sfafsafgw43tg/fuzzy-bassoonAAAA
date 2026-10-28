@@ -471,6 +471,8 @@ export const en: Record<string, string> = {
   'wsb.fallbackInfo': 'Restricted mode blocks camera, microphone and USB devices, limits the clipboard and keeps downloads inside the profile.',
   'wsb.useRestricted': 'Use restricted mode',
   'sandbox.hint': 'Windows Sandbox runs a disposable copy of Octo; everything is erased when it closes.',
+  'sandbox.alwaysWindows': 'Always open this profile in Windows Sandbox',
+  'sandbox.alwaysWindowsHint': 'Each launch creates one disposable Windows Sandbox session for this profile. Profile data is not persisted inside the VM.',
   'sandbox.hintNoWsb': 'Windows Sandbox is not available here; restricted mode will be used instead.',
   'sandbox.testVersion': 'test version',
   'sandbox.unavailable': 'Windows Sandbox is not available on this computer, so the profile was started in restricted mode instead.',

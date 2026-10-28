@@ -470,6 +470,8 @@ export const pl: Record<string, string> = {
   'wsb.fallbackInfo': 'Tryb ograniczony blokuje kamerę, mikrofon i urządzenia USB, ogranicza schowek i trzyma pobrane pliki wewnątrz profilu.',
   'wsb.useRestricted': 'Użyj trybu ograniczonego',
   'sandbox.hint': 'Piaskownica Windows uruchamia jednorazową kopię Octo; po zamknięciu wszystko jest usuwane.',
+  'sandbox.alwaysWindows': 'Zawsze otwieraj ten profil w Piaskownicy Windows',
+  'sandbox.alwaysWindowsHint': 'Każde uruchomienie tworzy jedną jednorazową sesję Piaskownicy Windows dla tego profilu. Dane profilu nie są zachowywane w maszynie wirtualnej.',
   'sandbox.hintNoWsb': 'Piaskownica Windows jest tu niedostępna; zamiast niej zostanie użyty tryb ograniczony.',
   'sandbox.testVersion': 'wersja testowa',
   'sandbox.unavailable': 'Piaskownica Windows jest niedostępna na tym komputerze, więc profil uruchomiono w trybie ograniczonym.',
