@@ -93,6 +93,9 @@ if (runCliVerifyIfRequested('octobrowser')) {
       if (fallback) {
         app.userAgentFallback = fallback;
       }
+      const savedProfile = new ProfileManager(layout).get(profileId);
+      const savedUa = savedProfile.ordinaryBrowser ? '' : savedProfile.fingerprint?.enabled ? savedProfile.fingerprint.userAgent : '';
+      if (savedUa) app.userAgentFallback = cleanUserAgent(savedUa);
     } catch { /* test doubles / older Electron */ }
     app.whenReady().then(() => hardenApp(new Logger(layout.logs, 'octobrowser-profiles'))).catch(() => undefined);
     runProfileProcess(distDir, profileDataDir, profileLanguage, profileId);

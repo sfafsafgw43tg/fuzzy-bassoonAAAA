@@ -33,17 +33,30 @@ export function serviceWorkerFingerprintPreload(config: {
   const define = (target: object | undefined, property: string, value: unknown): void => {
     if (!target) return;
     const descriptor = Object.getOwnPropertyDescriptor(target, property);
-    if (!descriptor?.get) return;
-    try {
-      Object.defineProperty(target, property, {
-        configurable: true,
-        enumerable: descriptor.enumerable ?? true,
-        get: () => value,
-      });
-    } catch { /* protected platform property */ }
+    if (descriptor?.get) {
+      try {
+        Object.defineProperty(target, property, {
+          configurable: true,
+          enumerable: descriptor.enumerable ?? true,
+          get: () => value,
+        });
+        return;
+      } catch { /* try the navigator instance below */ }
+    }
+    if (target !== navigatorValue && navigatorValue) {
+      try { Object.defineProperty(navigatorValue, property, { configurable: true, enumerable: true, get: () => value }); } catch { /* protected platform property */ }
+    }
   };
   define(workerNavigator, 'userAgent', config.userAgent);
   define(workerNavigator, 'platform', config.platform);
+  try {
+    const navigatorProxy = new Proxy(navigatorValue as object, { get: (target, property, receiver) => {
+      if (property === 'userAgent') return config.userAgent;
+      if (property === 'appVersion') return config.userAgent.replace(/^Mozilla\/\d+\.\d+\s*/i, '');
+      return Reflect.get(target, property, receiver);
+    } });
+    if (navigatorValue && G.navigator === navigatorValue) Object.defineProperty(G, 'navigator', { configurable: true, enumerable: true, get: () => navigatorProxy });
+  } catch { /* protected global navigator */ }
   if (config.cores) define(workerNavigator, 'hardwareConcurrency', config.cores);
   if (config.memory) define(workerNavigator, 'deviceMemory', config.memory);
   if (config.languages.length) {

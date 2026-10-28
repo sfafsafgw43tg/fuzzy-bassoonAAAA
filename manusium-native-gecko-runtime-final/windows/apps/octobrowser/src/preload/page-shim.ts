@@ -135,6 +135,10 @@ export function pageShim(c: PageConfig, eventName: string): void {
   };
   const proto = (name: string): object | undefined => (W[name] as { prototype?: object } | undefined)?.prototype;
   const fixed = (p: object | undefined, prop: string, value: unknown) => getter(p, prop, (_s, orig) => { orig(); return value; });
+  const ownFixed = (obj: object | undefined, prop: string, value: unknown): void => {
+    if (!obj) return;
+    try { dP(obj, prop, { configurable: true, enumerable: true, get: () => value }); } catch { /* protected host property */ }
+  };
 
   // ------------------------------------------------------ deterministic noise
   const seed = fp ? fp.seed >>> 0 : 0;
@@ -340,6 +344,18 @@ export function pageShim(c: PageConfig, eventName: string): void {
       const userAgent = fp.userAgent.replace(/\s?Electron\/[\d.]+/gi, '').replace(/\s{2,}/g, ' ').trim();
       fixed(Nav, 'userAgent', userAgent);
       fixed(Nav, 'appVersion', userAgent.replace(/^Mozilla\/\d+\.\d+\s*/i, ''));
+      ownFixed(W.navigator as object, 'userAgent', userAgent);
+      ownFixed(W.navigator as object, 'appVersion', userAgent.replace(/^Mozilla\/\d+\.\d+\s*/i, ''));
+      try {
+        const nativeNavigator = W.navigator as object;
+        const appVersion = userAgent.replace(/^Mozilla\/\d+\.\d+\s*/i, '');
+        const navigatorProxy = new Proxy(nativeNavigator, { get: (target, property, receiver) => {
+          if (property === 'userAgent') return userAgent;
+          if (property === 'appVersion') return appVersion;
+          return Reflect.get(target, property, receiver);
+        } });
+        dP(W, 'navigator', { configurable: true, enumerable: true, get: () => navigatorProxy });
+      } catch { /* protected window.navigator */ }
     }
     fixed(Nav, 'platform', fp.platform);
     fixed(Nav, 'pdfViewerEnabled', true);
@@ -419,6 +435,23 @@ export function pageShim(c: PageConfig, eventName: string): void {
         });
       });
       method(UAD, 'toJSON', (_self, args, orig) => { orig(...args); return { brands: brands.map((b) => ({ ...b })), mobile: fp.mobile, platform: fp.chPlatform }; });
+      const nativeData = (W.navigator as { userAgentData?: object }).userAgentData;
+      if (nativeData) {
+        ownFixed(nativeData, 'brands', brands);
+        ownFixed(nativeData, 'mobile', fp.mobile);
+        ownFixed(nativeData, 'platform', fp.chPlatform);
+        try {
+          dP(nativeData, 'getHighEntropyValues', { configurable: true, enumerable: false, value: (hints: string[]) => {
+            const all: Record<string, unknown> = {
+              brands: brands.map((b) => ({ ...b })), mobile: fp.mobile, platform: fp.chPlatform,
+              architecture: fp.architecture, bitness: fp.bitness, formFactors: [fp.formFactor],
+              fullVersionList: fp.fullVersionList.map((b) => ({ ...b })), model: fp.model,
+              platformVersion: fp.platformVersion, uaFullVersion: fp.uaFullVersion, wow64: false,
+            };
+            return Promise.resolve(Object.fromEntries((Array.isArray(hints) ? hints : []).filter((h) => h in all).map((h) => [h, all[h]])));
+          } });
+        } catch { /* protected host method */ }
+      }
     }
 
     // ---- screen & window ----
