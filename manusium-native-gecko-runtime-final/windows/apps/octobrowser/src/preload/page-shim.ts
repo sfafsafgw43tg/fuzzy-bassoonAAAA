@@ -232,6 +232,24 @@ export function pageShim(c: PageConfig, eventName: string): void {
 
   // ---- selected physical camera / microphone & video spoofing ----
   const MD = proto('MediaDevices');
+  // Baseline privacy for profiles that do not have a resolved fingerprint yet:
+  // keep device kinds/counts available for compatibility, but never expose host
+  // labels, device IDs, or group IDs through enumerateDevices(). getUserMedia()
+  // remains native and is still governed by the session permission handler.
+  if (!fp && MD) {
+    const MDI = W.MediaDeviceInfo as { prototype: object } | undefined;
+    method(MD, 'enumerateDevices', (_self, args, orig) => (orig(...args) as Promise<MediaDeviceInfo[]>).then((real) => real.map((device) => {
+      const masked = {
+        deviceId: '',
+        kind: device.kind,
+        label: '',
+        groupId: '',
+        toJSON() { return { deviceId: '', kind: device.kind, label: '', groupId: '' }; },
+      } as unknown as MediaDeviceInfo;
+      if (MDI) Object.setPrototypeOf(masked, MDI.prototype);
+      return masked;
+    })));
+  }
   if (c.cameraLabel || c.microphoneLabel || (fp && fp.videoSpoofing)) {
     const nativeEnumerate = MD && (gOPD(MD, 'enumerateDevices')?.value as Fn | undefined);
     const normalizedLabel = (value: string) => value.trim().toLocaleLowerCase()

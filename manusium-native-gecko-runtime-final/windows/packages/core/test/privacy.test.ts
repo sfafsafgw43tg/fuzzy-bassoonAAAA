@@ -28,7 +28,8 @@ describe('privacy presets', () => {
   it('flags inconsistent combinations', () => {
     const s = effectiveSettings({ level: 'strict', overrides: { webrtc: 'default' } });
     expect(checkConsistency(s).map((i) => i.key)).toContain('consistency.strictWebrtc');
-    expect(checkConsistency(presetFor('standard'), { proxyActive: true }).map((i) => i.key)).toContain('consistency.proxyWebrtc');
+    expect(checkConsistency(presetFor('standard'), { proxyActive: true }).map((i) => i.key)).not.toContain('consistency.proxyWebrtc');
+    expect(checkConsistency(effectiveSettings({ level: 'standard', overrides: { webrtc: 'default' } }), { proxyActive: true }).map((i) => i.key)).toContain('consistency.proxyWebrtc');
   });
 
   it('strips tracking parameters and unwraps bounce redirects', () => {
