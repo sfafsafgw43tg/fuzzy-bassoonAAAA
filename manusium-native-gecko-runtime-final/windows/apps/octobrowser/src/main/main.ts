@@ -9,7 +9,7 @@
 import { app, dialog, protocol } from 'electron';
 import * as path from 'node:path';
 import { DataLayout, Logger, ProfileManager, effectiveSettings, createSettingsStore, sanitizeProfile, newProfileId } from '@octo/core';
-import { argValue, hasFlag, prepareApp, relaunchArgsWithout, resetPreparedApp } from '@octo/shell/prepare';
+import { argValue, cleanUserAgent, hasFlag, prepareApp, relaunchArgsWithout, resetPreparedApp } from '@octo/shell/prepare';
 import { hardenApp } from '@octo/shell/hardening';
 import { setTrustedRoot } from '@octo/shell/ipc';
 import { startApp } from '@octo/shell/context';
@@ -85,6 +85,15 @@ if (runCliVerifyIfRequested('octobrowser')) {
     app.exit(3); // not configured - must be started by the manager
   } else {
     const layout = prep.layout ?? new DataLayout(profileDataDir);
+    // Set the Chromium-wide fallback before the profile creates its first
+    // WebContents. Session-level overrides are still applied later, but this
+    // closes the early-navigation gap where Electron/44.x could leak.
+    try {
+      const fallback = cleanUserAgent(app.userAgentFallback);
+      if (fallback) {
+        app.userAgentFallback = fallback;
+      }
+    } catch { /* test doubles / older Electron */ }
     app.whenReady().then(() => hardenApp(new Logger(layout.logs, 'octobrowser-profiles'))).catch(() => undefined);
     runProfileProcess(distDir, profileDataDir, profileLanguage, profileId);
   }

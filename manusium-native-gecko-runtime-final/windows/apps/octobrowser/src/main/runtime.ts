@@ -893,7 +893,7 @@ export class ProfileRuntime {
   private async registerServiceWorkerFingerprintPreload(ses: Electron.Session): Promise<void> {
     if (!this.fp?.enabled) return;
     const config = {
-      userAgent: this.fp.userAgent,
+      userAgent: cleanUserAgent(this.fp.userAgent),
       platform: this.fp.platform,
       languages: this.fp.languages,
       uaPlatform: this.fp.chPlatform,

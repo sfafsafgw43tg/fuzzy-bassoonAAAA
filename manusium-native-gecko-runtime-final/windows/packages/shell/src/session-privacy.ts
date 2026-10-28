@@ -225,6 +225,11 @@ export class ProfileSessionController {
     try { this.ses.setUserAgent(this.identityUserAgent ?? undefined as never); } catch { /* test doubles / older Electron */ }
   }
 
+  /** User-Agent to apply when a WebContents is created after session setup. */
+  userAgent(): string | null {
+    return this.identityUserAgent;
+  }
+
   /** Route the profile through different rules (e.g. the local auth bridge); null = profile rules. */
   async setProxyOverride(rules: string | null): Promise<void> {
     this.proxyOverride = rules;

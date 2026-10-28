@@ -336,6 +336,11 @@ export function pageShim(c: PageConfig, eventName: string): void {
   if (fp) {
     const Nav = proto('Navigator');
     // ---- navigator ----
+    if (fp.userAgent) {
+      const userAgent = fp.userAgent.replace(/\s?Electron\/[\d.]+/gi, '').replace(/\s{2,}/g, ' ').trim();
+      fixed(Nav, 'userAgent', userAgent);
+      fixed(Nav, 'appVersion', userAgent.replace(/^Mozilla\/\d+\.\d+\s*/i, ''));
+    }
     fixed(Nav, 'platform', fp.platform);
     fixed(Nav, 'pdfViewerEnabled', true);
     if (fp.mobile) fixed(Nav, 'maxTouchPoints', 5);

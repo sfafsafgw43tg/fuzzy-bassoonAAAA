@@ -828,7 +828,7 @@ export function resolveFingerprint(fp: FingerprintConfig, geoInput: GeoInfo | un
       };
     })()
     : null;
-  const configuredGpu = (fp.webglInfo.mode === 'manual' || fp.webglInfo.mode === 'custom') && fp.webglInfo.vendor && fp.webglInfo.renderer
+  const configuredGpu = fp.webglInfo.vendor && fp.webglInfo.renderer
     ? { vendor: fp.webglInfo.vendor, renderer: fp.webglInfo.renderer }
     : null;
   // Older profiles may have noise enabled with WebGL info still set to Real.

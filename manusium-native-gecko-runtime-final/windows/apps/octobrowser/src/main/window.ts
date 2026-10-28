@@ -15,6 +15,7 @@ import { NORMALIZED_HARDWARE } from '@octo/core';
 import { trustWebContents } from '@octo/shell/ipc';
 import { SAFE_WEB_PREFERENCES, assertSafeWebPreferences } from '@octo/shell/security-policy';
 import { profilePartition } from '@octo/shell/profile-partition';
+import { cleanUserAgent } from '@octo/shell/prepare';
 
 import { FINGERPRINT_PROBE_SCRIPT, type FingerprintProbeSnapshot } from './fingerprint-probe';
 import { FingerprintTestSiteId, FINGERPRINT_TEST_SITES } from '../shared/fingerprint-test-sites';
@@ -307,6 +308,7 @@ export class BrowserWindowController {
       cameraLabel: this.rt.profile.mediaCapture.cameraLabel,
       microphoneLabel: this.rt.profile.mediaCapture.microphoneLabel,
       fp: resolved ? {
+        userAgent: cleanUserAgent(resolved.userAgent),
         platform: resolved.platform,
         brands: resolved.brands,
         fullVersionList: resolved.fullVersionList,
@@ -380,6 +382,10 @@ export class BrowserWindowController {
         partition,
       },
     });
+    const identityUserAgent = this.rt.controller.userAgent();
+    if (identityUserAgent) {
+      try { view.webContents.setUserAgent(identityUserAgent); } catch { /* older Electron/test doubles */ }
+    }
     view.setBackgroundColor('#ffffff');
     t.view = view;
     const wc = view.webContents;
