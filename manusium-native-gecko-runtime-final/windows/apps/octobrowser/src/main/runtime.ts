@@ -233,19 +233,6 @@ export class ProfileRuntime {
     // before the profile route and identity are configured below.
     this.registerIpc();
     this.channel.onMessage((m) => void this.onManagerMessage(m));
-    const initialWindow = this.startupWindow ?? this.openWindow([], true);
-    this.startupWindow = null;
-    try {
-      // A renderer load can hang on a damaged cache, GPU initialization issue,
-      // or stale packaged bundle. The native window is already visible, so do
-      // not hold the manager handshake behind that renderer indefinitely.
-      await Promise.race([
-        initialWindow.whenChromeReady(),
-        new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
-      ]);
-    } catch (error) {
-      this.logger.error('window.chrome-load-failed-before-ready', { error: String(error) });
-    }
     // Proxy with credentials Chromium cannot use (SOCKS auth) -> local bridge.
     await this.startupWithin('proxy bridge', this.startProxyBridge(), 8_000, undefined);
     // Route the session before the first exit-IP lookup. Without this ordering,
@@ -268,6 +255,21 @@ export class ProfileRuntime {
         ? nativeUserAgent
         : cleanUserAgent(nativeUserAgent);
     await this.startupWithin('profile identity installation', this.controller.install(profileUserAgent, this.fp.enabled ? (this.fp.acceptLanguage ?? '') : ''), 8_000, undefined);
+
+    // Create the first profile window only after the session identity and
+    // fingerprint preload are installed. Creating it earlier lets Chromium
+    // commit a native UA/UA-CH snapshot before the profile configuration is
+    // available, which is visible to CreepJS and to the first Service Worker.
+    const initialWindow = this.startupWindow ?? this.openWindow([], true);
+    this.startupWindow = null;
+    try {
+      await Promise.race([
+        initialWindow.whenChromeReady(),
+        new Promise<void>((resolve) => setTimeout(resolve, 5_000)),
+      ]);
+    } catch (error) {
+      this.logger.error('window.chrome-load-failed-before-ready', { error: String(error) });
+    }
 
     // Bundled extensions are loaded only for profiles that explicitly enabled
     // them. Their extension storage therefore stays inside this profile's own

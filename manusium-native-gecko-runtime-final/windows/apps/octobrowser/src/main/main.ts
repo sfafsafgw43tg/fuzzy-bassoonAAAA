@@ -54,6 +54,9 @@ if (runCliVerifyIfRequested('octobrowser')) {
         const s = effectiveSettings(p.protection);
         const appSettings = createSettingsStore(layout).load();
         const switches: Array<[string, string?]> = [['force-webrtc-ip-handling-policy', s.webrtc]];
+        if (p.fingerprint?.enabled === true && p.fingerprint.webrtc.mode !== 'real') {
+          switches[0] = ['force-webrtc-ip-handling-policy', 'disable_non_proxied_udp'];
+        }
         // Keep hardware rendering available for profiles that explicitly use
         // native WebGL or WebGPU. WebGL Off is handled by the page shim and
         // must not disable a separately enabled WebGPU API; shutting down the
@@ -95,7 +98,11 @@ if (runCliVerifyIfRequested('octobrowser')) {
       }
       const savedProfile = new ProfileManager(layout).get(profileId);
       const savedUa = savedProfile.ordinaryBrowser ? '' : savedProfile.fingerprint?.enabled ? savedProfile.fingerprint.userAgent : '';
-      if (savedUa) app.userAgentFallback = cleanUserAgent(savedUa);
+      if (savedUa) {
+        const cleanSavedUa = cleanUserAgent(savedUa);
+        app.userAgentFallback = cleanSavedUa;
+        app.commandLine.appendSwitch('user-agent', cleanSavedUa);
+      }
     } catch { /* test doubles / older Electron */ }
     app.whenReady().then(() => hardenApp(new Logger(layout.logs, 'octobrowser-profiles'))).catch(() => undefined);
     runProfileProcess(distDir, profileDataDir, profileLanguage, profileId);
