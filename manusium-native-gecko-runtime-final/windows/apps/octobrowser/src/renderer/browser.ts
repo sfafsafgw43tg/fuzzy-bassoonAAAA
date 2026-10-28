@@ -27,6 +27,7 @@ interface ProfileInfo {
   id: string; name: string; kind: string; color: string; level: 'normal' | 'standard' | 'strict' | 'tor'; encrypted: boolean;
   network: 'system' | 'direct' | 'proxy'; deleteOnClose: boolean;
   audio: { muted: boolean; volume: number; outputDeviceId: string }; addons: string[];
+  chromeExtensions: Array<{ id: string; name: string; version: string; path: string; permissions: string[]; hostPermissions: string[]; enabled: boolean }>;
   theme: 'dark' | 'light'; browserShell: 'octo' | 'chrome' | 'chromium' | 'firefox' | 'safari'; baseChromeLook: boolean; appMode: boolean; smartPaste: boolean; mobile: boolean;
 }
 interface UpdateStatus {
@@ -40,6 +41,9 @@ interface WinState {
 interface AddonInfo {
   id: string; name: string; description: { en: string; pl: string }; version: string; license: string;
   permissions: Array<{ en: string; pl: string }>; source: string; kind: string; status: string; integrity: { en: string; pl: string };
+}
+interface ChromeExtensionInfo {
+  id: string; name: string; version: string; permissions: string[]; hostPermissions: string[]; enabled: boolean;
 }
 interface DownloadInfo {
   id: string; fileName: string; savePath: string; url: string;
@@ -70,6 +74,7 @@ let closeCountdownTimer: number | undefined;
 let stopChromeMediaPreview: (() => boolean) | null = null;
 const downloads = new Map<string, DownloadInfo>();
 let shuttingDown = false;
+let extensionPopupOpen = false;
 
 const $ = <T extends HTMLElement = HTMLElement>(id: string) => document.getElementById(id) as T;
 const tabById = (id: number) => state?.tabs.find((x) => x.id === id);
@@ -107,6 +112,7 @@ function setOverlay(on: boolean): void {
 
 /** Close every popout. `keepChromeMenu` leaves an open browser or tab dropdown in place for the caller to reuse. */
 function dismissAllPopouts(keepChromeMenu = false): void {
+  if (extensionPopupOpen) closeExtensionPopup();
   if (chromeMenuOpen && !keepChromeMenu) closeChromeMenu();
   if (downloadsTrayOpen) closeDownloadsTray();
   if (passwordsPopoutOpen) closePasswordsPopout();
@@ -219,9 +225,52 @@ function initToolbar(): void {
   micMark.append(icon('volume', 10));
   mediaButton.append(micMark);
   mk('stDownloads', 'download', 'panel.downloads', toggleDownloadsTray);
-  mk('stAddons', 'puzzle', 'panel.addons', () => openPanel('addons'));
+  mk('stAddons', 'puzzle', 'panel.addons', toggleExtensionPopup);
   mk('stUpdates', 'refreshCircle', 'panel.updates', () => openPanel('updates'));
   mk('stMenu', 'menu', 'ui.menu', toggleChromeMenu);
+}
+
+function toggleExtensionPopup(): void {
+  if (extensionPopupOpen) { closeExtensionPopup(); return; }
+  dismissAllPopouts();
+  extensionPopupOpen = true;
+  $('extensionPopup').classList.remove('hidden');
+  renderExtensionPopup();
+}
+
+function closeExtensionPopup(): void {
+  extensionPopupOpen = false;
+  $('extensionPopup').classList.add('hidden');
+}
+
+function renderExtensionPopup(): void {
+  const popup = $('extensionPopup');
+  clear(popup);
+  const head = h('div', { class: 'extension-popup-head' }, h('b', { text: 'Extensions' }), h('button', { class: 'icon-btn tiny', title: 'Close', 'aria-label': 'Close' }, icon('close', 14)));
+  (head.lastChild as HTMLButtonElement).onclick = closeExtensionPopup;
+  popup.append(head, h('div', { class: 'extension-popup-rule' }));
+  const list = h('div', { class: 'extension-popup-list' });
+  const bundled = addons.filter((a) => a.kind === 'extension' && state?.profile.addons.includes(a.id));
+  const local = (state?.profile.chromeExtensions ?? []).filter((a) => a.enabled);
+  if (!bundled.length && !local.length) list.append(h('p', { class: 'muted small extension-empty', text: t('addons.noneEnabled') }));
+  for (const addon of bundled) {
+    const row = h('div', { class: 'extension-popup-row' }, h('span', { class: 'extension-popup-mark', text: addon.name.slice(0, 1).toUpperCase() }), h('span', { class: 'extension-popup-name', text: addon.name }));
+    row.onclick = () => { closeExtensionPopup(); void api.invoke('ui:open-addon', addon.id); };
+    list.append(row);
+  }
+  for (const addon of local) {
+    const row = h('div', { class: 'extension-popup-row' }, h('span', { class: 'extension-popup-mark local', text: addon.name.slice(0, 1).toUpperCase() }), h('span', { class: 'extension-popup-name', text: addon.name }), h('span', { class: 'extension-popup-version', text: addon.version }));
+    row.onclick = () => { closeExtensionPopup(); void api.invoke('ui:chrome-extension', addon.id, 'open'); };
+    list.append(row);
+  }
+  popup.append(list);
+  const actions = h('div', { class: 'extension-popup-actions' });
+  const add = h('button', { class: 'linkish', text: t('addons.import') });
+  add.onclick = () => void api.invoke<ChromeExtensionInfo | null>('ui:pick-chrome-extension').then((result) => { if (result) renderExtensionPopup(); });
+  const manage = h('button', { class: 'linkish', text: t('addons.manage') });
+  manage.onclick = () => { closeExtensionPopup(); openPanel('addons'); };
+  actions.append(add, manage);
+  popup.append(actions);
 }
 
 function renderAddress(): void {
@@ -918,6 +967,7 @@ function renderTabSearch(q: string): void {
 
 function openPanel(p: Panel | null, custom?: () => void, title?: string): void {
   if (panelTimer) { window.clearInterval(panelTimer); panelTimer = null; }
+  if (extensionPopupOpen) closeExtensionPopup();
   if (p === panel && !custom) p = null; // toggle
   if (p && downloadsTrayOpen) closeDownloadsTray();
   if (p && chromeMenuOpen) closeChromeMenu();
@@ -1183,7 +1233,11 @@ function renderAddons(body: HTMLElement): void {
   if (!state) return;
   const enabled = new Set(state.profile.addons);
   const isTor = state.profile.level === 'tor';
-  body.append(h('p', { class: 'small muted', text: t('addons.intro') }));
+  const importButton = h('button', { class: 'btn small', text: t('addons.import') });
+  importButton.onclick = () => void api.invoke<ChromeExtensionInfo | null>('ui:pick-chrome-extension').then((result) => {
+    if (result) openPanel('addons', () => renderAddons($('panelBody')), t('panel.addons'));
+  }).catch((err: Error) => toast('err.generic', { message: err.message }));
+  body.append(h('p', { class: 'small muted', text: t('addons.intro') }), importButton);
   for (const a of addons) {
     const on = enabled.has(a.id);
     const sw = h('input', { type: 'checkbox', checked: on, disabled: isTor || a.kind === 'external-app' });
@@ -1204,6 +1258,19 @@ function renderAddons(body: HTMLElement): void {
     body.append(h('div', { class: 'addon' },
       h('div', { class: 'addon-head' }, h('b', { text: a.name }), h('label', { class: 'switch' }, sw, h('span', {}))),
       h('div', { class: 'small', text: L(a.description) }), openWorkspace, details));
+  }
+  for (const extension of state.profile.chromeExtensions ?? []) {
+    const sw = h('input', { type: 'checkbox', checked: extension.enabled, disabled: isTor });
+    sw.onchange = () => void api.invoke('ui:chrome-extension', extension.id, 'enable').then(() => openPanel('addons', () => renderAddons($('panelBody')), t('panel.addons')));
+    const open = h('button', { class: 'btn small', text: t('addons.openOptions') });
+    open.onclick = () => void api.invoke('ui:chrome-extension', extension.id, 'options');
+    const remove = h('button', { class: 'btn small', text: t('addons.remove') });
+    remove.onclick = () => void api.invoke('ui:chrome-extension', extension.id, 'remove').then(() => openPanel('addons', () => renderAddons($('panelBody')), t('panel.addons')));
+    body.append(h('div', { class: 'addon addon-local' },
+      h('div', { class: 'addon-head' }, h('b', { text: extension.name }), h('label', { class: 'switch' }, sw, h('span', {}))),
+      h('div', { class: 'small muted', text: `Chrome extension · ${extension.version}` }),
+      h('div', { class: 'row' }, open, remove),
+      h('details', {}, h('summary', { text: t('addons.details') }), kv('addons.source', extension.path), kv('addons.permissions', extension.permissions.join(', ') || 'none'), kv('addons.hostPermissions', extension.hostPermissions.join(', ') || 'none'))));
   }
   if (isTor) body.append(h('p', { class: 'note small', text: t('addons.torNote') }));
 }

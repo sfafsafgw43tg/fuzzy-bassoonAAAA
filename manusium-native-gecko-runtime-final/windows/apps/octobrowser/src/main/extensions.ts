@@ -23,6 +23,8 @@ export interface LocalChromeExtensionManifest {
   name: string;
   version: string;
   path: string;
+  entryPage: string;
+  optionsPage: string;
   permissions: string[];
   hostPermissions: string[];
   manifestVersion: 2 | 3;
@@ -53,8 +55,14 @@ export function inspectLocalChromeExtension(extensionPath: string): LocalChromeE
   const name = typeof manifest.name === 'string' ? manifest.name.replace(/[\u0000-\u001f]/g, '').trim().slice(0, 120) : '';
   const version = typeof manifest.version === 'string' ? manifest.version.trim().slice(0, 64) : '';
   if (!name || !version) throw new Error('Chrome extension manifest must declare name and version');
+  const action = manifest.action && typeof manifest.action === 'object' ? manifest.action as Record<string, unknown> : null;
+  const optionsUi = manifest.options_ui && typeof manifest.options_ui === 'object' ? manifest.options_ui as Record<string, unknown> : null;
+  const page = (value: unknown): string => typeof value === 'string' ? value.replace(/\\/g, '/').replace(/^\/+/, '') : '';
+  const entryPage = page(action?.default_popup);
+  const optionsPage = page(manifest.options_page ?? optionsUi?.page);
+  if (entryPage.includes('..') || optionsPage.includes('..')) throw new Error('Chrome extension page path is invalid');
   const digest = crypto.createHash('sha256').update(resolved.toLowerCase()).digest('hex').slice(0, 16);
-  return { id: `chrome-local-${digest}`, name, version, path: resolved, permissions: cleanStrings(manifest.permissions), hostPermissions: cleanStrings(manifest.host_permissions), manifestVersion };
+  return { id: `chrome-local-${digest}`, name, version, path: resolved, entryPage: entryPage || optionsPage, optionsPage, permissions: cleanStrings(manifest.permissions), hostPermissions: cleanStrings(manifest.host_permissions), manifestVersion };
 }
 
 export function toProfileChromeExtension(manifest: LocalChromeExtensionManifest): ProfileChromeExtension {

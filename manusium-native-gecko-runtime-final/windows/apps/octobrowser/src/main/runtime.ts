@@ -105,7 +105,7 @@ export class ProfileRuntime {
   sessionPartitionName(): string {
     return this.sessionPartition;
   }
-  private readonly loadedExtensions = new Map<string, { extensionId: string; extension: BundledExtension | { addonId: string; entryPage: string } }>();
+  private readonly loadedExtensions = new Map<string, { extensionId: string; extension: BundledExtension | { addonId: string; entryPage: string; optionsPage?: string } }>();
 
   constructor(
     readonly distDir: string,
@@ -701,15 +701,16 @@ export class ProfileRuntime {
       const extension = bundledExtension(addonId);
       const localExtension = local.find((item) => item.id === addonId);
       if (!extension && !localExtension) continue;
-      const extensionPath = localExtension
-        ? inspectLocalChromeExtension(localExtension.path).path
+      const inspectedLocal = localExtension ? inspectLocalChromeExtension(localExtension.path) : null;
+      const extensionPath = inspectedLocal
+        ? inspectedLocal.path
         : bundledExtensionPath(extension!, this.distDir, app.isPackaged, process.resourcesPath);
       if (!fs.existsSync(path.join(extensionPath, 'manifest.json'))) {
         throw new Error(this.t('addons.packageUnavailable'));
       }
       try {
         const loaded = await ses.loadExtension(extensionPath);
-        this.loadedExtensions.set(addonId, { extensionId: loaded.id, extension: extension ?? { addonId, entryPage: '' } });
+        this.loadedExtensions.set(addonId, { extensionId: loaded.id, extension: extension ?? { addonId, entryPage: inspectedLocal?.entryPage ?? '', optionsPage: inspectedLocal?.optionsPage } });
         this.logger.info('addon.extension-loaded', { addonId, extensionId: loaded.id, profile: this.profile.id });
       } catch (err) {
         this.logger.error('addon.extension-load-failed', { addonId, error: String(err) });
@@ -729,10 +730,13 @@ export class ProfileRuntime {
   }
 
   /** Open a reviewed extension's declared local workspace in an ordinary profile tab. */
-  private openBundledExtension(addonId: string): void {
+  private openBundledExtension(addonId: string, page: 'entry' | 'options' = 'entry'): void {
     const loaded = this.loadedExtensions.get(addonId);
     if (!loaded) throw new Error(this.t('addons.packageUnavailable'));
-    const url = `chrome-extension://${loaded.extensionId}/${loaded.extension.entryPage}`;
+    const entryPage = page === 'options' && 'optionsPage' in loaded.extension && loaded.extension.optionsPage
+      ? loaded.extension.optionsPage
+      : loaded.extension.entryPage;
+    const url = `chrome-extension://${loaded.extensionId}/${entryPage}`;
     (this.lastFocused ?? this.openWindow()).newTab(url);
   }
 
@@ -746,6 +750,7 @@ export class ProfileRuntime {
         id: this.profile.id, name: this.profile.name, kind: this.profile.kind, color: this.profile.color,
         level: this.profile.protection.level, encrypted: this.profile.encrypted, sandbox: this.profile.sandbox.mode,
         network: this.profile.network.mode, deleteOnClose: this.profile.deleteOnClose, audio: this.profile.audio, addons: this.profile.addons,
+        chromeExtensions: this.profile.chromeExtensions ?? [],
         theme: this.profile.theme, browserShell: this.profile.browserShell, baseChromeLook: this.profile.baseChromeLook, appMode: this.profile.appMode, smartPaste: this.profile.smartPaste,
         mobile: Boolean(this.mobile),
       },
@@ -1101,7 +1106,36 @@ export class ProfileRuntime {
       return true;
     });
     handle('ui:open-addon', L, (_e, id: string) => {
-      this.openBundledExtension(String(id));
+      this.openBundledExtension(String(id), 'entry');
+      return true;
+    });
+    handle('ui:pick-chrome-extension', L, async (e) => {
+      const result = await dialog.showOpenDialog(this.windowFor(e).win, { title: this.t('addons.importTitle'), properties: ['openDirectory'] });
+      if (result.canceled || !result.filePaths[0]) return null;
+      const inspected = inspectLocalChromeExtension(result.filePaths[0]);
+      const current = this.profile.chromeExtensions ?? [];
+      const next = [...current.filter((item) => item.id !== inspected.id), {
+        id: inspected.id, name: inspected.name, version: inspected.version, path: inspected.path,
+        permissions: inspected.permissions, hostPermissions: inspected.hostPermissions, enabled: true,
+      }];
+      this.profile = { ...this.profile, chromeExtensions: next };
+      await this.syncBundledExtensions(this.profileSession());
+      this.requestProfileUpdate({ chromeExtensions: next });
+      this.pushAll();
+      return { id: inspected.id, name: inspected.name, version: inspected.version, permissions: inspected.permissions, hostPermissions: inspected.hostPermissions, enabled: true };
+    });
+    handle('ui:chrome-extension', L, async (_e, id: string, action: 'enable' | 'remove' | 'open' | 'options') => {
+      const current = this.profile.chromeExtensions ?? [];
+      const target = current.find((item) => item.id === String(id));
+      if (!target) return false;
+      if (action === 'open' || action === 'options') { this.openBundledExtension(target.id, action === 'options' ? 'options' : 'entry'); return true; }
+      const next = action === 'remove'
+        ? current.filter((item) => item.id !== target.id)
+        : current.map((item) => item.id === target.id ? { ...item, enabled: !item.enabled } : item);
+      this.profile = { ...this.profile, chromeExtensions: next };
+      await this.syncBundledExtensions(this.profileSession());
+      this.requestProfileUpdate({ chromeExtensions: next });
+      this.pushAll();
       return true;
     });
     handle('ui:audio', L, (_e, patch: { muted?: boolean; volume?: number; outputDeviceId?: string }) => {

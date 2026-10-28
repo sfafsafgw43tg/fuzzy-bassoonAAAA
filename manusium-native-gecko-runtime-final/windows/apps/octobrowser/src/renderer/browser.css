@@ -291,6 +291,19 @@ body.downloads-tray-open #content { margin-right: 0; }
 :root[data-theme="light"] .chrome-menu { box-shadow: 0 10px 24px #00000024; }
 .chrome-menu-item { display: flex; align-items: center; justify-content: space-between; gap: 20px; min-height: 31px; padding: 5px 9px; border: 0; border-radius: 5px; background: transparent; color: inherit; text-align: left; }
 .chrome-menu-item:hover, .chrome-menu-item:focus-visible { background: var(--panel2); outline: none; }
+.extension-popup { position: fixed; z-index: 47; top: 78px; right: 82px; width: min(350px, calc(100vw - 16px)); padding: 10px 9px 8px; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; box-shadow: 0 14px 30px #00000055; color: var(--text); animation: browser-pop .14s cubic-bezier(.2,.8,.2,1); transform-origin: top right; }
+.extension-popup-head { display: flex; align-items: center; justify-content: space-between; padding: 2px 7px 9px; }
+.extension-popup-rule { height: 1px; margin: 0 2px 5px; background: var(--line); }
+.extension-popup-list { display: flex; flex-direction: column; gap: 2px; max-height: 260px; overflow: auto; }
+.extension-popup-row { display: flex; align-items: center; gap: 10px; min-height: 42px; padding: 6px 7px; border-radius: 6px; cursor: pointer; }
+.extension-popup-row:hover { background: var(--panel2); }
+.extension-popup-mark { display: grid; place-items: center; width: 25px; height: 25px; border-radius: 4px; background: #6d6d6d; color: #fff; font-weight: 700; }
+.extension-popup-mark.local { background: var(--accent); color: var(--bg); }
+.extension-popup-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.extension-popup-version { color: var(--muted); font-size: 11px; }
+.extension-empty { padding: 9px 7px; margin: 0; }
+.extension-popup-actions { display: flex; justify-content: space-between; gap: 8px; margin: 7px 2px 0; padding-top: 7px; border-top: 1px solid var(--line); }
+.extension-popup-actions .linkish { padding: 5px 7px; }
 .chrome-menu-item kbd { min-width: 86px; border: 0; padding: 0; background: transparent; color: var(--muted); text-align: right; }
 .chrome-menu-divider { height: 1px; margin: 6px 2px; background: var(--line); }
 .chrome-menu-zoom { display: grid; grid-template-columns: 1fr auto auto auto; align-items: center; gap: 4px; min-height: 31px; padding: 2px 9px; }

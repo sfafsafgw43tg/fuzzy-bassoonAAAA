@@ -59,9 +59,9 @@ describe('profile-local Chrome extensions', () => {
   it('reads a valid MV3 manifest and exposes declared permissions', () => {
     const root = fs.mkdtempSync(path.join('/tmp', 'octo-local-extension-'));
     fs.writeFileSync(path.join(root, 'manifest.json'), JSON.stringify({
-      manifest_version: 3, name: 'Local QA tool', version: '1.2.3', permissions: ['storage', 'tabs'], host_permissions: ['https://example.test/*'],
+      manifest_version: 3, name: 'Local QA tool', version: '1.2.3', action: { default_popup: 'popup.html' }, options_ui: { page: 'options.html' }, permissions: ['storage', 'tabs'], host_permissions: ['https://example.test/*'],
     }));
-    expect(inspectLocalChromeExtension(root)).toMatchObject({ name: 'Local QA tool', version: '1.2.3', permissions: ['storage', 'tabs'], hostPermissions: ['https://example.test/*'], manifestVersion: 3 });
+    expect(inspectLocalChromeExtension(root)).toMatchObject({ name: 'Local QA tool', version: '1.2.3', entryPage: 'popup.html', optionsPage: 'options.html', permissions: ['storage', 'tabs'], hostPermissions: ['https://example.test/*'], manifestVersion: 3 });
     expect(inspectLocalChromeExtension(root).id).toMatch(/^chrome-local-[a-f0-9]{16}$/);
   });
 
