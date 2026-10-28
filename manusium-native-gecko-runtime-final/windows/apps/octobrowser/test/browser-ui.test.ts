@@ -650,7 +650,7 @@ describe('browser entry UI', () => {
   });
 
   it('resolves auto locale only after the profile network route is active', () => {
-    expect(runtime).toContain('await this.controller.prepareNetwork();');
+    expect(runtime).toContain("this.startupWithin('network preparation', this.controller.prepareNetwork(), 8_000, undefined)");
     expect(runtime).not.toContain("if (this.profile.network.mode !== 'proxy') return undefined");
     expect(windowController).toContain('?hl=${encodeURIComponent(lang)}');
   });

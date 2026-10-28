@@ -357,6 +357,7 @@ export class BrowserWindowController {
 
   private createView(t: Tab, adopt?: WebContents): void {
     const s = this.rt.controller.privacy;
+    const fingerprintWebglOff = this.rt.fp?.enabled === true && this.rt.fp.webgl === 'off';
     const graphicsBlocked = this.rt.settings.load().privacyRuntime?.graphicsExposure === 'block'
       && !(this.rt.profile.fingerprint?.enabled === true && this.rt.profile.fingerprint.webgl !== 'off');
     const partition = typeof this.rt.sessionPartitionName === 'function'
@@ -371,7 +372,10 @@ export class BrowserWindowController {
         nodeIntegrationInSubFrames: false, // run the privacy preload in iframes too
         webviewTag: false,
         // `webgl: false` blocks the API; it does not impersonate another GPU.
-        webgl: !graphicsBlocked && s.webgl === 'allow',
+        // Honor the profile's explicit WebGL-off setting even when the global
+        // graphics exposure policy is permissive, so the advanced setting is
+        // reflected by the actual page capability.
+        webgl: !graphicsBlocked && !fingerprintWebglOff && s.webgl === 'allow',
         plugins: true, // built-in PDF viewer
         spellcheck: false,
         safeDialogs: true,
