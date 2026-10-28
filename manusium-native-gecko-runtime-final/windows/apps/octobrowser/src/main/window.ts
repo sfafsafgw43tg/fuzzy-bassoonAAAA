@@ -442,8 +442,16 @@ export class BrowserWindowController {
       };
       patch(window.WebGLRenderingContext); patch(window.WebGL2RenderingContext);
     })();`;
-    void wc.executeJavaScript(source, true).catch((error) => {
-      this.rt.logger.warn('fingerprint.webgl-fallback-failed', { error: String(error) });
+    void wc.executeJavaScript(`${source};(function(){
+      var c=document.createElement('canvas');
+      var g=c.getContext('webgl')||c.getContext('experimental-webgl');
+      if(!g) return {available:false};
+      var e=g.getExtension('WEBGL_debug_renderer_info');
+      return {available:true,vendor:g.getParameter(0x1f00),renderer:g.getParameter(0x1f01),unmaskedVendor:e?g.getParameter(0x9245):null,unmaskedRenderer:e?g.getParameter(0x9246):null};
+    })()`, true).then((observed) => {
+      this.rt.logger.info('fingerprint.webgl-fallback-observed', { selectedVendor: fp.webglVendor, selectedRenderer: fp.webglRenderer, observed });
+    }).catch((error) => {
+      this.rt.logger.warn('fingerprint.webgl-fallback-failed', { error: String(error), selectedVendor: fp.webglVendor, selectedRenderer: fp.webglRenderer });
     });
   }
 

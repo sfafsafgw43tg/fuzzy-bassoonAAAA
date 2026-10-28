@@ -645,8 +645,50 @@ export function pageShim(c: PageConfig, eventName: string): void {
           });
         }
       };
+      // Chromium normally stores these methods on the prototype, but a
+      // context can expose own callable properties after creation. Patch the
+      // returned instance as well so a page cannot bypass the selected GPU by
+      // retaining an unwrapped context method.
+      const patchedContexts = new WeakSet<object>();
+      const patchContextInstance = (context: unknown): unknown => {
+        if (!context || (typeof context !== 'object' && typeof context !== 'function')) return context;
+        const object = context as Record<string, unknown>;
+        if (patchedContexts.has(object)) return context;
+        patchedContexts.add(object);
+        const wrap = (name: string, handler: (args: unknown[], orig: (...a: unknown[]) => unknown) => unknown): void => {
+          const original = object[name];
+          if (typeof original !== 'function') return;
+          try {
+            Object.defineProperty(object, name, {
+              configurable: true,
+              writable: true,
+              value: (...args: unknown[]) => handler(args, (...next) => Reflect.apply(original as (...a: unknown[]) => unknown, context, next)),
+            });
+          } catch { /* protected native instance */ }
+        };
+        wrap('getParameter', (args, orig) => {
+          const p = Number(args[0]);
+          if (p === 0x1f00 || p === 0x9245) return exposedVendor;
+          if (p === 0x1f01 || p === 0x9246) return exposedRenderer;
+          return orig(...args);
+        });
+        wrap('getExtension', (args, orig) => {
+          const ext = orig(...args) as Record<string, unknown> | null;
+          if (String(args[0]) !== 'WEBGL_debug_renderer_info') return ext;
+          const target = ext ?? { UNMASKED_VENDOR_WEBGL: 0x9245, UNMASKED_RENDERER_WEBGL: 0x9246 };
+          return new Proxy(target, { get(obj, prop) {
+            if (prop === 'UNMASKED_VENDOR_WEBGL') return 0x9245;
+            if (prop === 'UNMASKED_RENDERER_WEBGL') return 0x9246;
+            return Reflect.get(obj, prop);
+          } });
+        });
+        return context;
+      };
       patchWebGL((W as Record<string, unknown>).WebGLRenderingContext);
       patchWebGL((W as Record<string, unknown>).WebGL2RenderingContext);
+      const wrapCanvasContext = (_self: unknown, args: unknown[], orig: (...a: unknown[]) => unknown): unknown => patchContextInstance(orig(...args));
+      method(proto('HTMLCanvasElement'), 'getContext', wrapCanvasContext);
+      method(proto('OffscreenCanvas'), 'getContext', wrapCanvasContext);
     }
 
     // A page-world preload cannot automatically run inside a dedicated worker.
