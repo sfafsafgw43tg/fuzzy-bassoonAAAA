@@ -72,6 +72,13 @@ export interface CameraResolution { width: number; height: number }
 export type GpuMode = 'auto' | 'host' | 'swiftshader_indirect' | 'off';
 export type BootMode = 'quick' | 'cold';
 export type NetworkSpeed = 'full' | 'lte' | 'umts' | 'edge' | 'gsm';
+/** Provider identity is metadata used to validate the host endpoint. The
+ * emulator still receives only its enumerated webcamN endpoint. */
+export type AndroidCameraProvider = 'unity-capture' | 'obs' | 'directshow';
+
+export function normalizeAndroidCameraProvider(value: unknown): AndroidCameraProvider {
+  return value === 'obs' || value === 'directshow' || value === 'unity-capture' ? value : 'unity-capture';
+}
 
 export function normalizeNetworkSpeed(value: unknown): NetworkSpeed {
   return value === 'full' || value === 'lte' || value === 'umts' || value === 'edge' || value === 'gsm' ? value : 'lte';
@@ -208,6 +215,8 @@ export function normalizeCameraRotation(value: unknown): CameraRotation {
 
 export interface AndroidLaunchInput {
   name: string;
+  /** Host virtual-camera provider used for endpoint validation and diagnostics. */
+  cameraProvider?: AndroidCameraProvider;
   cameraFront?: CameraSource;
   cameraBack?: CameraSource;
   /** Active emulator camera endpoints assigned independently to each facing. */

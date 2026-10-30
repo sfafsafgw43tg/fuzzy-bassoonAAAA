@@ -30,6 +30,9 @@ param(
   [ValidatePattern('^(none|webcam\d{1,2})$')]
   [string] $FrontCamera = 'none',
 
+  [ValidateSet('unity-capture', 'obs', 'directshow')]
+  [string] $Provider = 'unity-capture',
+
   [string] $SdkRoot,
 
   [string] $AvdHome,
@@ -38,11 +41,29 @@ param(
 
   [switch] $SkipBuild,
 
-  [switch] $KeepEmulator
+  [switch] $KeepEmulator,
+
+  [switch] $MockUnityCapture
 )
 
 $ErrorActionPreference = 'Stop'
-$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..\..')).Path
+$repoRoot = (Resolve-Path (Join-Path $PSScriptRoot '..\..')).Path
+$resultPath = Join-Path $repoRoot 'android-camera-result.json'
+
+if ($MockUnityCapture) {
+  if ($BackCamera -ne 'webcam0' -or $FrontCamera -ne 'none') {
+    throw '[AVD camera validation] Mock mode supports webcam0 on the rear camera and none on the front camera only.'
+  }
+  $mock = [ordered]@{
+    mode = 'mock'; provider = $Provider; avd = $AvdName; endpoint = $BackCamera; front = $FrontCamera
+    listedCameras = @('webcam0'); emulatorLaunched = $false; booted = $false; liveFramesVerified = $false
+    limitation = 'No emulator, virtual-camera driver, CameraX preview, or live frames were exercised.'
+  }
+  $mock | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $resultPath -Encoding UTF8
+  Write-Host "[AVD camera validation] MOCK PASS: provider=$Provider endpoint=$BackCamera"
+  Write-Host "[AVD camera validation] MOCK LIMIT: no emulator or live frames were exercised. Result: $resultPath"
+  exit 0
+}
 $moduleRoot = Join-Path $repoRoot 'android\avd-camera-check'
 $setupScript = Join-Path $PSScriptRoot 'setup-avd-cameras.ps1'
 $apk = Join-Path $moduleRoot 'app\build\outputs\apk\debug\app-debug.apk'
@@ -96,11 +117,13 @@ function Get-AdbOutput([string[]] $Arguments) {
   return $output.Trim()
 }
 
+$localAppData = [Environment]::GetFolderPath('LocalApplicationData')
+$programFiles = [Environment]::GetFolderPath('ProgramFiles')
 $roots = @(
   $SdkRoot,
   $env:ANDROID_HOME,
   $env:ANDROID_SDK_ROOT,
-  (Join-Path $env:LOCALAPPDATA 'Android\Sdk')
+  $(if ($localAppData) { Join-Path $localAppData 'Android\Sdk' })
 )
 $sdk = Resolve-ExistingDirectory $roots
 if (-not $sdk) {
@@ -118,9 +141,9 @@ if (-not $emulator) { Fail "emulator.exe was not found under '$sdk\emulator'. In
 
 $jdkCandidates = @(
   $env:JAVA_HOME,
-  (Join-Path $env:ProgramFiles 'Android\Android Studio\jbr'),
-  (Join-Path $env:ProgramFiles 'Android\Android Studio\jre'),
-  (Join-Path $env:LOCALAPPDATA 'Programs\Android Studio\jbr')
+  $(if ($programFiles) { Join-Path $programFiles 'Android\Android Studio\jbr' }),
+  $(if ($programFiles) { Join-Path $programFiles 'Android\Android Studio\jre' }),
+  $(if ($localAppData) { Join-Path $localAppData 'Programs\Android Studio\jbr' })
 )
 $jdk = Resolve-ExistingDirectory $jdkCandidates
 if (-not $jdk) { Fail "JDK 17 was not found. Set JAVA_HOME or install Android Studio's bundled JBR." }
@@ -154,10 +177,23 @@ if ($avds -notcontains $AvdName) { Fail "AVD '$AvdName' is not installed. Availa
 $webcams = (& $emulator "@$AvdName" -webcam-list 2>&1 | Out-String)
 Write-Host $webcams.Trim()
 $listed = @([regex]::Matches($webcams, '\bwebcam\d{1,2}\b', [System.Text.RegularExpressions.RegexOptions]::IgnoreCase) | ForEach-Object { $_.Value.ToLowerInvariant() } | Select-Object -Unique)
+function Test-ProviderLine([string] $ProviderName, [string] $CameraName, [string] $Output) {
+  $line = ($Output -split "`r?`n" | Where-Object { $_ -match [regex]::Escape($CameraName) } | Select-Object -First 1)
+  if (-not $line) { return $false }
+  switch ($ProviderName) {
+    'unity-capture' { return $line -match '(?i)unity\s*(video\s*)?capture|v-?studio' }
+    'obs' { return $line -match '(?i)obs(\s+studio)?\s+virtual\s+camera|obsvirtualcamera' }
+    'directshow' { return $true }
+    default { return $false }
+  }
+}
 foreach ($camera in @($BackCamera, $FrontCamera)) {
   if ($camera -ne 'none' -and $listed -notcontains $camera.ToLowerInvariant()) {
     Fail "$camera is not listed by this emulator. Listed cameras: $($listed -join ', '). Start the virtual-camera provider and retry."
   }
+}
+if ($BackCamera -ne 'none' -and -not (Test-ProviderLine $Provider $BackCamera $webcams)) {
+  Fail "Endpoint '$BackCamera' did not match provider mode '$Provider'. The emulator output must identify the selected provider."
 }
 if ($BackCamera -ne 'none' -and $FrontCamera -ne 'none' -and $BackCamera -ieq $FrontCamera) {
   Fail 'The same host camera cannot be assigned to both lenses.'
@@ -208,6 +244,11 @@ try {
   if ($ui -notmatch 'active' -or $ui -notmatch 'Camera:') {
     Fail "The diagnostic app did not report an active preview. Full diagnostics were saved to '$logRoot'."
   }
+  [ordered]@{
+    mode = 'real'; provider = $Provider; avd = $AvdName; endpoint = $BackCamera; front = $FrontCamera
+    listedCameras = $listed; emulatorLaunched = $true; booted = $true; liveFramesVerified = $true
+    logPath = $logRoot
+  } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $resultPath -Encoding UTF8
   Write-Host "[AVD camera validation] SUCCESS: the diagnostic app reports an active live preview. Diagnostics: $logRoot"
 } finally {
   if ($emulatorProcess -and -not $KeepEmulator) {
