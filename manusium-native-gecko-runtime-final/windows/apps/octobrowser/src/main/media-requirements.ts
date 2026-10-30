@@ -131,18 +131,24 @@ function commandOutput(program: string, args: string[], timeout = 10_000): Promi
   });
 }
 
+const UNITY_CAPTURE_CLSIDS = [
+  '{5C2CD55C-92AD-4999-8666-912BD3E70010}', // current 64-bit upstream filter
+  '{5C2CD55C-92AD-4999-8666-912BD3E70002}', // legacy Octo/Unity Capture build
+];
+
 /** Non-blocking driver probe for renderer-facing status pages. */
 export async function unityCaptureRegisteredAsync(): Promise<boolean> {
   if (process.platform !== 'win32') return false;
-  return (await commandOutput('reg.exe', ['query', 'HKLM\\SOFTWARE\\Classes\\CLSID\\{5C2CD55C-92AD-4999-8666-912BD3E70002}'])).ok;
+  const probes = await Promise.all(UNITY_CAPTURE_CLSIDS.map((clsid) =>
+    commandOutput('reg.exe', ['query', `HKLM\\SOFTWARE\\Classes\\CLSID\\${clsid}`])));
+  return probes.some((probe) => probe.ok);
 }
-
 /** Is the Unity Capture DirectShow filter registered on this machine? */
 export function unityCaptureRegistered(): boolean {
   if (process.platform !== 'win32') return false;
-  const result = spawnSync('reg.exe', ['query', 'HKLM\\SOFTWARE\\Classes\\CLSID\\{5C2CD55C-92AD-4999-8666-912BD3E70002}'],
-    { encoding: 'utf8', windowsHide: true, timeout: 10_000 });
-  return result.status === 0;
+  return UNITY_CAPTURE_CLSIDS.some((clsid) => spawnSync('reg.exe',
+    ['query', `HKLM\\SOFTWARE\\Classes\\CLSID\\${clsid}`],
+    { encoding: 'utf8', windowsHide: true, timeout: 10_000 }).status === 0);
 }
 
 function vbCableEndpointAvailable(): boolean {
