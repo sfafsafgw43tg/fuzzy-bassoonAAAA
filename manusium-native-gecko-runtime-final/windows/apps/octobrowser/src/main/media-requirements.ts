@@ -220,7 +220,11 @@ export async function installUnityCapture(onProgress?: (text: string, percent: n
   fs.mkdirSync(root, { recursive: true });
   onProgress?.('Unpacking Unity Capture', 50);
   const files = unzipTo(archive, root, /Install\/.*\.(dll|bat)$/i);
-  const filter = files.find((file) => /UnityCaptureFilter64bit\.dll$/i.test(file)) ?? files.find((file) => /UnityCaptureFilter32bit\.dll$/i.test(file));
+  // The upstream repository ships UnityCaptureFilter64.dll/32.dll. Older
+  // builds used the longer *bit.dll names; accept both layouts so a repo
+  // rename does not silently disable the camera installer.
+  const filter = files.find((file) => /UnityCaptureFilter64(?:bit)?\.dll$/i.test(file))
+    ?? files.find((file) => /UnityCaptureFilter32(?:bit)?\.dll$/i.test(file));
   if (!filter) return { ok: false, message: 'The Unity Capture archive did not contain the camera filter.' };
   onProgress?.('Registering the camera filter (Windows will ask for permission)', 80);
   // regsvr32 needs elevation, so Windows shows its own consent dialog.

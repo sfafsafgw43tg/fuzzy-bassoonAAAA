@@ -53,7 +53,9 @@ function Find-Tool([string] $Name, [string[]] $Candidates) {
 
 $roots = @()
 if ($SdkRoot) { $roots += $SdkRoot }
-$roots += @($env:ANDROID_HOME, $env:ANDROID_SDK_ROOT, (Join-Path $env:LOCALAPPDATA 'Android\Sdk'))
+$localAppData = [Environment]::GetFolderPath('LocalApplicationData')
+$userProfile = [Environment]::GetFolderPath('UserProfile')
+$roots += @($env:ANDROID_HOME, $env:ANDROID_SDK_ROOT, $(if ($localAppData) { Join-Path $localAppData 'Android\Sdk' }))
 $roots = @($roots | Where-Object { $_ } | ForEach-Object { try { (Resolve-Path -LiteralPath $_ -ErrorAction Stop).Path } catch { $null } } | Select-Object -Unique)
 
 $emulatorCandidates = @($roots | ForEach-Object { Join-Path $_ 'emulator\emulator.exe' })
@@ -61,7 +63,7 @@ $emulator = Find-Tool 'emulator.exe' $emulatorCandidates
 
 $avdRoots = @()
 if ($AvdHome) { $avdRoots += $AvdHome }
-$avdRoots += @($env:ANDROID_AVD_HOME, (Join-Path $env:USERPROFILE '.android\avd'))
+$avdRoots += @($env:ANDROID_AVD_HOME, $(if ($userProfile) { Join-Path $userProfile '.android\avd' }))
 $avdRoots = @($avdRoots | Where-Object { $_ } | ForEach-Object { try { (Resolve-Path -LiteralPath $_ -ErrorAction Stop).Path } catch { $_ } } | Select-Object -Unique)
 
 $config = $null
@@ -73,6 +75,11 @@ foreach ($root in $avdRoots) {
   }
 }
 if (-not $config) {
+  $pointer = if ($userProfile) { Join-Path $userProfile ".android\avd\$AvdName.ini" }
+  if ($pointer -and (Test-Path -LiteralPath $pointer)) {
+    $target = (Get-Content -LiteralPath $pointer | Where-Object { $_ -match '^path=' } | Select-Object -First 1) -replace '^path=', ''
+    throw "AVD '$AvdName' has a stale pointer at '$pointer' targeting '$target'. Restore that drive or recreate the AVD locally before configuring cameras."
+  }
   throw "Could not find config.ini for AVD '$AvdName'. Check -AvdHome or create the AVD first."
 }
 
