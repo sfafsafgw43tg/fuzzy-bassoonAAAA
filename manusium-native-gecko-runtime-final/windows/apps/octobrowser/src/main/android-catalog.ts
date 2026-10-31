@@ -146,13 +146,13 @@ export const androidRelease = (api: number): string => RELEASES[api] ?? String(a
  * actually needs, and the advertised storage is reported separately.
  */
 const TIERS: Record<DeviceTier, { ramMb: number; cpus: number; diskGb: number; hostRamGb: number; hostCores: number; runningRamMb: number }> = {
-  low: { ramMb: 2048, cpus: 2, diskGb: 8, hostRamGb: 8, hostCores: 4, runningRamMb: 2600 },
-  compact: { ramMb: 3072, cpus: 3, diskGb: 16, hostRamGb: 8, hostCores: 4, runningRamMb: 3600 },
-  mid: { ramMb: 4096, cpus: 4, diskGb: 24, hostRamGb: 16, hostCores: 6, runningRamMb: 4800 },
-  high: { ramMb: 6144, cpus: 4, diskGb: 32, hostRamGb: 16, hostCores: 8, runningRamMb: 6900 },
-  flagship: { ramMb: 8192, cpus: 6, diskGb: 48, hostRamGb: 32, hostCores: 8, runningRamMb: 9000 },
-  foldable: { ramMb: 8192, cpus: 6, diskGb: 48, hostRamGb: 32, hostCores: 8, runningRamMb: 9200 },
-  tablet: { ramMb: 6144, cpus: 4, diskGb: 48, hostRamGb: 16, hostCores: 8, runningRamMb: 7000 },
+  low: { ramMb: 2048, cpus: 2, diskGb: 4, hostRamGb: 8, hostCores: 4, runningRamMb: 2600 },
+  compact: { ramMb: 3072, cpus: 3, diskGb: 5, hostRamGb: 8, hostCores: 4, runningRamMb: 3600 },
+  mid: { ramMb: 4096, cpus: 4, diskGb: 6, hostRamGb: 16, hostCores: 6, runningRamMb: 4800 },
+  high: { ramMb: 6144, cpus: 4, diskGb: 8, hostRamGb: 16, hostCores: 8, runningRamMb: 6900 },
+  flagship: { ramMb: 8192, cpus: 6, diskGb: 10, hostRamGb: 32, hostCores: 8, runningRamMb: 9000 },
+  foldable: { ramMb: 8192, cpus: 6, diskGb: 10, hostRamGb: 32, hostCores: 8, runningRamMb: 9200 },
+  tablet: { ramMb: 6144, cpus: 4, diskGb: 8, hostRamGb: 16, hostCores: 8, runningRamMb: 7000 },
 };
 
 /** Each Android release ships as one system image; the download scales with it. */
@@ -209,6 +209,7 @@ function build(seed: Seed): PhoneSpec {
   const retailStorageGb = seed.store.length ? Math.min(...seed.store) : tier.diskGb;
   const retailCores = seed.cores || tier.cpus;
   const diskBytes = retailStorageGb * GB;
+  const virtualDiskBytes = Math.min(retailStorageGb, tier.diskGb) * GB;
   // Android itself occupies the first few GB of the virtual disk; the rest is
   // what the user actually sees as free space inside the phone.
   const systemBytes = Math.round(download * 2.2);
@@ -316,8 +317,8 @@ function build(seed: Seed): PhoneSpec {
     },
     storage: {
       imageDownloadBytes: download,
-      virtualDiskBytes: diskBytes,
-      freeInsideBytes: Math.max(GB, diskBytes - systemBytes),
+      virtualDiskBytes,
+      freeInsideBytes: Math.max(GB, virtualDiskBytes - systemBytes),
       advertisedStorageGb: largestStorage,
     },
   };
@@ -624,9 +625,9 @@ export interface ImageVariant {
 export const IMAGE_VARIANTS: readonly ImageVariant[] = [
   { id: 'play', downloadFactor: 1, diskGb: 0, ramMb: 0, cpus: 0, googleApps: true, playStore: true, apiOverride: 0, sdkKind: 'google_apis_playstore' },
   { id: 'gapps', downloadFactor: 0.82, diskGb: 0, ramMb: 0, cpus: 0, googleApps: true, playStore: false, apiOverride: 0, sdkKind: 'google_apis' },
-  { id: 'aosp', downloadFactor: 0.6, diskGb: 8, ramMb: 3072, cpus: 3, googleApps: false, playStore: false, apiOverride: 0, sdkKind: 'default' },
-  { id: 'go', downloadFactor: 0.42, diskGb: 6, ramMb: 2048, cpus: 2, googleApps: true, playStore: true, apiOverride: 0, sdkKind: 'google_apis' },
-  { id: 'legacy', downloadFactor: 0.38, diskGb: 4, ramMb: 1536, cpus: 2, googleApps: false, playStore: false, apiOverride: 30, sdkKind: 'default' },
+  { id: 'aosp', downloadFactor: 0.6, diskGb: 4, ramMb: 3072, cpus: 3, googleApps: false, playStore: false, apiOverride: 0, sdkKind: 'default' },
+  { id: 'go', downloadFactor: 0.42, diskGb: 3, ramMb: 2048, cpus: 2, googleApps: true, playStore: true, apiOverride: 0, sdkKind: 'google_apis' },
+  { id: 'legacy', downloadFactor: 0.38, diskGb: 2, ramMb: 1536, cpus: 2, googleApps: false, playStore: false, apiOverride: 30, sdkKind: 'default' },
   // Android 12L is the official large-screen system image. It gives tablet
   // profiles Android's own split-screen overview UI; it is not a fake second
   // display and apps that opt out of resizing remain single-window.
@@ -646,7 +647,10 @@ export function applyVariant(spec: PhoneSpec, variantId: ImageVariantId | string
   const variant = imageVariant(variantId);
   const api = variant.apiOverride || spec.identity.apiLevel;
   const ramMb = variant.ramMb || spec.sizing.ramMb;
-  const storageGb = variant.diskGb || spec.sizing.storageGb;
+  // Retail capacity is fingerprint/display metadata, not a reason to create a
+  // similarly sized sparse AVD image. Every mode gets the bounded tier disk;
+  // explicit lightweight variants can still request an even smaller value.
+  const storageGb = variant.diskGb || Math.min(spec.sizing.storageGb, TIERS[spec.tier].diskGb);
   const cpus = variant.cpus || spec.sizing.cpus;
   const baseDownload = IMAGE_DOWNLOAD[api] ?? spec.storage.imageDownloadBytes;
   const downloadBytes = Math.round(baseDownload * variant.downloadFactor);

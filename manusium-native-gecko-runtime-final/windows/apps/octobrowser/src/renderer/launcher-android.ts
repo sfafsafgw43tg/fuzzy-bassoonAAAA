@@ -395,7 +395,9 @@ export function deviceSettingsDialog(target: {
 
     const ram = input(String(target.ramMb ?? 4096), { type: 'number', min: '1024', max: '65536' });
     const cores = input(String(target.cores ?? 4), { type: 'number', min: '1', max: '16' });
-    const disk = input(String(target.dataGb ?? 16), { type: 'number', min: '4', max: '512' });
+    // New devices start compact; updateAndroidSettings still refuses to shrink
+    // an existing data partition, so users do not lose data on older AVDs.
+    const disk = input(String(target.dataGb ?? 6), { type: 'number', min: '2', max: '512' });
     const width = input(String(target.width ?? 1080), { type: 'number', min: '320', max: '2560' });
     const height = input(String(target.height ?? 2400), { type: 'number', min: '480', max: '3840' });
     const dpi = input(String(target.dpi ?? 420), { type: 'number', min: '120', max: '640' });
@@ -613,7 +615,6 @@ export function androidNetworkBar(reload: () => Promise<void>): HTMLElement {
   void refresh();
   return bar;
 }
-
 
 
 

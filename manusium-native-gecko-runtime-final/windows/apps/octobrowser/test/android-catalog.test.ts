@@ -41,18 +41,18 @@ describe('phone specification catalogue', () => {
     }
   });
 
-  it('uses the smallest sold storage SKU rather than an invented capacity', () => {
+  it('keeps advertised storage separate from a bounded AVD virtual disk', () => {
     for (const item of PHONES) {
       if (item.identity.realDevice) {
-        expect(item.storage.virtualDiskBytes).toBe(Math.min(...item.performance.storageOptionsGb) * 1_000_000_000);
+        expect(item.storage.virtualDiskBytes).toBe(creationSummary(item).diskBytes);
+        expect(item.storage.virtualDiskBytes).toBeLessThanOrEqual(Math.min(...item.performance.storageOptionsGb) * 1_000_000_000);
       }
       // Free space inside Android is always smaller than the disk it lives on.
       expect(item.storage.freeInsideBytes).toBeLessThan(item.storage.virtualDiskBytes);
       expect(item.storage.freeInsideBytes).toBeGreaterThan(0);
       expect(item.storage.imageDownloadBytes).toBeGreaterThan(500_000_000);
     }
-    // A 1 TB option remains in the catalogue, while the VM starts from the
-    // smallest real retail SKU instead of inventing a tiny 48 GB phone.
+    // A 1 TB option remains catalogue metadata, while the VM stays compact.
     const ultra = phone('galaxy-s24-ultra')!;
     expect(ultra.storage.advertisedStorageGb).toBe(1024);
     expect(ultra.sizing.storageGb).toBe(Math.min(...ultra.performance.storageOptionsGb));
@@ -135,7 +135,7 @@ describe('lightweight image variants', () => {
     expect(summary.variant).toBe('aosp');
     expect(summary.image).toContain(';default;');
     expect(summary.playStore).toBe(false);
-    expect(summary.storageGb).toBe(8);
+    expect(summary.storageGb).toBe(4);
     const playSummary = creationSummary(spec, 'play');
     expect(playSummary.image).toContain('google_apis_playstore');
     expect(playSummary.diskBytes).toBeGreaterThan(summary.diskBytes);
