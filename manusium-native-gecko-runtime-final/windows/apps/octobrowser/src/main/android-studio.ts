@@ -1896,13 +1896,22 @@ export async function startObsVirtualCamera(): Promise<ObsVirtualCameraStartResu
   if (process.platform !== 'win32') return { ok: false, message: 'OBS Virtual Camera startup is supported on Windows only.' };
   const existing=(await windowsCameraNames()).find((item)=>/obs\s*virtual\s*camera/i.test(item.friendlyName));
   if (existing) return { ok:true, message:'OBS Virtual Camera is already available.', cameraName:existing.friendlyName };
+  const alreadyRunning = process.platform === 'win32' && /obs64\.exe/i.test(String(spawnSync(
+    'tasklist', ['/FI', 'IMAGENAME eq obs64.exe', '/FO', 'CSV', '/NH'],
+    { encoding: 'utf8', windowsHide: true, timeout: 5_000 },
+  ).stdout ?? ''));
   const candidates=[process.env.ProgramFiles?path.join(process.env.ProgramFiles,'obs-studio','bin','64bit','obs64.exe'):'',process.env['ProgramFiles(x86)']?path.join(process.env['ProgramFiles(x86)'],'obs-studio','bin','64bit','obs64.exe'):'',process.env.LOCALAPPDATA?path.join(process.env.LOCALAPPDATA,'Programs','obs-studio','bin','64bit','obs64.exe'):''].filter(Boolean);
   const executable=candidates.find((item)=>fs.existsSync(item));
   if (!executable) return { ok:false, message:'OBS Studio was not found. Install OBS Studio, then try again.' };
   try { const child=spawn(executable,['--startvirtualcam'],{detached:true,stdio:'ignore',windowsHide:true}); child.unref(); } catch(error) { return {ok:false,message:`OBS Studio could not be started: ${error instanceof Error?error.message:String(error)}`}; }
   const started=Date.now();
   while(Date.now()-started<20000){ windowsNamesCache=null; const camera=(await windowsCameraNames()).find((item)=>/obs\s*virtual\s*camera/i.test(item.friendlyName)); if(camera) return {ok:true,message:'OBS Virtual Camera is ready. Select it as the Android webcam and cold-start the emulator.',cameraName:camera.friendlyName}; await new Promise((resolve)=>setTimeout(resolve,500)); }
-  return {ok:false,message:'OBS started, but OBS Virtual Camera did not appear in Windows within 20 seconds. Click Start Virtual Camera in OBS and refresh the Android camera list.'};
+  return {
+    ok: false,
+    message: alreadyRunning
+      ? 'OBS Studio is running, but its Virtual Camera device is not enabled. Click Start Virtual Camera in OBS, then refresh the Android camera list.'
+      : 'OBS started, but OBS Virtual Camera did not appear in Windows within 20 seconds. Click Start Virtual Camera in OBS and refresh the Android camera list.',
+  };
 }
 
 function readWindowsCameraNames(): Promise<WindowsCameraName[]> {
