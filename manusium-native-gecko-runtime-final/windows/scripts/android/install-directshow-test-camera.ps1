@@ -15,7 +15,7 @@
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
   [Parameter(Mandatory = $true)]
-  [ValidateSet('lensio', 'unity-capture', 'obs')]
+  [ValidateSet('lensio', 'unity-capture', 'obs', 'directshow')]
   [string] $Provider,
 
   [string] $LensioExe = "$env:LOCALAPPDATA\LensioStudio\LensioStudio.exe",
@@ -47,6 +47,18 @@ function Assert-File([string] $Path, [string] $Description) {
   if (-not $Path -or -not (Test-Path -LiteralPath $Path -PathType Leaf)) { throw "$Description was not found: $Path" }
   $item = Get-Item -LiteralPath $Path
   if ($item.Length -lt 1024) { throw "$Description is unexpectedly small: $Path" }
+}
+
+function Read-EmulatorWebcams {
+  if ($SkipWebcamList) { return '' }
+  $deadline = (Get-Date).AddSeconds(15)
+  $last = ''
+  do {
+    $last = (& $emulator "@$AvdName" '-webcam-list' 2>&1 | Out-String).Trim()
+    if ($last -match '(?i)webcam\d+') { return $last }
+    Start-Sleep -Seconds 2
+  } while ((Get-Date) -lt $deadline)
+  return $last
 }
 
 if (-not $SdkRoot) {
@@ -88,18 +100,24 @@ switch ($Provider) {
       $action = 'OBS was started normally with --startvirtualcam. Safe Mode must not be used because it can skip obs-virtualcam.'
     }
   }
+  'directshow' {
+    # Probe-only mode: DirectShow is an interface, not a driver. This is useful
+    # for diagnostics when the caller supplies its own provider.
+    $action = 'DirectShow probe only; no driver was installed.'
+  }
 }
 
 $devices = @(Get-CimInstance Win32_PnPEntity -ErrorAction SilentlyContinue |
   Where-Object { $_.PNPClass -in @('Camera', 'Image') -or $_.Name -match '(?i)camera|webcam|video capture' } |
   Select-Object -ExpandProperty Name)
-$webcamList = ''
-if (-not $SkipWebcamList) { $webcamList = (& $emulator "@$AvdName" -webcam-list 2>&1 | Out-String).Trim() }
+$webcamList = Read-EmulatorWebcams
+$webcams = @([regex]::Matches($webcamList, '(?i)webcam\d{1,2}') | ForEach-Object { $_.Value.ToLowerInvariant() } | Select-Object -Unique)
 [ordered]@{
   provider = $Provider
   action = $action
   windowsCameraDevices = $devices
+  webcams = $webcams
   emulatorWebcamList = $webcamList
-  emulatorEndpointReady = [bool]($webcamList -match '(?i)webcam\d+')
+  emulatorEndpointReady = $webcams.Count -gt 0
   note = 'A registered Windows provider is not sufficient; the endpoint must appear in emulator -webcam-list before Android Camera2 can use it.'
 } | ConvertTo-Json -Depth 6
