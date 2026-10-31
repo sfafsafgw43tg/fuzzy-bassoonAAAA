@@ -121,9 +121,13 @@ describe('Android Studio local bridge', () => {
   it('scales the presets and keeps the space estimate honest', () => {
     const device = ANDROID_DEVICES[0];
     const light = androidPreset('light', device);
+    const standard = androidPreset('standard', device);
     const ultra = androidPreset('ultra', device);
     expect(ultra.ramMb).toBeGreaterThan(light.ramMb);
     expect(ultra.dataGb).toBeGreaterThan(light.dataGb);
+    expect(light.dataGb).toBe(3);
+    expect(standard.dataGb).toBe(6);
+    expect(ultra.dataGb).toBe(12);
     // "custom" never rewrites what the user typed.
     expect(androidPreset('custom', device, light)).toEqual(light);
 

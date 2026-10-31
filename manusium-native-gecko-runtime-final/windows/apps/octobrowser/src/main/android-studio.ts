@@ -1949,6 +1949,36 @@ export async function startObsVirtualCamera(): Promise<ObsVirtualCameraStartResu
   };
 }
 
+/** Start LensioStudio as the selected live-camera provider and wait for its
+ * DirectShow endpoint. The emulator still has to enumerate that endpoint. */
+export async function startLensioVirtualCamera(): Promise<ObsVirtualCameraStartResult> {
+  if (process.platform !== 'win32') return { ok: false, message: 'Lensio startup is supported on Windows only.' };
+  const candidates = [
+    process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'LensioStudio', 'LensioStudio.exe') : '',
+    process.env.ProgramFiles ? path.join(process.env.ProgramFiles, 'LensioStudio', 'LensioStudio.exe') : '',
+    process.env['ProgramFiles(x86)'] ? path.join(process.env['ProgramFiles(x86)'], 'LensioStudio', 'LensioStudio.exe') : '',
+  ].filter(Boolean);
+  const executable = candidates.find((item) => fs.existsSync(item));
+  if (!executable) return { ok: false, message: 'LensioStudio was not found. Install LensioStudio, then try again.' };
+  try {
+    const processList = String(spawnSync('tasklist', ['/FI', 'IMAGENAME eq LensioStudio.exe', '/FO', 'CSV', '/NH'], { encoding: 'utf8', windowsHide: true, timeout: 5_000 }).stdout ?? '');
+    if (!/LensioStudio\.exe/i.test(processList)) {
+      const child = spawn(executable, [], { detached: true, stdio: 'ignore', windowsHide: true });
+      child.unref();
+    }
+  } catch (error) {
+    return { ok: false, message: `LensioStudio could not be started: ${error instanceof Error ? error.message : String(error)}` };
+  }
+  const started = Date.now();
+  while (Date.now() - started < 15_000) {
+    windowsNamesCache = null;
+    const camera = (await windowsCameraNames()).find((item) => /lensio|apexcam|virtual camera/i.test(item.friendlyName));
+    if (camera) return { ok: true, message: 'Lensio virtual camera is ready. Refresh the Android camera list.', cameraName: camera.friendlyName };
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+  return { ok: false, message: 'LensioStudio started, but no Lensio DirectShow endpoint appeared within 15 seconds. Start Lensio streaming, then refresh the Android camera list.' };
+}
+
 function readWindowsCameraNames(): Promise<WindowsCameraName[]> {
   const script = "try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }; "
     + "$rows=@(Get-PnpDevice -PresentOnly -Status OK -ErrorAction SilentlyContinue "

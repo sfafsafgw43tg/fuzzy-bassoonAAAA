@@ -224,9 +224,9 @@ export interface AndroidHardwareChoice {
  */
 export function androidPreset(preset: AndroidPerformancePreset, device: AndroidDeviceProfile, current?: AndroidHardwareChoice): AndroidHardwareChoice {
   if (preset === 'custom' && current) return current;
-  if (preset === 'light') return { ramMb: 2048, heapMb: 256, cores: 2, dataGb: 4, sdCardMb: 0 };
-  if (preset === 'ultra') return { ramMb: Math.max(8192, device.ramMb), heapMb: 1024, cores: 6, dataGb: 16, sdCardMb: 2048 };
-  return { ramMb: device.ramMb, heapMb: 512, cores: 4, dataGb: 8, sdCardMb: 512 };
+  if (preset === 'light') return { ramMb: 2048, heapMb: 256, cores: 2, dataGb: 3, sdCardMb: 0 };
+  if (preset === 'ultra') return { ramMb: Math.max(8192, device.ramMb), heapMb: 1024, cores: 6, dataGb: 12, sdCardMb: 1024 };
+  return { ramMb: device.ramMb, heapMb: 512, cores: 4, dataGb: 6, sdCardMb: 256 };
 }
 
 export interface AndroidSpaceEstimate {

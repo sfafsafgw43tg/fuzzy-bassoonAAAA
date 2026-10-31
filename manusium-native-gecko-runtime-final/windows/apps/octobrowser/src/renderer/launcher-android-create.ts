@@ -441,7 +441,7 @@ export function androidCreateWizard(context: CreatorContext): void {
     if (!draft.hardwareTouched) {
       draft.ramMb = summary?.ramMb ?? phone.sizing.ramMb;
       draft.cpus = summary?.cpus ?? phone.sizing.cpus;
-      draft.diskGb = summary?.storageGb ?? phone.sizing.storageGb;
+      draft.diskGb = draft.preset === 'light' ? 3 : draft.preset === 'ultra' ? 12 : draft.preset === 'custom' ? (summary?.storageGb ?? phone.sizing.storageGb) : 6;
       draft.heapMb = phone.avd.heapMb;
       draft.sdCardMb = phone.avd.sdCardMb;
       draft.width = phone.avd.width;
@@ -965,10 +965,9 @@ export function androidCreateWizard(context: CreatorContext): void {
       if (value === 'custom') return;
       const summary = summaryFor();
       const baseRam = summary?.ramMb ?? phone.sizing.ramMb;
-      const baseDisk = summary?.storageGb ?? phone.sizing.storageGb;
-      if (value === 'light') { draft.ramMb = Math.max(1536, Math.round(baseRam / 2)); draft.cpus = 2; draft.diskGb = Math.max(8, Math.round(baseDisk / 2)); draft.heapMb = 256; }
-      if (value === 'standard') { draft.ramMb = baseRam; draft.cpus = summary?.cpus ?? phone.sizing.cpus; draft.diskGb = baseDisk; draft.heapMb = phone.avd.heapMb; }
-      if (value === 'ultra') { draft.ramMb = Math.max(8192, baseRam); draft.cpus = Math.max(6, summary?.cpus ?? 4); draft.diskGb = Math.max(32, baseDisk); draft.heapMb = 1024; }
+      if (value === 'light') { draft.ramMb = Math.max(1536, Math.round(baseRam / 2)); draft.cpus = 2; draft.diskGb = 3; draft.heapMb = 256; }
+      if (value === 'standard') { draft.ramMb = baseRam; draft.cpus = summary?.cpus ?? phone.sizing.cpus; draft.diskGb = 6; draft.heapMb = phone.avd.heapMb; }
+      if (value === 'ultra') { draft.ramMb = Math.max(8192, baseRam); draft.cpus = Math.max(6, summary?.cpus ?? 4); draft.diskGb = 12; draft.heapMb = 1024; }
       draft.hardwareTouched = true;
       paint();
     });

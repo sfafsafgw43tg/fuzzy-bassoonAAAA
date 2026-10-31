@@ -568,7 +568,7 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
     stopPreview();
     if (id === 'emulated') { setSource(facing, 'emulated'); paintLenses(); paintStatus(); emit(); return; }
     if (id === 'virtualcam') {
-      const result = await api.invoke<{ ok: boolean; message: string }>('mgr:android-start-obs')
+      const result = await api.invoke<{ ok: boolean; message: string }>('mgr:android-start-lensio')
         .catch((error: unknown) => ({ ok: false, message: errText(error) }));
       toast(result.message, result.ok ? 'ok' : 'info');
       await scan(true);
