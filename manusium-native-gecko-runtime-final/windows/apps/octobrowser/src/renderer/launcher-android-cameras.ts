@@ -615,24 +615,16 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
     // Do not invent webcam0 when the emulator returned an empty list. Keep a
     // currently selected endpoint visible only long enough for scan() to clear
     // it after a completed discovery pass.
-    const ids = [...new Set([...listed.map(camera => camera.name), deviceOf(facing)].filter(id => /^webcam\d+$/.test(id)))];
-    const options: Array<[string, string]> = [['', t('android.camera.off')], ['emulated', t('android.camera.virtualScene')], ['image', t('android.camera.imageFile')], ['virtualcam', t('android.camera.liveVirtualCamera')], ['video', t('android.camera.videoFile')], ...ids.map((id): [string, string] => {
-      const camera = listed.find(item => item.name === id);
-      return [id, camera ? `${id} — ${displayName(camera)}` : t('android.camera.manualEndpoint', { endpoint: id })];
-    })];
+    const options: Array<[string, string]> = [
+      ['', t('android.camera.off')],
+      ['image', t('android.camera.imageFile')],
+      ['video', t('android.camera.videoFile')],
+    ];
     const source = facing === 'front' ? selection.front : selection.back;
-    const obs = h('button', { type: 'button', class: 'btn small camera-quick-switch', text: t('android.camera.quickObs') }) as HTMLButtonElement;
-    obs.onclick = () => { obs.disabled = true; void useObs(facing).finally(() => { obs.disabled = false; }); };
     const video = h('button', { type: 'button', class: 'btn small camera-quick-switch', text: t('android.camera.quickVideo') }) as HTMLButtonElement;
     video.onclick = () => { void pickVideo(facing); };
     const photo = h('button', { type: 'button', class: 'btn small camera-quick-switch', text: t('android.camera.choosePhoto') }) as HTMLButtonElement;
     photo.onclick = () => { photo.disabled = true; void pickImage(facing).finally(() => { photo.disabled = false; }); };
-    const image = h('button', { type: 'button', class: 'btn small camera-quick-switch', text: t('android.camera.quickImage') }) as HTMLButtonElement;
-    image.onclick = () => { image.disabled = true; void useLiveImage(facing).finally(() => { image.disabled = false; }); };
-    const previous = h('button', { type: 'button', class: 'btn small camera-quick-switch', text: t('android.camera.previousImage') }) as HTMLButtonElement;
-    previous.onclick = () => { previous.disabled = true; void switchLiveImage(facing, -1).finally(() => { previous.disabled = false; }); };
-    const next = h('button', { type: 'button', class: 'btn small camera-quick-switch', text: t('android.camera.nextImage') }) as HTMLButtonElement;
-    next.onclick = () => { next.disabled = true; void switchLiveImage(facing, 1).finally(() => { next.disabled = false; }); };
     const currentDevice = deviceOf(facing);
     const currentCamera = currentDevice ? listed.find(camera => camera.name === currentDevice) : undefined;
     const currentCheck = currentCamera ? checkOf(currentCamera) : undefined;
@@ -641,10 +633,10 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
     const isLive = source === 'webcam' ? currentCheck?.ok === true : undefined;
     const badge = (label: string, state: boolean | undefined): HTMLElement => h('span', { class: `camera-source-badge ${state === true ? 'ok' : state === false ? 'off' : 'unknown'}`, text: `${label}: ${state === true ? t('android.camera.statusYes') : state === false ? t('android.camera.statusNo') : t('android.camera.statusUnknown')}` });
     return field(key, h('div', { class: 'camera-source-controls' },
-      select<string>(source === 'video' ? 'video' : source === 'image' ? 'image' : deviceOf(facing), options, id => { void choose(facing, id); }),
+      select<string>(source === 'video' ? 'video' : source === 'image' ? 'image' : '', options, id => { void choose(facing, id); }),
       h('div', { class: 'camera-source-status', 'aria-label': t('android.camera.sourceStatus') },
         badge(t('android.camera.detected'), isDetected), badge(t('android.camera.configured'), isConfigured), badge(t('android.camera.liveFrames'), isLive)),
-      h('div', { class: 'camera-quick-switches' }, obs, photo, image, previous, next, video)));
+      h('div', { class: 'camera-quick-switches' }, photo, video)));
   }
 
   function paintLenses(): void {
