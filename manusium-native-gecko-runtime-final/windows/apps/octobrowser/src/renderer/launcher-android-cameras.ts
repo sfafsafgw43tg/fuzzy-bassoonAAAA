@@ -5,7 +5,7 @@
 import { api } from '@octo/shell/renderer/bridge';
 import { h, t } from '@octo/shell/renderer/i18n-client';
 import { icon } from '@octo/shell/renderer/icons';
-import { field, run, select } from './launcher-ui';
+import { errText, field, run, select, toast } from './launcher-ui';
 import {
   resolveAvdCameraSelection, classifyCameraFailure, pickCameraForEmulator, type CameraFailure,
 } from '@octo/core/android-camera';
@@ -327,7 +327,15 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
   };
   previewButton.onclick = () => { if (previewStream) stopPreview(); else void startPreview(); };
   const obsButton = h('button', { type: 'button', class: 'btn small', text: t('android.camera.startObs') }) as HTMLButtonElement;
-  obsButton.onclick = async () => { obsButton.disabled = true; await run(api.invoke<{ ok: boolean; message: string }>('mgr:android-start-obs'), 'android.camera.obsResult'); obsButton.disabled = false; await scan(true); };
+  obsButton.onclick = async () => {
+    obsButton.disabled = true;
+    const result = await api.invoke<{ ok: boolean; message: string }>('mgr:android-start-obs')
+      .catch((error: unknown) => ({ ok: false, message: errText(error) }));
+    toast(result.message, result.ok ? 'ok' : 'info');
+    previewStatus.textContent = result.message;
+    obsButton.disabled = false;
+    await scan(true);
+  };
   const refreshButton = h('button', { type: 'button', class: 'btn small' },
     icon('refreshCircle', 14), h('span', { text: t('common.refresh') })) as HTMLButtonElement;
   refreshButton.onclick = () => void scan(true);
