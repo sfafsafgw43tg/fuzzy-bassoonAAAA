@@ -4701,6 +4701,41 @@ export function adbPath(): string {
   return optionalSdk()?.adb ?? '';
 }
 
+function lensioCamApk(): string {
+  const candidates = [
+    process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'LensioStudio', 'LensioCam.apk') : '',
+    path.join(os.homedir(), '.octobrowser', 'Lensio', 'LensioCam.apk'),
+    path.join(os.homedir(), 'Downloads', 'LensioCam.apk'),
+    path.resolve(process.cwd(), '.work', 'lensio-release-v2.9.5', 'LensioCam.apk'),
+    process.resourcesPath ? path.join(process.resourcesPath, 'lensio', 'LensioCam.apk') : '',
+  ].filter(Boolean);
+  return candidates.find((candidate) => fs.existsSync(candidate)) ?? '';
+}
+
+/** Install and foreground the bundled/locally staged LensioCam companion.
+ * Missing assets are reported as a skip, never as a fake successful install. */
+export async function installLensioCamOnAndroid(name: string): Promise<{ installed: boolean; launched: boolean; reason: string }> {
+  const apk = lensioCamApk();
+  if (!apk) return { installed: false, launched: false, reason: 'LensioCam.apk was not found; Windows Lensio can still run without the Android companion.' };
+  const clean = assertName(name);
+  let serial = '';
+  for (let attempt = 0; attempt < 30 && !serial; attempt++) {
+    serial = await androidSerialFor(clean).catch(() => '');
+    if (!serial) await new Promise((resolve) => setTimeout(resolve, 2_000));
+  }
+  const adb = adbPath();
+  if (!serial || !adb) return { installed: false, launched: false, reason: 'The Android device did not become ADB-ready for LensioCam.' };
+  const output = await adbRun(adb, ['-s', serial, 'install', '-r', apk], 120_000)
+    .catch((error: unknown) => error instanceof Error ? error.message : String(error));
+  if (!/^Success\b/im.test(String(output)) && !/INSTALL_FAILED_UPDATE_INCOMPATIBLE/i.test(String(output))) {
+    return { installed: false, launched: false, reason: `LensioCam.apk could not be installed: ${String(output).trim().slice(-500)}` };
+  }
+  const launch = await adbRun(adb, ['-s', serial, 'shell', 'monkey', '-p', 'com.apexcam', '1'], 30_000)
+    .catch((error: unknown) => error instanceof Error ? error.message : String(error));
+  const launched = !/error|exception|no activity/i.test(String(launch));
+  return { installed: true, launched, reason: launched ? 'LensioCam is installed and running in the Android device.' : 'LensioCam was installed, but Android did not foreground it.' };
+}
+
 /** The adb serial of a running device, exported for the store installer. */
 export async function androidSerialFor(name: string): Promise<string> {
   return emulatorSerial(assertName(name));
