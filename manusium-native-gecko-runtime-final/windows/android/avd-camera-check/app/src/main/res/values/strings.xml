@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">AVD Camera Check</string>
+    <string name="app_name">Octo Camera Controller</string>
 
     <!-- The five messages the specification fixes. Do not reword them. -->
     <string name="msg_no_camera">No camera detected on this device or emulator.</string>

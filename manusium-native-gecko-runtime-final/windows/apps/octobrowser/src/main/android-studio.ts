@@ -4769,6 +4769,42 @@ export async function installLensioCamOnAndroid(name: string): Promise<{ install
   return { installed: true, launched, reason: launched ? 'LensioCam is installed and running in the Android device.' : 'LensioCam was installed, but Android did not foreground it.' };
 }
 
+function octoCameraControllerApk(): string {
+  const candidates: string[] = [];
+  for (const root of [__dirname, process.resourcesPath, process.cwd()].filter(Boolean)) {
+    let current = path.resolve(String(root));
+    for (let i = 0; i < 8; i += 1) {
+      candidates.push(path.join(current, 'resources', 'octo-camera', 'OctoCameraController.apk'));
+      candidates.push(path.join(current, 'windows', 'resources', 'octo-camera', 'OctoCameraController.apk'));
+      const parent = path.dirname(current);
+      if (parent === current) break;
+      current = parent;
+    }
+  }
+  candidates.push(path.resolve(process.cwd(), 'android', 'avd-camera-check', 'app', 'build', 'outputs', 'apk', 'debug', 'app-debug.apk'));
+  return candidates.find((candidate) => fs.existsSync(candidate)) ?? '';
+}
+
+/** Install and foreground the device-side media picker used by the native imagefile/videofile flow. */
+export async function installOctoCameraControllerOnAndroid(name: string): Promise<{ installed: boolean; launched: boolean; reason: string }> {
+  const apk = octoCameraControllerApk();
+  if (!apk) return { installed: false, launched: false, reason: 'OctoCameraController.apk was not found.' };
+  const clean = assertName(name);
+  const serial = await emulatorSerial(clean).catch(() => '');
+  const adb = adbPath();
+  if (!serial || !adb) return { installed: false, launched: false, reason: 'The Android device did not become ADB-ready for the camera controller.' };
+  const output = await adbRun(adb, ['-s', serial, 'install', '-r', apk], 120_000)
+    .catch((error: unknown) => error instanceof Error ? error.message : String(error));
+  if (!/^Success\b/im.test(String(output))) return { installed: false, launched: false, reason: `OctoCameraController.apk could not be installed: ${String(output).trim().slice(-500)}` };
+  const packageCheck = await adbRun(adb, ['-s', serial, 'shell', 'pm', 'path', 'app.octo.avdcamera'], 15_000)
+    .catch((error: unknown) => error instanceof Error ? error.message : String(error));
+  if (!/^package:/im.test(String(packageCheck))) return { installed: false, launched: false, reason: 'adb reported a successful install, but app.octo.avdcamera is not present.' };
+  const launch = await adbRun(adb, ['-s', serial, 'shell', 'am', 'start', '-n', 'app.octo.avdcamera/.ControllerActivity'], 30_000)
+    .catch((error: unknown) => error instanceof Error ? error.message : String(error));
+  const launched = !/error|exception|unable to resolve/i.test(String(launch)) && /starting: intent/i.test(String(launch));
+  return { installed: true, launched, reason: launched ? 'Octo Camera Controller is installed and open on the Android device.' : 'The controller was installed, but Android did not foreground it.' };
+}
+
 /** The adb serial of a running device, exported for the store installer. */
 export async function androidSerialFor(name: string): Promise<string> {
   return emulatorSerial(assertName(name));
