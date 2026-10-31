@@ -45,7 +45,7 @@ export type { AndroidDeviceProfile, AndroidHardwareChoice, AndroidSystemImage, A
  * configured manually even when enumeration fails; that is not proof of capture.
  * The emulator's test pattern/virtual scene is never substituted for a camera.
  */
-export type CameraSource = 'none' | 'webcam' | 'emulated';
+export type CameraSource = 'none' | 'webcam' | 'emulated' | 'video';
 
 /** The picture size the umbrella keys advertise when no lens is on. */
 const DEFAULT_CAMERA_LIMIT = { width: 1920, height: 1080 };
@@ -1679,6 +1679,7 @@ function cameraValue(source: CameraSource | string, webcam = ''): string {
   // depend on Windows/DirectShow enumeration. Host endpoints still require an
   // explicitly validated webcamN name; stale endpoints never become webcam0.
   if (source === 'emulated' || source === 'virtualscene') return 'emulated';
+  if (source === 'video' && path.isAbsolute(webcam) && fs.existsSync(webcam) && /\.(mp4|mkv|avi|mov)$/i.test(webcam)) return `videofile:${webcam}`;
   return source === 'webcam' && WEBCAM.test(webcam) ? webcam : 'none';
 }
 
@@ -1686,6 +1687,7 @@ function cameraValue(source: CameraSource | string, webcam = ''): string {
 export function normalizeCameraSource(saved?: string): CameraSource {
   if (saved === 'none') return 'none';
   if (saved === 'emulated' || saved === 'virtualscene') return 'emulated';
+  if (saved === 'video') return 'video';
   return 'webcam';
 }
 
@@ -1892,10 +1894,30 @@ function windowsCameraNames(): Promise<WindowsCameraName[]> {
  * shown by its hardware ID, never guessed.
  */
 export interface ObsVirtualCameraStartResult { ok: boolean; message: string; cameraName?: string }
+
+function obsSafeModeVirtualCameraHint(): string {
+  if (process.platform !== 'win32') return '';
+  try {
+    const logDir = path.join(os.homedir(), 'AppData', 'Roaming', 'obs-studio', 'logs');
+    const latest = fs.readdirSync(logDir).filter((item) => /\.txt$/i.test(item))
+      .map((item) => path.join(logDir, item)).filter((item) => fs.statSync(item).isFile())
+      .sort((a, b) => fs.statSync(b).mtimeMs - fs.statSync(a).mtimeMs)[0];
+    if (!latest) return '';
+    const text = fs.readFileSync(latest, 'utf8').slice(-160_000);
+    if (/skipping module ['"]?obs-virtualcam|safe mode launch selected/i.test(text)) {
+      return ' OBS Safe Mode skipped obs-virtualcam. Close OBS, start it normally, choose Launch normally if recovery is shown, then click Start Virtual Camera once.';
+    }
+  } catch { /* diagnostics must never block provider startup */ }
+  return '';
+}
+
 export async function startObsVirtualCamera(): Promise<ObsVirtualCameraStartResult> {
   if (process.platform !== 'win32') return { ok: false, message: 'OBS Virtual Camera startup is supported on Windows only.' };
   const existing=(await windowsCameraNames()).find((item)=>/obs\s*virtual\s*camera/i.test(item.friendlyName));
   if (existing) return { ok:true, message:'OBS Virtual Camera is already available.', cameraName:existing.friendlyName };
+  if (await unityCaptureRegisteredAsync()) {
+    return { ok: true, message: 'OBS is not required: Unity Capture is registered and is the preferred fallback for live images. Choose Live image to start the Unity provider.', cameraName: 'Unity Capture virtual camera' };
+  }
   const alreadyRunning = process.platform === 'win32' && /obs64\.exe/i.test(String(spawnSync(
     'tasklist', ['/FI', 'IMAGENAME eq obs64.exe', '/FO', 'CSV', '/NH'],
     { encoding: 'utf8', windowsHide: true, timeout: 5_000 },
@@ -1903,14 +1925,27 @@ export async function startObsVirtualCamera(): Promise<ObsVirtualCameraStartResu
   const candidates=[process.env.ProgramFiles?path.join(process.env.ProgramFiles,'obs-studio','bin','64bit','obs64.exe'):'',process.env['ProgramFiles(x86)']?path.join(process.env['ProgramFiles(x86)'],'obs-studio','bin','64bit','obs64.exe'):'',process.env.LOCALAPPDATA?path.join(process.env.LOCALAPPDATA,'Programs','obs-studio','bin','64bit','obs64.exe'):''].filter(Boolean);
   const executable=candidates.find((item)=>fs.existsSync(item));
   if (!executable) return { ok:false, message:'OBS Studio was not found. Install OBS Studio, then try again.' };
-  try { const child=spawn(executable,['--startvirtualcam'],{detached:true,stdio:'ignore',windowsHide:true}); child.unref(); } catch(error) { return {ok:false,message:`OBS Studio could not be started: ${error instanceof Error?error.message:String(error)}`}; }
+  try {
+    // Start the normal OBS application first. Passing --startvirtualcam on the
+    // first process launch can send a crashed installation straight back into
+    // Safe Mode, where obs-virtualcam is deliberately excluded. A second,
+    // one-shot invocation asks the already-running OBS instance to start its
+    // output without changing its recovery state.
+    if (!alreadyRunning) {
+      const normal = spawn(executable, [], { detached: true, stdio: 'ignore', windowsHide: true });
+      normal.unref();
+      await new Promise((resolve) => setTimeout(resolve, 1_500));
+    }
+    const request = spawn(executable, ['--startvirtualcam'], { detached: true, stdio: 'ignore', windowsHide: true });
+    request.unref();
+  } catch(error) { return {ok:false,message:`OBS Studio could not be started: ${error instanceof Error?error.message:String(error)}`}; }
   const started=Date.now();
   while(Date.now()-started<20000){ windowsNamesCache=null; const camera=(await windowsCameraNames()).find((item)=>/obs\s*virtual\s*camera/i.test(item.friendlyName)); if(camera) return {ok:true,message:'OBS Virtual Camera is ready. Select it as the Android webcam and cold-start the emulator.',cameraName:camera.friendlyName}; await new Promise((resolve)=>setTimeout(resolve,500)); }
   return {
     ok: false,
     message: alreadyRunning
-      ? 'OBS Studio is running, but its Virtual Camera device is not enabled. Click Start Virtual Camera in OBS, then refresh the Android camera list.'
-      : 'OBS started, but OBS Virtual Camera did not appear in Windows within 20 seconds. Click Start Virtual Camera in OBS and refresh the Android camera list.',
+      ? `OBS Studio is running, but its Virtual Camera device is not enabled. Click Start Virtual Camera in OBS, then refresh the Android camera list.${obsSafeModeVirtualCameraHint()}`
+      : `OBS started, but OBS Virtual Camera did not appear in Windows within 20 seconds. Click Start Virtual Camera in OBS and refresh the Android camera list.${obsSafeModeVirtualCameraHint()}`,
   };
 }
 
@@ -2068,6 +2103,24 @@ export function resolveActiveCameraAssignments(
 ): ActiveCameraAssignments {
   const normalizedFront = normalizeCameraSource(String(front));
   const normalizedBack = normalizeCameraSource(String(back));
+  if (normalizedFront === 'video' || normalizedBack === 'video') {
+    const resolved = resolveActiveCameraAssignments(
+      normalizedFront === 'video' ? 'none' : normalizedFront,
+      normalizedBack === 'video' ? 'none' : normalizedBack,
+      normalizedFront === 'video' ? '' : frontDevice,
+      normalizedBack === 'video' ? '' : backDevice,
+      webcams,
+      _preferred,
+      legacyDevice,
+    );
+    return {
+      front: normalizedFront === 'video' ? 'video' : resolved.front,
+      back: normalizedBack === 'video' ? 'video' : resolved.back,
+      frontDevice: normalizedFront === 'video' ? frontDevice : resolved.frontDevice,
+      backDevice: normalizedBack === 'video' ? backDevice : resolved.backDevice,
+      warning: resolved.warning,
+    };
+  }
   if (normalizedFront === 'emulated' || normalizedBack === 'emulated') {
     const webcamSelection = resolveAvdCameraSelection(
       { front: normalizedFront === 'emulated' ? 'none' : normalizedFront, back: normalizedBack === 'emulated' ? 'none' : normalizedBack },
@@ -2160,6 +2213,10 @@ export function mediaConfig(
   limits: { front?: CameraResolution; back?: CameraResolution } = {},
 ): Record<string, string> {
   const values = emulatorCameraValues(front, back, frontWebcam, backWebcam);
+  // videofile: is a launch-only override; config.ini accepts emulated/webcam/none,
+  // so persist Off and let the command-line launch carry the validated file path.
+  const persistedFront = values.front.startsWith('videofile:') ? 'none' : values.front;
+  const persistedBack = values.back.startsWith('videofile:') ? 'none' : values.back;
   const cameraEnabled = values.front !== 'none' || values.back !== 'none';
   const actualFrontDevice = values.front.startsWith('webcam') ? values.front : '';
   const actualBackDevice = values.back.startsWith('webcam') ? values.back : '';
@@ -2175,8 +2232,8 @@ export function mediaConfig(
   const maxHorizontal = active.length ? Math.min(...active.map((limit) => limit.width)) : 0;
   const maxVertical = active.length ? Math.min(...active.map((limit) => limit.height)) : 0;
   return {
-    'hw.camera.back': values.back,
-    'hw.camera.front': values.front,
+    'hw.camera.back': persistedBack,
+    'hw.camera.front': persistedFront,
     'hw.camera.maxHorizontalPixels': String(maxHorizontal || DEFAULT_CAMERA_LIMIT.width),
     'hw.camera.maxVerticalPixels': String(maxVertical || DEFAULT_CAMERA_LIMIT.height),
     'hw.audioInput': microphoneEnabled ? 'yes' : 'no',
@@ -2725,6 +2782,12 @@ export function configureMediaCompanion(input: {
   width?: number; height?: number;
   /** Folder of photos and videos the virtual camera should play. */
   mediaFolder?: string;
+  /** How still images are resized into the handset frame. */
+  imageFit?: 'fill' | 'fit' | 'stretch' | 'blur';
+  /** Playlist behavior used by vStudio Mobile. */
+  playlistMode?: 'manual' | 'auto' | 'random';
+  /** Seconds between automatic playlist changes. */
+  playlistInterval?: number;
   /** Explicit user request to start/stop publishing; omitted means preserve it. */
   autoBroadcast?: boolean;
 }): string {
@@ -2786,6 +2849,9 @@ export function configureMediaCompanion(input: {
     },
     video: {
       ...video,
+      fit_mode: input.imageFit ?? String(video.fit_mode ?? 'fill'),
+      slideshow_mode: input.playlistMode ?? String(video.slideshow_mode ?? 'manual'),
+      slideshow_interval: Math.max(0.5, Math.min(3600, Number(input.playlistInterval ?? video.slideshow_interval ?? 6))),
       orientation: (video.orientation as string | undefined) ?? 'portrait',
       input_camera_name: clean(input.cameraDevice, String(video.input_camera_name ?? ''), 160),
       input_rotation: input.inputRotation === undefined
@@ -3894,7 +3960,7 @@ export async function launchAndroidAvd(input: AndroidLaunchInput): Promise<Andro
   // or the Unity Capture producer changed is a reproducible stock Camera app
   // crash. Host-camera launches therefore cold-boot the volatile guest state
   // and do not save it back; userdata and installed apps remain untouched.
-  const usesHostCamera = Boolean(assignments.frontDevice || assignments.backDevice);
+  const usesHostCamera = assignments.front === 'webcam' || assignments.back === 'webcam';
   if (input.bootMode === 'cold' || usesHostCamera) args.push('-no-snapshot-load');
   if (usesHostCamera) args.push('-no-snapshot-save');
   if (input.networkSpeed) args.push('-netspeed', input.networkSpeed);

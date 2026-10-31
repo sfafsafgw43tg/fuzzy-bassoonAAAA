@@ -161,6 +161,7 @@ function androidLaunchDialog(machine: AndroidMachine, load: () => Promise<void>,
     // One picker for both lenses. It offers only the cameras that send a picture
     // on this computer right now; a lens with none is Off.
     const cameras = cameraPicker({
+      deviceName: machine.name,
       initial: {
         front: saved?.cameraFront ?? machine.cameraFront,
         back: saved?.cameraBack ?? machine.cameraBack,

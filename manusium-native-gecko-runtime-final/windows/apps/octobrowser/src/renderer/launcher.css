@@ -2003,3 +2003,22 @@ textarea.ua, .frow-info-card { max-width: 760px; }
 .camera-manager label { display: flex; align-items: center; gap: 8px; }
 .camera-manager input[type="checkbox"] { width: 18px; height: 18px; flex: none; }
 .camera-manager .camera-picker-foot { flex-wrap: wrap; gap: 8px; }
+.camera-live-panel { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; margin: 0 0 12px; background: var(--bg2); }
+.camera-live-panel-head { display: flex; align-items: baseline; justify-content: space-between; gap: 10px; margin-bottom: 8px; }
+.camera-live-panel-head .hint { margin: 0; }
+.camera-lensio-badge { border: 1px solid var(--accent); border-radius: 999px; color: var(--accent); font-size: 10px; padding: 2px 7px; white-space: nowrap; }
+.camera-live-settings { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr) 130px; gap: 8px; margin-bottom: 10px; }
+.camera-live-settings .field { margin: 0; min-width: 0; }
+.camera-live-settings input, .camera-live-settings select { width: 100%; min-width: 0; }
+.camera-live-image-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
+.camera-live-image-card { position: relative; min-height: 76px; padding: 3px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); cursor: pointer; overflow: hidden; }
+.camera-live-image-card:hover { border-color: var(--accent); }
+.camera-live-image-card.active { border: 2px solid var(--accent); padding: 2px; box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent); }
+.camera-live-image-thumb { display: block; width: 100%; height: 72px; object-fit: cover; border-radius: 5px; background: var(--bg3); }
+.camera-live-image-caption { position: absolute; right: 5px; bottom: 5px; min-width: 19px; padding: 1px 5px; border-radius: 10px; color: #fff; background: rgba(0,0,0,.7); font-size: 11px; text-align: center; }
+.camera-source-controls { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.camera-source-status { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; }
+.camera-source-badge { display: inline-flex; align-items: center; padding: 3px 7px; border: 1px solid var(--line); border-radius: 999px; color: var(--muted); font-size: 10px; line-height: 1.2; white-space: nowrap; }
+.camera-source-badge.ok { border-color: color-mix(in srgb, var(--ok) 55%, var(--line)); color: var(--ok); }
+.camera-source-badge.off { border-color: color-mix(in srgb, var(--danger) 45%, var(--line)); color: var(--danger); }
+.camera-source-badge.unknown { border-style: dashed; }

@@ -13,7 +13,7 @@ import { CameraTestManager } from './camera-test-manager';
 const cameraTests = new CameraTestManager();
 
 /** A lens is fed from a host camera (`webcam`), or it is off (`none`). */
-export type CameraSource = 'none' | 'webcam' | 'emulated';
+export type CameraSource = 'none' | 'webcam' | 'emulated' | 'video';
 export type CameraFacing = 'front' | 'back';
 export interface CameraResolution { width: number; height: number }
 
@@ -57,6 +57,8 @@ export interface CameraSelection {
 export interface CameraPickerOptions {
   /** What the device is configured with right now. */
   initial: Partial<CameraSelection>;
+  /** AVD name used when configuring the live-image companion. */
+  deviceName?: string;
   /** Called after every scan, with the selection that will be saved. */
   onChange?: (value: CameraSelection) => void;
   /** Called after every scan, with the cameras that work right now. */
@@ -241,8 +243,8 @@ export function checkHostCamera(camera: EmulatorCamera): Promise<CameraCheck> {
 
 export function cameraPicker(options: CameraPickerOptions): CameraPicker {
   const selection: CameraSelection = {
-    front: options.initial.front === 'none' ? 'none' : options.initial.front === 'emulated' ? 'emulated' : 'webcam',
-    back: options.initial.back === 'none' ? 'none' : options.initial.back === 'emulated' ? 'emulated' : 'webcam',
+    front: options.initial.front === 'none' ? 'none' : options.initial.front === 'emulated' ? 'emulated' : options.initial.front === 'video' ? 'video' : 'webcam',
+    back: options.initial.back === 'none' ? 'none' : options.initial.back === 'emulated' ? 'emulated' : options.initial.back === 'video' ? 'video' : 'webcam',
     frontDevice: options.initial.front === 'none' || options.initial.front === 'emulated' ? '' : options.initial.frontDevice ?? '',
     backDevice: options.initial.back === 'none' || options.initial.back === 'emulated' ? '' : options.initial.backDevice ?? '',
     frontLimit: options.initial.frontLimit,
@@ -267,6 +269,13 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
   let detail = '';
   let windowsCount = 0;
   let hostCameraCount = 0;
+  let liveImages: string[] = [];
+  let liveImageIndex = 0;
+  let liveFacing: CameraFacing = 'back';
+  let liveFit: 'fill' | 'fit' | 'stretch' | 'blur' = 'fill';
+  let liveMode: 'manual' | 'auto' | 'random' = 'manual';
+  let liveInterval = 6;
+  const videoDetected = new Map<CameraFacing, boolean>();
 
   const keyOf = (camera: EmulatorCamera): string => `${camera.name}\u0001${camera.device}`;
   const checkOf = (camera: EmulatorCamera): CameraCheck | undefined => {
@@ -279,6 +288,7 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
   const backSlot = h('div', { class: 'vbox-live-host' });
   const frontSlot = h('div', { class: 'vbox-live-host' });
   const statusSlot = h('div', { class: 'camera-scan-status', role: 'status' });
+  const livePanel = h('section', { class: 'camera-live-panel', hidden: 'true' });
   const previewVideo = h('video', { class: 'android-camera-preview', autoplay: '', muted: '', playsinline: '', hidden: 'true', 'aria-label': t('android.camera.preview') }) as HTMLVideoElement;
   const previewButton = h('button', { type: 'button', class: 'btn small', text: t('android.camera.preview') }) as HTMLButtonElement;
   const previewStatus = h('p', { class: 'hint', 'aria-live': 'polite', text: t('android.camera.previewHint') });
@@ -292,6 +302,10 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
   };
   const startPreview = async (): Promise<void> => {
     stopPreview();
+    if (selection.front === 'video' || selection.back === 'video') {
+      previewStatus.textContent = t('android.camera.videoFileHint');
+      return;
+    }
     const endpoint = selection.backDevice || selection.frontDevice;
     if (!endpoint || selection.back === 'none' && selection.front === 'none') {
       previewStatus.textContent = t('android.camera.previewOff');
@@ -351,6 +365,140 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
   };
   const off = h('button', { type: 'button', class: 'btn small', text: t('android.camera.disableBoth') });
   off.onclick = () => { cameraTests.setEnabled(false); setDevice('front', ''); setDevice('back', ''); paintLenses(); paintStatus(); emit(); };
+
+  async function useObs(facing: CameraFacing): Promise<void> {
+    stopPreview();
+    const result = await api.invoke<{ ok: boolean; message: string }>('mgr:android-start-obs')
+      .catch((error: unknown) => ({ ok: false, message: errText(error) }));
+    toast(result.message, result.ok ? 'ok' : 'info');
+    await scan(true);
+    const virtual = listed.find(camera => camera.virtual);
+    if (!virtual) {
+      toast(t('android.camera.virtualUnavailable'), 'info');
+      paintStatus();
+      return;
+    }
+    setSource(facing, 'webcam', virtual.name);
+    paintLenses(); paintStatus(); emit();
+  }
+
+  async function useLiveImage(facing: CameraFacing): Promise<void> {
+    stopPreview();
+    liveFacing = facing;
+    const picked = await api.invoke<string[]>('mgr:pick-images', {
+      extensions: ['jpg', 'jpeg', 'png', 'webp', 'bmp', 'tif', 'tiff'],
+    }).catch(() => []);
+    if (!picked.length) return;
+    if (!options.deviceName) {
+      toast(t('android.camera.liveImageUnavailable'), 'info');
+      return;
+    }
+    const result = await api.invoke<{ ok: boolean; message: string }>('mgr:android-live-image', {
+      deviceName: options.deviceName,
+      imagePaths: picked,
+      activeIndex: 0,
+      imageFit: liveFit,
+      playlistMode: liveMode,
+      playlistInterval: liveInterval,
+    }).catch((error: unknown) => ({ ok: false, message: errText(error) }));
+    toast(result.message, result.ok ? 'ok' : 'info');
+    if (!result.ok) return;
+    liveImages = picked;
+    liveImageIndex = 0;
+    paintLivePanel();
+    await scan(true);
+    const virtual = listed.find(camera => camera.virtual);
+    if (!virtual) {
+      toast(t('android.camera.virtualUnavailable'), 'info');
+      paintStatus();
+      return;
+    }
+    setSource(facing, 'webcam', virtual.name);
+    paintLenses(); paintStatus(); emit();
+  }
+
+  async function switchLiveImage(facing: CameraFacing, delta: number): Promise<void> {
+    if (!options.deviceName || !liveImages.length) {
+      toast(t('android.camera.liveImagePlaylistEmpty'), 'info');
+      return;
+    }
+    stopPreview();
+    liveImageIndex = (liveImageIndex + delta + liveImages.length) % liveImages.length;
+    await activateLiveImage(facing, liveImageIndex);
+  }
+
+  async function activateLiveImage(facing: CameraFacing, index: number): Promise<void> {
+    if (!options.deviceName || !liveImages.length) return;
+    liveFacing = facing;
+    liveImageIndex = (index + liveImages.length) % liveImages.length;
+    const result = await api.invoke<{ ok: boolean; message: string }>('mgr:android-live-image', {
+      deviceName: options.deviceName,
+      activeIndex: liveImageIndex,
+      imageFit: liveFit,
+      playlistMode: liveMode,
+      playlistInterval: liveInterval,
+    }).catch((error: unknown) => ({ ok: false, message: errText(error) }));
+    toast(result.message, result.ok ? 'ok' : 'info');
+    if (!result.ok) return;
+    paintLivePanel();
+    await scan(true);
+    const virtual = listed.find(camera => camera.virtual);
+    if (!virtual) { toast(t('android.camera.virtualUnavailable'), 'info'); paintStatus(); return; }
+    setSource(facing, 'webcam', virtual.name);
+    paintLenses(); paintStatus(); emit();
+  }
+
+  function paintLivePanel(): void {
+    livePanel.hidden = liveImages.length === 0;
+    if (!liveImages.length) { livePanel.replaceChildren(); return; }
+    const cards = liveImages.map((file, index) => {
+      const button = h('button', {
+        type: 'button',
+        class: `camera-live-image-card${index === liveImageIndex ? ' active' : ''}`,
+        title: t('android.camera.selectImage', { n: String(index + 1) }),
+        'aria-label': t('android.camera.selectImage', { n: String(index + 1) }),
+      }) as HTMLButtonElement;
+      const image = h('img', { class: 'camera-live-image-thumb', alt: t('android.camera.selectImage', { n: String(index + 1) }) }) as HTMLImageElement;
+      const caption = h('span', { class: 'camera-live-image-caption', text: `${index + 1}` });
+      button.append(image, caption);
+      button.onclick = () => { button.disabled = true; void activateLiveImage(liveFacing, index).finally(() => { button.disabled = false; }); };
+      void api.invoke<string | null>('mgr:read-image-preview', file).then((src) => { if (src) image.src = src; }).catch(() => undefined);
+      return button;
+    });
+    const fit = select<string>(liveFit, [
+      ['fill', t('android.camera.fitFill')], ['fit', t('android.camera.fitContain')],
+      ['stretch', t('android.camera.fitStretch')], ['blur', t('android.camera.fitBlur')],
+    ], (value) => { liveFit = value as typeof liveFit; void activateLiveImage(liveFacing, liveImageIndex); });
+    const mode = select<string>(liveMode, [
+      ['manual', t('android.camera.playlistManual')], ['auto', t('android.camera.playlistAuto')],
+      ['random', t('android.camera.playlistRandom')],
+    ], (value) => { liveMode = value as typeof liveMode; void activateLiveImage(liveFacing, liveImageIndex); });
+    const interval = h('input', { type: 'number', min: '0.5', max: '3600', step: '0.5', value: String(liveInterval), title: t('android.camera.playlistInterval') }) as HTMLInputElement;
+    interval.onchange = () => { liveInterval = Math.max(0.5, Math.min(3600, Number(interval.value) || 6)); interval.value = String(liveInterval); void activateLiveImage(liveFacing, liveImageIndex); };
+    livePanel.replaceChildren(
+      h('div', { class: 'camera-live-panel-head' },
+        h('strong', { text: t('android.camera.liveImagePanel') }),
+        h('span', { class: 'camera-lensio-badge', text: t('android.camera.lensioBridge') }),
+        h('span', { class: 'hint', text: t('android.camera.liveImageCount', { n: String(liveImages.length) }) })),
+      h('p', { class: `hint ${listed.length ? '' : 'warn'}`, text: listed.length
+        ? t('android.camera.lensioEndpointReady', { endpoints: listed.map((camera) => camera.name).join(', ') })
+        : t('android.camera.lensioEndpointWaiting') }),
+      h('div', { class: 'camera-live-settings' },
+        field('android.camera.imageFit', fit), field('android.camera.playlistMode', mode),
+        field('android.camera.playlistInterval', interval)),
+      h('div', { class: 'camera-live-image-grid' }, ...cards));
+  }
+
+  async function pickVideo(facing: CameraFacing): Promise<void> {
+    stopPreview();
+    const file = await api.invoke<string | null>('mgr:pick-file', { extensions: ['mp4', 'mkv', 'avi', 'mov'] }).catch(() => null);
+    if (!file) return;
+    const valid = await api.invoke<{ detected: boolean }>('mgr:validate-camera-video', file).catch(() => ({ detected: false }));
+    if (!valid.detected) { toast(t('android.camera.videoFileInvalid'), 'info'); return; }
+    videoDetected.set(facing, true);
+    setSource(facing, 'video', file);
+    paintLenses(); paintStatus(); emit();
+  }
   const manager = h('fieldset', { class: 'camera-manager' },
     h('legend', { text: t('android.camera.manager') }),
     h('label', {}, hostToggle, h('span', { text: t('android.camera.hostTesting') })),
@@ -375,6 +523,7 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
   navigator.mediaDevices?.addEventListener?.('devicechange', onDeviceChange);
   const element = h('div', { class: 'camera-picker' },
     manager,
+    livePanel,
     h('div', { class: 'grid2' }, backSlot, frontSlot),
     h('div', { class: 'camera-picker-foot' }, refreshButton, obsButton, previewButton),
     previewVideo,
@@ -402,8 +551,8 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
   }
 
   function setSource(facing: CameraFacing, source: CameraSource, device = ''): void {
-    if (facing === 'front') { selection.front = source; selection.frontDevice = source === 'webcam' ? device : ''; }
-    else { selection.back = source; selection.backDevice = source === 'webcam' ? device : ''; }
+    if (facing === 'front') { selection.front = source; selection.frontDevice = source === 'webcam' || source === 'video' ? device : ''; }
+    else { selection.back = source; selection.backDevice = source === 'webcam' || source === 'video' ? device : ''; }
   }
 
   /** Discovery must not erase an explicit endpoint or reactivate Off. */
@@ -411,13 +560,31 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
     const result = resolveAvdCameraSelection({ front: selection.front, back: selection.back },
       { front: selection.frontDevice, back: selection.backDevice },
       listed.map(camera => ({ id: camera.name, name: camera.device })));
-    if (selection.front !== 'emulated') setDevice('front', result.front);
-    if (selection.back !== 'emulated') setDevice('back', result.back);
+    if (selection.front !== 'emulated' && selection.front !== 'video') setDevice('front', result.front);
+    if (selection.back !== 'emulated' && selection.back !== 'video') setDevice('back', result.back);
   }
 
-  function choose(facing: CameraFacing, id: string): void {
+  async function choose(facing: CameraFacing, id: string): Promise<void> {
     stopPreview();
     if (id === 'emulated') { setSource(facing, 'emulated'); paintLenses(); paintStatus(); emit(); return; }
+    if (id === 'virtualcam') {
+      const result = await api.invoke<{ ok: boolean; message: string }>('mgr:android-start-obs')
+        .catch((error: unknown) => ({ ok: false, message: errText(error) }));
+      toast(result.message, result.ok ? 'ok' : 'info');
+      await scan(true);
+      const virtual = listed.find(camera => camera.virtual);
+      if (!virtual) {
+        toast(t('android.camera.virtualUnavailable'), 'info');
+        paintStatus();
+        return;
+      }
+      setSource(facing, 'webcam', virtual.name);
+      paintLenses(); paintStatus(); emit();
+      return;
+    }
+    if (id === 'video') {
+      await pickVideo(facing); return;
+    }
     if (id && !/^webcam\d+$/.test(id)) return;
     setSource(facing, id ? 'webcam' : 'none', id);
     paintLenses(); paintStatus(); emit();
@@ -429,11 +596,33 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
     // currently selected endpoint visible only long enough for scan() to clear
     // it after a completed discovery pass.
     const ids = [...new Set([...listed.map(camera => camera.name), deviceOf(facing)].filter(id => /^webcam\d+$/.test(id)))];
-    const options: Array<[string, string]> = [['', t('android.camera.off')], ['emulated', t('android.camera.virtualScene')], ...ids.map((id): [string, string] => {
+    const options: Array<[string, string]> = [['', t('android.camera.off')], ['emulated', t('android.camera.virtualScene')], ['virtualcam', t('android.camera.liveVirtualCamera')], ['video', t('android.camera.videoFile')], ...ids.map((id): [string, string] => {
       const camera = listed.find(item => item.name === id);
       return [id, camera ? `${id} — ${displayName(camera)}` : t('android.camera.manualEndpoint', { endpoint: id })];
     })];
-    return field(key, select<string>(deviceOf(facing), options, id => choose(facing, id)));
+    const source = facing === 'front' ? selection.front : selection.back;
+    const obs = h('button', { type: 'button', class: 'btn small camera-quick-switch', text: t('android.camera.quickObs') }) as HTMLButtonElement;
+    obs.onclick = () => { obs.disabled = true; void useObs(facing).finally(() => { obs.disabled = false; }); };
+    const video = h('button', { type: 'button', class: 'btn small camera-quick-switch', text: t('android.camera.quickVideo') }) as HTMLButtonElement;
+    video.onclick = () => { void pickVideo(facing); };
+    const image = h('button', { type: 'button', class: 'btn small camera-quick-switch', text: t('android.camera.quickImage') }) as HTMLButtonElement;
+    image.onclick = () => { image.disabled = true; void useLiveImage(facing).finally(() => { image.disabled = false; }); };
+    const previous = h('button', { type: 'button', class: 'btn small camera-quick-switch', text: t('android.camera.previousImage') }) as HTMLButtonElement;
+    previous.onclick = () => { previous.disabled = true; void switchLiveImage(facing, -1).finally(() => { previous.disabled = false; }); };
+    const next = h('button', { type: 'button', class: 'btn small camera-quick-switch', text: t('android.camera.nextImage') }) as HTMLButtonElement;
+    next.onclick = () => { next.disabled = true; void switchLiveImage(facing, 1).finally(() => { next.disabled = false; }); };
+    const currentDevice = deviceOf(facing);
+    const currentCamera = currentDevice ? listed.find(camera => camera.name === currentDevice) : undefined;
+    const currentCheck = currentCamera ? checkOf(currentCamera) : undefined;
+    const isDetected = source === 'emulated' || (source === 'video' ? (videoDetected.get(facing) ?? Boolean(currentDevice && /\.(mp4|mkv|avi|mov)$/i.test(currentDevice))) : Boolean(currentDevice && listed.some(camera => camera.name === currentDevice)));
+    const isConfigured = source !== 'none' && (source !== 'webcam' || Boolean(currentDevice));
+    const isLive = source === 'webcam' ? currentCheck?.ok === true : undefined;
+    const badge = (label: string, state: boolean | undefined): HTMLElement => h('span', { class: `camera-source-badge ${state === true ? 'ok' : state === false ? 'off' : 'unknown'}`, text: `${label}: ${state === true ? t('android.camera.statusYes') : state === false ? t('android.camera.statusNo') : t('android.camera.statusUnknown')}` });
+    return field(key, h('div', { class: 'camera-source-controls' },
+      select<string>(source === 'video' ? 'video' : deviceOf(facing), options, id => { void choose(facing, id); }),
+      h('div', { class: 'camera-source-status', 'aria-label': t('android.camera.sourceStatus') },
+        badge(t('android.camera.detected'), isDetected), badge(t('android.camera.configured'), isConfigured), badge(t('android.camera.liveFrames'), isLive)),
+      h('div', { class: 'camera-quick-switches' }, obs, image, previous, next, video)));
   }
 
   function paintLenses(): void {
@@ -450,8 +639,12 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
   function paintStatus(): void {
     const lines: HTMLElement[] = [];
     if (!cameraTests.enabled) lines.push(line(false, t('android.camera.testingOff')));
+    if (selection.front === 'video' || selection.back === 'video') lines.push(line(false, t('android.camera.videoFileHint')));
     if (selection.frontDevice && selection.frontDevice === selection.backDevice) lines.push(line(true, t('android.camera.sharedWarning')));
-    const unlisted = [...new Set([selection.frontDevice, selection.backDevice].filter(id => id && !listed.some(camera => camera.name === id)))];
+    const unlisted = [...new Set([
+      selection.front === 'webcam' ? selection.frontDevice : '',
+      selection.back === 'webcam' ? selection.backDevice : '',
+    ].filter(id => id && !listed.some(camera => camera.name === id)))];
     if (loaded && unlisted.length) lines.push(line(true, t('android.camera.manualWarning', { endpoints: unlisted.join(', ') })));
     if (loadFailed) lines.push(line(true, t('android.camera.scanFailed')));
     else if (!loaded || checking) lines.push(line(false, t('android.camera.scanning')));
@@ -512,8 +705,8 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
       // A completed scan is authoritative: never keep saving a route the
       // emulator did not list. The user can start the provider and Refresh.
       if (loaded && listed.length === 0) {
-        if (selection.front !== 'emulated' && selection.frontDevice) setDevice('front', '');
-        if (selection.back !== 'emulated' && selection.backDevice) setDevice('back', '');
+        if (selection.front !== 'emulated' && selection.front !== 'video' && selection.frontDevice) setDevice('front', '');
+        if (selection.back !== 'emulated' && selection.back !== 'video' && selection.backDevice) setDevice('back', '');
       }
       // A camera that is gone, or renamed, loses its check.
       for (const [name, entry] of checks) {

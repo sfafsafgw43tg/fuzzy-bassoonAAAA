@@ -278,7 +278,7 @@ describe('vStudio Mobile inside the phones', () => {
     expect(studio).toContain("'octobrowser.cameraFront': values.front === 'none' ? 'none' : values.front === 'emulated' ? 'emulated' : 'webcam',");
     expect(studio).toContain("'octobrowser.cameraBack': values.back === 'none' ? 'none' : values.back === 'emulated' ? 'emulated' : 'webcam',");
     expect(studio).not.toContain("'hw.camera': cameraEnabled");
-    expect(studio).toContain("'hw.camera.back': values.back");
+    expect(studio).toContain("'hw.camera.back': persistedBack");
     // The guest is told a safe resolution: an unmeasured camera gets 640x480,
     // measured cameras are capped at HD, and no lens gets the default size.
     // Passing a host-reported 4K capability through to the guest made the stock
@@ -354,7 +354,7 @@ describe('vStudio Mobile inside the phones', () => {
   it('offers explicit manual endpoints, Off, and the stable Virtual scene source', () => {
     expect(page).toContain('androidMediaDialog({ name: machine.name');
     // Off is selectable and webcam0 remains configurable when enumeration fails.
-    expect(cameraUi).toContain("select<string>(deviceOf(facing), options, id => choose(facing, id))");
+    expect(cameraUi).toContain("select<string>(source === 'video' ? 'video' : deviceOf(facing), options");
     expect(cameraUi).toContain("t('android.camera.manualEndpoint', { endpoint: id })");
     expect(cameraUi).toContain("['emulated', t('android.camera.virtualScene')]");
     expect(cameraUi).toContain("source === 'emulated'");

@@ -60,7 +60,10 @@ class CameraStreamController(
     private var selectedCameraId: String? = null
 
     init {
-        previewView.implementationMode = PreviewView.ImplementationMode.PERFORMANCE
+        // TextureView/COMPATIBLE is more tolerant of emulator and virtual-camera
+        // surfaces than the hardware-only path, and mirrors the safe preview
+        // choice used by the reference CameraX scanner.
+        previewView.implementationMode = PreviewView.ImplementationMode.COMPATIBLE
         previewView.scaleType = PreviewView.ScaleType.FILL_CENTER
     }
 
@@ -108,6 +111,15 @@ class CameraStreamController(
     private fun bindSelectedCamera() {
         val currentProvider = provider ?: return
         val cameraId = selectedCameraId ?: return
+        val present = currentProvider.availableCameraInfos.any { info ->
+            runCatching { Camera2CameraInfo.from(info).cameraId == cameraId }.getOrDefault(false)
+        }
+        if (!present) {
+            Diagnostics.log("camera id $cameraId is no longer available; refusing to bind")
+            previewView.post { previewView.visibility = android.view.View.INVISIBLE }
+            return
+        }
+        previewView.visibility = android.view.View.VISIBLE
         val selector = CameraSelector.Builder()
             .addCameraFilter { infos ->
                 infos.filter { info ->
@@ -134,6 +146,7 @@ class CameraStreamController(
             Diagnostics.log("stream bound to $cameraId")
         } catch (error: Exception) {
             analysis.clearAnalyzer()
+            currentProvider.unbindAll()
             Diagnostics.log("stream bind failed for $cameraId: ${error.javaClass.simpleName}: ${error.message}")
         }
     }

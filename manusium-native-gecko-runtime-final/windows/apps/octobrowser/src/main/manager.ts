@@ -3131,6 +3131,64 @@ export class Manager {
     // repair that wires the device to one of them.
     handle('mgr:android-webcams', L, () => emulatorWebcams());
     handle('mgr:android-start-obs', L, () => startObsVirtualCamera());
+    handle('mgr:android-live-image', L, async (_e, input: { deviceName?: string; imagePath?: string; imagePaths?: string[]; activeIndex?: number; imageFit?: 'fill' | 'fit' | 'stretch' | 'blur'; playlistMode?: 'manual' | 'auto' | 'random'; playlistInterval?: number }) => {
+      const deviceName = String(input?.deviceName ?? '').trim();
+      if (!/^[A-Za-z0-9._-]{1,64}$/.test(deviceName)) throw new Error('Invalid Android device name');
+      const requested = (Array.isArray(input?.imagePaths) ? input.imagePaths : [input?.imagePath])
+        .map((value) => String(value ?? '').trim()).filter(Boolean);
+      if (requested.some((imagePath) => !path.isAbsolute(imagePath) || !fs.existsSync(imagePath))) throw new Error('One of the selected images does not exist');
+      if (requested.some((imagePath) => !/\.(jpg|jpeg|png|webp|bmp|tif|tiff)$/i.test(imagePath))) throw new Error('Choose JPG, PNG, WEBP, BMP, or TIFF images');
+      if (!mediaPluginActive('vstudio-mobile')) setMediaPluginEnabled('vstudio-mobile', true);
+      await ensureMediaCompanionAsync('vstudio-mobile');
+      stopMediaCompanion('vstudio-mobile');
+      const status = await mediaCompanionStatusAsync('vstudio-mobile');
+      if (!status.path) throw new Error('The vStudio Mobile companion is not installed');
+      const mediaDir = path.join(status.path, 'media');
+      const libraryDir = path.join(status.path, '.octo-live-images');
+      const playlistFile = path.join(libraryDir, 'playlist.json');
+      fs.mkdirSync(mediaDir, { recursive: true });
+      fs.mkdirSync(libraryDir, { recursive: true });
+      let playlist: string[] = [];
+      if (requested.length) {
+        for (const entry of fs.readdirSync(libraryDir)) {
+          if (/\.(jpg|jpeg|png|webp|bmp|tif|tiff)$/i.test(entry)) {
+            try { fs.rmSync(path.join(libraryDir, entry), { force: true }); } catch { /* replace what is removable */ }
+          }
+        }
+        playlist = requested.map((imagePath, index) => {
+          const ext = path.extname(imagePath).toLowerCase() || '.png';
+          const target = path.join(libraryDir, `image-${index}${ext}`);
+          fs.copyFileSync(imagePath, target);
+          return target;
+        });
+        fs.writeFileSync(playlistFile, JSON.stringify({ images: playlist.map((item) => path.basename(item)) }, null, 2) + '\n', { mode: 0o600 });
+      } else {
+        try {
+          const saved = JSON.parse(fs.readFileSync(playlistFile, 'utf8')) as { images?: unknown };
+          playlist = Array.isArray(saved.images) ? saved.images.filter((item): item is string => typeof item === 'string')
+            .map((item) => path.join(libraryDir, path.basename(item))).filter((item) => fs.existsSync(item)) : [];
+        } catch { playlist = []; }
+      }
+      if (!playlist.length) throw new Error('No live images are configured');
+      const activeIndex = ((Number(input?.activeIndex ?? 0) % playlist.length) + playlist.length) % playlist.length;
+      const imageFit = input?.imageFit === 'fit' || input?.imageFit === 'stretch' || input?.imageFit === 'blur' ? input.imageFit : 'fill';
+      const playlistMode = input?.playlistMode === 'auto' || input?.playlistMode === 'random' ? input.playlistMode : 'manual';
+      const playlistInterval = Math.max(0.5, Math.min(3600, Number(input?.playlistInterval ?? 6) || 6));
+      for (const entry of fs.readdirSync(mediaDir)) {
+        if (/\.(jpg|jpeg|png|webp|bmp|tif|tiff|mp4|avi|mkv|mov|webm|m4v|3gp)$/i.test(entry)) {
+          try { fs.rmSync(path.join(mediaDir, entry), { force: true }); } catch { /* replace what is removable */ }
+        }
+      }
+      const filesToPublish = playlistMode === 'manual' ? [playlist[activeIndex]] : playlist;
+      filesToPublish.forEach((source, index) => {
+        fs.copyFileSync(source, path.join(mediaDir, `octo-live-image-${index}${path.extname(source).toLowerCase()}`));
+      });
+      configureMediaCompanion({ deviceName, mediaFolder: mediaDir, imageFit, playlistMode, playlistInterval, autoBroadcast: true });
+      const request = requestMediaCompanionBroadcast('vstudio-mobile', true);
+      const started = startMediaCompanion('vstudio-mobile');
+      await waitForMediaCompanionCamera('vstudio-mobile', request);
+      return { ok: true, started: started.started, index: activeIndex, total: playlist.length, mode: playlistMode, interval: playlistInterval, fit: imageFit, message: `Live image ${activeIndex + 1} of ${playlist.length} is broadcasting through ${started.message}` };
+    });
     handle('mgr:android-camera-choices', L, () => androidCameraChoicesCached());
     handle('mgr:android-media-check', L, (_e, name: string) => androidMediaCheck(String(name ?? '')));
     handle('mgr:android-media-repair', L, (_e, name: string, input: { cameraDevice?: string; start?: boolean }) =>
@@ -3652,6 +3710,29 @@ export class Manager {
         filters: extensions.length ? [{ name: extensions.join(', ').toUpperCase(), extensions }] : [],
       });
       return r.canceled || !r.filePaths[0] ? null : r.filePaths[0];
+    });
+    handle('mgr:pick-images', L, async (e, input: { extensions?: string[] }) => {
+      const win = BrowserWindow.fromWebContents(e.sender);
+      const extensions = (input?.extensions ?? []).map((value) => String(value).replace(/[^a-z0-9]/gi, '').slice(0, 8)).filter(Boolean);
+      const r = await dialog.showOpenDialog(win!, {
+        properties: ['openFile', 'multiSelections'],
+        filters: extensions.length ? [{ name: extensions.join(', ').toUpperCase(), extensions }] : [],
+      });
+      return r.canceled ? [] : r.filePaths;
+    });
+    handle('mgr:read-image-preview', L, (_e, imagePath: string) => {
+      const file = String(imagePath ?? '').trim();
+      if (!path.isAbsolute(file) || !fs.existsSync(file) || !/\.(jpg|jpeg|png|webp|bmp|tif|tiff)$/i.test(file)) return null;
+      const stat = fs.statSync(file);
+      if (!stat.isFile() || stat.size > 12 * 1024 * 1024) return null;
+      const mime = /\.png$/i.test(file) ? 'image/png' : /\.webp$/i.test(file) ? 'image/webp' : 'image/jpeg';
+      return `data:${mime};base64,${fs.readFileSync(file).toString('base64')}`;
+    });
+    handle('mgr:validate-camera-video', L, (_e, videoPath: string) => {
+      const file = String(videoPath ?? '').trim();
+      if (!path.isAbsolute(file) || !/\.(mp4|mkv|avi|mov)$/i.test(file) || !fs.existsSync(file)) return { detected: false };
+      try { return { detected: fs.statSync(file).isFile() && fs.statSync(file).size > 0 }; }
+      catch { return { detected: false }; }
     });
     /**
      * Move the whole data folder to another base directory. The data is COPIED
