@@ -45,7 +45,7 @@ export type { AndroidDeviceProfile, AndroidHardwareChoice, AndroidSystemImage, A
  * configured manually even when enumeration fails; that is not proof of capture.
  * The emulator's test pattern/virtual scene is never substituted for a camera.
  */
-export type CameraSource = 'none' | 'webcam' | 'emulated' | 'video';
+export type CameraSource = 'none' | 'webcam' | 'emulated' | 'image' | 'video';
 
 /** The picture size the umbrella keys advertise when no lens is on. */
 const DEFAULT_CAMERA_LIMIT = { width: 1920, height: 1080 };
@@ -1679,6 +1679,7 @@ function cameraValue(source: CameraSource | string, webcam = ''): string {
   // depend on Windows/DirectShow enumeration. Host endpoints still require an
   // explicitly validated webcamN name; stale endpoints never become webcam0.
   if (source === 'emulated' || source === 'virtualscene') return 'emulated';
+  if (source === 'image' && path.isAbsolute(webcam) && fs.existsSync(webcam) && /\.(png|jpe?g)$/i.test(webcam)) return `imagefile:${webcam}`;
   if (source === 'video' && path.isAbsolute(webcam) && fs.existsSync(webcam) && /\.(mp4|mkv|avi|mov)$/i.test(webcam)) return `videofile:${webcam}`;
   return source === 'webcam' && WEBCAM.test(webcam) ? webcam : 'none';
 }
@@ -1687,6 +1688,7 @@ function cameraValue(source: CameraSource | string, webcam = ''): string {
 export function normalizeCameraSource(saved?: string): CameraSource {
   if (saved === 'none') return 'none';
   if (saved === 'emulated' || saved === 'virtualscene') return 'emulated';
+  if (saved === 'image') return 'image';
   if (saved === 'video') return 'video';
   return 'webcam';
 }
@@ -2133,21 +2135,23 @@ export function resolveActiveCameraAssignments(
 ): ActiveCameraAssignments {
   const normalizedFront = normalizeCameraSource(String(front));
   const normalizedBack = normalizeCameraSource(String(back));
-  if (normalizedFront === 'video' || normalizedBack === 'video') {
+  if (normalizedFront === 'image' || normalizedBack === 'image' || normalizedFront === 'video' || normalizedBack === 'video') {
+    const frontFile = normalizedFront === 'image' || normalizedFront === 'video';
+    const backFile = normalizedBack === 'image' || normalizedBack === 'video';
     const resolved = resolveActiveCameraAssignments(
-      normalizedFront === 'video' ? 'none' : normalizedFront,
-      normalizedBack === 'video' ? 'none' : normalizedBack,
-      normalizedFront === 'video' ? '' : frontDevice,
-      normalizedBack === 'video' ? '' : backDevice,
+      frontFile ? 'none' : normalizedFront,
+      backFile ? 'none' : normalizedBack,
+      frontFile ? '' : frontDevice,
+      backFile ? '' : backDevice,
       webcams,
       _preferred,
       legacyDevice,
     );
     return {
-      front: normalizedFront === 'video' ? 'video' : resolved.front,
-      back: normalizedBack === 'video' ? 'video' : resolved.back,
-      frontDevice: normalizedFront === 'video' ? frontDevice : resolved.frontDevice,
-      backDevice: normalizedBack === 'video' ? backDevice : resolved.backDevice,
+      front: frontFile ? normalizedFront : resolved.front,
+      back: backFile ? normalizedBack : resolved.back,
+      frontDevice: frontFile ? frontDevice : resolved.frontDevice,
+      backDevice: backFile ? backDevice : resolved.backDevice,
       warning: resolved.warning,
     };
   }
@@ -2243,10 +2247,10 @@ export function mediaConfig(
   limits: { front?: CameraResolution; back?: CameraResolution } = {},
 ): Record<string, string> {
   const values = emulatorCameraValues(front, back, frontWebcam, backWebcam);
-  // videofile: is a launch-only override; config.ini accepts emulated/webcam/none,
+  // imagefile:/videofile: are launch-only overrides; config.ini accepts emulated/webcam/none,
   // so persist Off and let the command-line launch carry the validated file path.
-  const persistedFront = values.front.startsWith('videofile:') ? 'none' : values.front;
-  const persistedBack = values.back.startsWith('videofile:') ? 'none' : values.back;
+  const persistedFront = values.front.startsWith('imagefile:') || values.front.startsWith('videofile:') ? 'none' : values.front;
+  const persistedBack = values.back.startsWith('imagefile:') || values.back.startsWith('videofile:') ? 'none' : values.back;
   const cameraEnabled = values.front !== 'none' || values.back !== 'none';
   const actualFrontDevice = values.front.startsWith('webcam') ? values.front : '';
   const actualBackDevice = values.back.startsWith('webcam') ? values.back : '';
