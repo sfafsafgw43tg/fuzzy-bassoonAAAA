@@ -245,8 +245,8 @@ export function checkHostCamera(camera: EmulatorCamera): Promise<CameraCheck> {
 
 export function cameraPicker(options: CameraPickerOptions): CameraPicker {
   const selection: CameraSelection = {
-    front: options.initial.front === 'none' ? 'none' : options.initial.front === 'emulated' ? 'emulated' : options.initial.front === 'video' ? 'video' : 'webcam',
-    back: options.initial.back === 'none' ? 'none' : options.initial.back === 'emulated' ? 'emulated' : options.initial.back === 'video' ? 'video' : 'webcam',
+    front: options.initial.front === 'none' ? 'none' : options.initial.front === 'emulated' ? 'emulated' : options.initial.front === 'image' ? 'image' : options.initial.front === 'video' ? 'video' : 'webcam',
+    back: options.initial.back === 'none' ? 'none' : options.initial.back === 'emulated' ? 'emulated' : options.initial.back === 'image' ? 'image' : options.initial.back === 'video' ? 'video' : 'webcam',
     frontDevice: options.initial.front === 'none' || options.initial.front === 'emulated' ? '' : options.initial.frontDevice ?? '',
     backDevice: options.initial.back === 'none' || options.initial.back === 'emulated' ? '' : options.initial.backDevice ?? '',
     frontLimit: options.initial.frontLimit,
@@ -268,6 +268,9 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
   let scanning = false;
   let attached = false;
   let disposed = false;
+  const videoSettings = new Map<CameraFacing, { loop: boolean; speed: number }>([
+    ['front', { loop: true, speed: 1 }], ['back', { loop: true, speed: 1 }],
+  ]);
   let problem: CameraProblem = '';
   let detail = '';
   let windowsCount = 0;
@@ -508,6 +511,18 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
     setSource(facing, 'video', file);
     paintLenses(); paintStatus(); emit();
   }
+  async function prepareVideo(facing: CameraFacing): Promise<void> {
+    const source = facing === 'front' ? selection.frontDevice : selection.backDevice;
+    if (!source || (facing === 'front' ? selection.front : selection.back) !== 'video') return;
+    const settings = videoSettings.get(facing) ?? { loop: true, speed: 1 };
+    const result = await api.invoke<{ ok: boolean; path: string; message: string }>('mgr:prepare-camera-video', {
+      path: source, loop: settings.loop, speed: settings.speed,
+    }).catch((error: unknown) => ({ ok: false, path: source, message: errText(error) }));
+    toast(result.message, result.ok ? 'ok' : 'info');
+    if (!result.ok) return;
+    setSource(facing, 'video', result.path);
+    paintLenses(); paintStatus(); emit();
+  }
   async function pickImage(facing: CameraFacing): Promise<void> {
     stopPreview();
     const file = await api.invoke<string | null>('mgr:pick-file', { extensions: ['png', 'jpg', 'jpeg'] }).catch(() => null);
@@ -625,6 +640,14 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
     video.onclick = () => { void pickVideo(facing); };
     const photo = h('button', { type: 'button', class: 'btn small camera-quick-switch', text: t('android.camera.choosePhoto') }) as HTMLButtonElement;
     photo.onclick = () => { photo.disabled = true; void pickImage(facing).finally(() => { photo.disabled = false; }); };
+    const videoSettingsPanel = h('div', { class: 'camera-video-settings' });
+    if (source === 'video') {
+      const settings = videoSettings.get(facing) ?? { loop: true, speed: 1 };
+      const loop = h('input', { type: 'checkbox', checked: settings.loop ? 'true' : undefined }) as HTMLInputElement;
+      loop.onchange = () => { settings.loop = loop.checked; videoSettings.set(facing, settings); void prepareVideo(facing); };
+      const speed = select<string>(String(settings.speed), [['0.25', '0.25×'], ['0.5', '0.5×'], ['0.75', '0.75×'], ['1', '1×'], ['1.25', '1.25×'], ['1.5', '1.5×'], ['2', '2×']], value => { settings.speed = Number(value) || 1; videoSettings.set(facing, settings); void prepareVideo(facing); });
+      videoSettingsPanel.append(field('Loop video (3 cycles)', loop), field('Playback speed', speed));
+    }
     const currentDevice = deviceOf(facing);
     const currentCamera = currentDevice ? listed.find(camera => camera.name === currentDevice) : undefined;
     const currentCheck = currentCamera ? checkOf(currentCamera) : undefined;
@@ -636,7 +659,7 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
       select<string>(source === 'video' ? 'video' : source === 'image' ? 'image' : '', options, id => { void choose(facing, id); }),
       h('div', { class: 'camera-source-status', 'aria-label': t('android.camera.sourceStatus') },
         badge(t('android.camera.detected'), isDetected), badge(t('android.camera.configured'), isConfigured), badge(t('android.camera.liveFrames'), isLive)),
-      h('div', { class: 'camera-quick-switches' }, photo, video)));
+      h('div', { class: 'camera-quick-switches' }, photo, video), videoSettingsPanel));
   }
 
   function paintLenses(): void {

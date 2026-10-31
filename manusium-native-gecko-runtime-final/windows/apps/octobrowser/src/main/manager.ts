@@ -3757,6 +3757,29 @@ export class Manager {
       try { return { detected: fs.statSync(file).isFile() && fs.statSync(file).size > 0 }; }
       catch { return { detected: false }; }
     });
+    handle('mgr:prepare-camera-video', L, async (_e, input: { path?: string; loop?: boolean; speed?: number }) => {
+      const source = String(input?.path ?? '').trim();
+      const speed = Math.max(0.25, Math.min(2, Number(input?.speed) || 1));
+      const loop = input?.loop === true;
+      if (!path.isAbsolute(source) || !/\.(mp4|mkv|avi|mov)$/i.test(source) || !fs.existsSync(source)) {
+        return { ok: false, path: source, message: 'The selected video file is not available.' };
+      }
+      if (!loop && speed === 1) return { ok: true, path: source, message: 'Original video selected.' };
+      const cache = path.join(os.tmpdir(), 'octosuite-camera-video');
+      await fsp.mkdir(cache, { recursive: true });
+      const output = path.join(cache, `camera-${Date.now()}-${Math.random().toString(36).slice(2)}.mp4`);
+      const args = ['-y', '-hide_banner', '-loglevel', 'error'];
+      if (loop) args.push('-stream_loop', '2');
+      args.push('-i', source, '-an', '-vf', `setpts=PTS/${speed}`, '-c:v', 'libx264', '-preset', 'veryfast', '-pix_fmt', 'yuv420p', '-movflags', '+faststart', output);
+      try {
+        await new Promise<void>((resolve, reject) => {
+          execFile('ffmpeg', args, { windowsHide: true, timeout: 120_000 }, (error) => error ? reject(error) : resolve());
+        });
+        return { ok: true, path: output, message: `Video prepared (${loop ? 'loop enabled' : 'single pass'}, ${speed}x).` };
+      } catch (error) {
+        return { ok: false, path: source, message: error instanceof Error ? `FFmpeg could not prepare the video: ${error.message}` : 'FFmpeg could not prepare the video.' };
+      }
+    });
     /**
      * Move the whole data folder to another base directory. The data is COPIED
      * first (never moved out from under a running process), the bootstrap file
