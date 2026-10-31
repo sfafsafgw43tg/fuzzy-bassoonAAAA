@@ -1972,7 +1972,7 @@ export async function startLensioVirtualCamera(): Promise<ObsVirtualCameraStartR
   const started = Date.now();
   while (Date.now() - started < 15_000) {
     windowsNamesCache = null;
-    const camera = (await windowsCameraNames()).find((item) => /lensio|apexcam|virtual camera/i.test(item.friendlyName));
+    const camera = (await windowsCameraNames()).find((item) => /lensio|apexcam/i.test(item.friendlyName));
     if (camera) return { ok: true, message: 'Lensio virtual camera is ready. Refresh the Android camera list.', cameraName: camera.friendlyName };
     await new Promise((resolve) => setTimeout(resolve, 500));
   }
@@ -4727,7 +4727,7 @@ export async function installLensioCamOnAndroid(name: string): Promise<{ install
   if (!serial || !adb) return { installed: false, launched: false, reason: 'The Android device did not become ADB-ready for LensioCam.' };
   const output = await adbRun(adb, ['-s', serial, 'install', '-r', apk], 120_000)
     .catch((error: unknown) => error instanceof Error ? error.message : String(error));
-  if (!/^Success\b/im.test(String(output)) && !/INSTALL_FAILED_UPDATE_INCOMPATIBLE/i.test(String(output))) {
+  if (!/^Success\b/im.test(String(output))) {
     return { installed: false, launched: false, reason: `LensioCam.apk could not be installed: ${String(output).trim().slice(-500)}` };
   }
   const launch = await adbRun(adb, ['-s', serial, 'shell', 'monkey', '-p', 'com.apexcam', '1'], 30_000)
