@@ -1,0 +1,37 @@
+services:
+  build-api:
+    build:
+      context: ../..
+      dockerfile: services/android-build/Dockerfile
+    command: ["node", "services/android-build/dist/services/android-build/src/api.js"]
+    environment:
+      OCTO_BUILD_API_TOKENS: ${OCTO_BUILD_API_TOKENS:?Set a development token in .env}
+      OCTO_BUILD_WORKER_TOKEN: ${OCTO_BUILD_WORKER_TOKEN:?Set a worker token in .env}
+      OCTO_BUILD_STORE_PATH: /var/lib/octo-build/android-build-platform.json
+      OCTO_BUILD_ARTIFACT_ROOT: /var/lib/octo-build/artifacts
+    ports:
+      - "127.0.0.1:8787:8787"
+    volumes:
+      - build-state:/var/lib/octo-build
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:8787/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 3s
+      retries: 6
+  build-worker:
+    build:
+      context: ../..
+      dockerfile: services/android-build/Dockerfile
+    command: ["node", "services/android-build/dist/services/android-build/src/worker-daemon.js"]
+    environment:
+      OCTO_BUILD_STORE_PATH: /var/lib/octo-build/android-build-platform.json
+      OCTO_BUILD_WORK_ROOT: /var/lib/octo-build/work
+      OCTO_BUILD_ARTIFACT_ROOT: /var/lib/octo-build/artifacts
+      OCTO_BUILD_WORKER_ID: local-worker
+    volumes:
+      - build-state:/var/lib/octo-build
+    depends_on:
+      build-api:
+        condition: service_healthy
+volumes:
+  build-state:

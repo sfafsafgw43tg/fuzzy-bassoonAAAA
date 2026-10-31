@@ -1,0 +1,308 @@
+name: Windows Chromium Release Build
+
+on:
+  workflow_dispatch:
+  push:
+    branches: ['arena/c10966b9-fuzzy-bassoonaaaa']
+    paths:
+      - '.github/workflows/windows-chromium-release.yml'
+      - 'windows/**'
+      - 'windows/package-lock.json'
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+concurrency:
+  group: windows-chromium-release-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows-chromium:
+    # The source checkout/build needs a fixed large disk and the runner's
+    # installed Visual Studio Build Tools. Users never run this job.
+    runs-on: [self-hosted, windows, x64, inkbrowser-chromium]
+    timeout-minutes: 600
+    defaults:
+      run:
+        working-directory: windows
+    env:
+      CI: 'true'
+      DEPOT_TOOLS_UPDATE: '0'
+      DEPOT_TOOLS_WIN_TOOLCHAIN: '0'
+      CSC_IDENTITY_AUTO_DISCOVERY: 'false'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: windows/package-lock.json
+
+      - name: Initialize build logs
+        shell: pwsh
+        run: New-Item -ItemType Directory -Force -Path ci-logs | Out-Null
+
+      - name: Install project dependencies
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          npm ci 2>&1 | Tee-Object -FilePath ci-logs/npm-ci.log
+          if ($LASTEXITCODE -ne 0) { throw "npm ci failed with exit code $LASTEXITCODE" }
+
+      - name: Typecheck and unit tests
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          npm run typecheck 2>&1 | Tee-Object -FilePath ci-logs/typecheck.log
+          if ($LASTEXITCODE -ne 0) { throw "typecheck failed with exit code $LASTEXITCODE" }
+          npm test 2>&1 | Tee-Object -FilePath ci-logs/unit-tests.log
+          if ($LASTEXITCODE -ne 0) { throw "unit tests failed with exit code $LASTEXITCODE" }
+
+      - name: Installer contract tests (PowerShell)
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not (Get-Module -ListAvailable Pester | Where-Object { $_.Version -ge [version]'5.3.0' })) {
+            Install-Module Pester -MinimumVersion 5.3.0 -Force -Scope CurrentUser
+          }
+          Import-Module Pester -MinimumVersion 5.3.0
+          Invoke-Pester -Path scripts/tests/installer-runtime.Tests.ps1 -CI -Output Detailed
+          if ($LASTEXITCODE -ne 0) { throw 'Installer contract tests failed' }
+
+      - name: Bootstrap depot_tools
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $depot = Join-Path $env:RUNNER_TEMP 'inkbrowser-depot_tools'
+          if (-not (Test-Path (Join-Path $depot 'fetch.bat'))) {
+            Remove-Item -LiteralPath $depot -Recurse -Force -ErrorAction SilentlyContinue
+            git clone --depth 1 https://chromium.googlesource.com/chromium/tools/depot_tools.git $depot
+          }
+          if (-not (Test-Path (Join-Path $depot 'fetch.bat'))) { throw "depot_tools bootstrap failed: $depot" }
+          Add-Content $env:GITHUB_PATH $depot
+          if (-not $env:OCTO_CHROMIUM_SOURCE) { throw 'OCTO_CHROMIUM_SOURCE must point to a fixed drive with at least 300 GB free.' }
+
+      - name: Verify Windows Chromium prerequisites
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $sourceRoot = [System.IO.Path]::GetFullPath($env:OCTO_CHROMIUM_SOURCE)
+          $driveName = [System.IO.Path]::GetPathRoot($sourceRoot).TrimEnd('\').TrimEnd(':')
+          $free = (Get-PSDrive -Name $driveName).Free
+          if ($free -lt 300GB) { throw "Chromium source drive has only $([math]::Round($free / 1GB, 1)) GB free; at least 300 GB is required." }
+          foreach ($tool in @('git', 'fetch', 'gclient', 'gn', 'autoninja')) {
+            if (-not (Get-Command $tool -ErrorAction SilentlyContinue)) { throw "$tool is not available on PATH." }
+          }
+          $vswhere = Join-Path ${env:ProgramFiles(x86)} 'Microsoft Visual Studio\Installer\vswhere.exe'
+          if (-not (Test-Path $vswhere)) { throw "vswhere.exe is missing: $vswhere" }
+          $vs = & $vswhere -latest -products * -version '[18.0,19.0)' -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 Microsoft.VisualStudio.Component.VC.ATLMFC -property installationPath
+          if (-not $vs) { throw 'Visual Studio 2026 (18+) with MSVC x64/x86 and ATL/MFC is required by both pinned Chromium revisions.' }
+          $sdkRoot = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\bin'
+          if (-not (Test-Path $sdkRoot)) { throw "Windows SDK bin directory is missing under $($vs | Select-Object -First 1)" }
+          # The SDK installer patch is 10.0.28000.2270; directory version is .0.
+          $kitsRoot = Split-Path $sdkRoot
+          foreach ($part in @('Include', 'Lib', 'bin')) {
+            if (-not (Test-Path (Join-Path $kitsRoot "$part\10.0.28000.0"))) { throw 'Windows 11 SDK 10.0.28000.2270 is required (10.0.28000.0 directory layout).' }
+          }
+          $dbghelp = Join-Path $kitsRoot 'Debuggers\x64\dbghelp.dll'
+          if (-not (Test-Path $dbghelp)) { throw 'Windows SDK x64 Debugging Tools are missing.' }
+          $debugVersion = [regex]::Match((Get-Item $dbghelp).VersionInfo.FileVersion, '\d+\.\d+\.\d+\.\d+').Value
+          if (-not $debugVersion -or [version]$debugVersion -lt [version]'10.0.26100.3323') { throw 'SDK Debugging Tools 10.0.26100.3323 or newer are required.' }
+          Write-Host "Chromium source root: $sourceRoot"
+          Write-Host "Chromium source drive free space: $([math]::Round($free / 1GB, 1)) GB"
+
+      - name: Generate branding assets
+        shell: pwsh
+        run: |
+          npm run icons
+          if ($LASTEXITCODE -ne 0) { throw 'Icon generation failed' }
+
+      - name: Validate native Chromium patch bundle
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          npm run check:chromium-patches 2>&1 | Tee-Object -FilePath ci-logs/chromium-patches.log
+          if ($LASTEXITCODE -ne 0) { throw "Chromium patch bundle validation failed with exit code $LASTEXITCODE" }
+
+      - name: Build Chromium source runtime
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          npm run build:chromium:windows 2>&1 | Tee-Object -FilePath ci-logs/chromium-build.log
+          if ($LASTEXITCODE -ne 0) { throw "npm run build:chromium:windows failed with exit code $LASTEXITCODE" }
+
+      - name: Verify source-built Chromium
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          npm run verify:chromium:windows 2>&1 | Tee-Object -FilePath ci-logs/chromium-staged-verify.log
+          if ($LASTEXITCODE -ne 0) { throw "npm run verify:chromium:windows failed with exit code $LASTEXITCODE" }
+
+      - name: Build browser distribution
+        shell: pwsh
+        env:
+          CSC_LINK: ${{ secrets.CSC_LINK }}
+          CSC_KEY_PASSWORD: ${{ secrets.CSC_KEY_PASSWORD }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          npm run dist:browser 2>&1 | Tee-Object -FilePath ci-logs/dist-browser.log
+          if ($LASTEXITCODE -ne 0) { throw "npm run dist:browser failed with exit code $LASTEXITCODE" }
+
+      - name: Verify packaged Chromium and run native packaged test
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          npm run verify:chromium:packaged 2>&1 | Tee-Object -FilePath ci-logs/chromium-packaged-verify.log
+          if ($LASTEXITCODE -ne 0) { throw "npm run verify:chromium:packaged failed with exit code $LASTEXITCODE" }
+          npm run test:native-packaged:windows 2>&1 | Tee-Object -FilePath ci-logs/chromium-native-test.log
+          if ($LASTEXITCODE -ne 0) { throw "npm run test:native-packaged:windows failed with exit code $LASTEXITCODE" }
+
+      - name: Build OctoDetect installer companion
+        shell: pwsh
+        run: |
+          npm run dist:detect
+          if ($LASTEXITCODE -ne 0) { throw 'OctoDetect packaging failed' }
+
+      - name: Verify branded Windows executables
+        shell: pwsh
+        run: |
+          npm run verify:windows:branding
+          if ($LASTEXITCODE -ne 0) { throw 'Octo Windows executable branding failed verification' }
+
+      - name: Check Electron fuses
+        shell: pwsh
+        run: |
+          node tools/check-fuses.mjs 2>&1 | Tee-Object -FilePath ci-logs/fuses.log
+          if ($LASTEXITCODE -ne 0) { throw "fuse check failed with exit code $LASTEXITCODE" }
+
+      - name: Install Inno Setup 6
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { choco install innosetup --no-progress -y }
+          if (-not (Test-Path "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe")) { throw 'ISCC.exe was not found after Inno Setup installation.' }
+
+      - name: Build installer
+        shell: pwsh
+        env:
+          OCTO_SIGNTOOL: ${{ secrets.OCTO_SIGNTOOL }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          npm run installer 2>&1 | Tee-Object -FilePath ci-logs/installer-build.log
+          if ($LASTEXITCODE -ne 0) { throw "npm run installer failed with exit code $LASTEXITCODE" }
+
+      - name: Archive verified Chromium runtime for clean-install testing
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = (Get-Content tools/chromium-versions.json -Raw | ConvertFrom-Json | Select-Object -First 1)
+          $archive = Join-Path (Join-Path $PWD 'release') "InkBrowser-Chromium-win32-x64-$version.zip"
+          Compress-Archive -Path "resources/engines/chromium/$version" -DestinationPath $archive -Force
+          $hash = (Get-FileHash -Algorithm SHA256 -LiteralPath $archive).Hash.ToLowerInvariant()
+          "$hash  $(Split-Path $archive -Leaf)" | Set-Content -LiteralPath "$archive.sha256" -Encoding ASCII
+          Write-Host "Created $archive ($hash)"
+
+      - name: Sign update manifest and hash release
+        shell: pwsh
+        env:
+          UPDATE_SIGNING_KEY: ${{ secrets.UPDATE_SIGNING_KEY }}
+          OCTO_KEY_PASSPHRASE: ${{ secrets.UPDATE_KEY_PASSPHRASE }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          if (-not $env:UPDATE_SIGNING_KEY) { throw 'UPDATE_SIGNING_KEY is required for the release installer verification.' }
+          $key = Join-Path $env:RUNNER_TEMP 'inkbrowser-update-key.pem'
+          try {
+            [IO.File]::WriteAllText($key, $env:UPDATE_SIGNING_KEY)
+            $env:OCTO_UPDATE_PRIVATE_KEY = $key
+            npm run sign-manifest -- --notes-en "Source-built InkBrowser runtimes and Octo branding" --notes-pl "Wersje InkBrowser ze źródeł i identyfikacja Octo"
+            if ($LASTEXITCODE -ne 0) { throw 'Manifest signing failed' }
+            npm run hashes
+            if ($LASTEXITCODE -ne 0) { throw 'Release hashing failed' }
+          } finally { Remove-Item -LiteralPath $key -Force -ErrorAction SilentlyContinue }
+
+      - name: Upload build logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: InkBrowser-Windows-logs-${{ github.run_number }}
+          if-no-files-found: warn
+          retention-days: 14
+          path: windows/ci-logs/**
+
+      - name: Upload UNVERIFIED candidate for clean-machine testing
+        uses: actions/upload-artifact@v4
+        with:
+          name: InkBrowser-Windows-CANDIDATE-${{ github.run_number }}
+          if-no-files-found: error
+          retention-days: 14
+          path: |
+            windows/release/OctoSuite-Setup-*.exe
+            windows/release/octobrowser/win-unpacked/resources/engines/chromium/*/runtime.json
+            windows/release/InkBrowser-Chromium-win32-x64-*.zip
+            windows/release/InkBrowser-Chromium-win32-x64-*.zip.sha256
+            windows/release/octobrowser/*.zip
+            windows/release/latest.json*
+            windows/release/SHA256SUMS.txt
+
+  clean-install:
+    needs: windows-chromium
+    # A disposable machine, NOT the source builder and its cached installations.
+    runs-on: windows-latest
+    timeout-minutes: 30
+    defaults:
+      run:
+        working-directory: windows
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - uses: actions/download-artifact@v4
+        with:
+          name: InkBrowser-Windows-CANDIDATE-${{ github.run_number }}
+          path: windows/release
+      - name: Install test harness only (no browser downloads)
+        run: npm ci --ignore-scripts --include=optional --no-audit --no-fund
+      - name: Clean install and execute installed InkBrowser versions
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          New-Item -ItemType Directory -Force ci-logs | Out-Null
+          ./tools/ci/installer-e2e.ps1 2>&1 | Tee-Object ci-logs/clean-installer-e2e.log
+          if ($LASTEXITCODE -ne 0) { throw 'Clean installed-runtime test failed' }
+      - name: Upload clean-machine evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: InkBrowser-Windows-clean-install-logs-${{ github.run_number }}
+          path: windows/ci-logs/**
+          if-no-files-found: warn
+      - name: Upload tested release only after clean-install success
+        uses: actions/upload-artifact@v4
+        with:
+          name: InkBrowser-Windows-installer-${{ github.run_number }}
+          if-no-files-found: error
+          path: |
+            windows/release/OctoSuite-Setup-*.exe
+            windows/release/octobrowser/*.zip
+            windows/release/InkBrowser-Chromium-win32-x64-*.zip
+            windows/release/InkBrowser-Chromium-win32-x64-*.zip.sha256
+            windows/release/latest.json*
+            windows/release/SHA256SUMS.txt
+
+      - name: Publish verified runtime release asset
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $version = (Get-Content tools/chromium-versions.json -Raw | ConvertFrom-Json | Select-Object -First 1)
+          $archive = Get-ChildItem "release/InkBrowser-Chromium-win32-x64-$version.zip" | Select-Object -First 1
+          $checksum = Get-ChildItem "release/InkBrowser-Chromium-win32-x64-$version.zip.sha256" | Select-Object -First 1
+          if (-not $archive -or -not $checksum) { throw 'Verified Chromium runtime archive is missing after clean-install testing.' }
+          gh release create $env:GITHUB_REF_NAME $archive.FullName $checksum.FullName --repo $env:GITHUB_REPOSITORY --title "InkBrowser $env:GITHUB_REF_NAME" --generate-notes

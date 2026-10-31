@@ -1,0 +1,8 @@
+[
+  {
+    "id": 1,
+    "priority": 1,
+    "action": { "type": "redirect", "redirect": { "transform": { "queryTransform": { "removeParams": ["utm_source", "utm_medium", "utm_campaign", "utm_term", "utm_content", "gclid", "fbclid", "mc_cid", "mc_eid"] } } } },
+    "condition": { "urlFilter": "|http", "resourceTypes": ["main_frame"] }
+  }
+]

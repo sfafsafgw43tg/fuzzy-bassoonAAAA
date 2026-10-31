@@ -1,0 +1,9 @@
+{
+  "name": "octocompact",
+  "version": "0.2.3",
+  "private": true,
+  "description": "A compact, single-engine Octo desktop browser",
+  "author": "OctoSuite contributors",
+  "license": "MPL-2.0",
+  "main": "dist/main.js"
+}
