@@ -1,5 +1,5 @@
-/** Shared AVD camera controls. Explicit endpoints are allowed even if enumeration
- * fails. Host capture testing is opt-in and can be stopped for Android-only use.
+/** Shared AVD camera controls. A route is offered only after the emulator lists
+ * it. Host capture testing is opt-in and can be stopped for Android-only use.
  * A configured endpoint is never labelled a verified camera without a live test.
  */
 import { api } from '@octo/shell/renderer/bridge';
@@ -336,6 +336,7 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
   hostToggle.onchange = () => cameraTests.setEnabled(hostToggle.checked);
   const both = h('button', { type: 'button', class: 'btn small', text: t('android.camera.useWebcam0Both') });
   both.onclick = () => {
+    if (!listed.some((camera) => camera.name === 'webcam0')) return;
     cameraTests.setEnabled(false);
     setDevice('front', 'webcam0'); setDevice('back', 'webcam0');
     paintLenses(); paintStatus(); emit();
@@ -416,7 +417,10 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
 
   function lensField(facing: CameraFacing): HTMLElement {
     const key = facing === 'front' ? 'android.cameraFront' : 'android.cameraBack';
-    const ids = [...new Set(['webcam0', ...listed.map(camera => camera.name), deviceOf(facing)].filter(id => /^webcam\d+$/.test(id)))];
+    // Do not invent webcam0 when the emulator returned an empty list. Keep a
+    // currently selected endpoint visible only long enough for scan() to clear
+    // it after a completed discovery pass.
+    const ids = [...new Set([...listed.map(camera => camera.name), deviceOf(facing)].filter(id => /^webcam\d+$/.test(id)))];
     const options: Array<[string, string]> = [['', t('android.camera.off')], ['emulated', t('android.camera.virtualScene')], ...ids.map((id): [string, string] => {
       const camera = listed.find(item => item.name === id);
       return [id, camera ? `${id} — ${displayName(camera)}` : t('android.camera.manualEndpoint', { endpoint: id })];
@@ -425,6 +429,7 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
   }
 
   function paintLenses(): void {
+    both.disabled = !listed.some((camera) => camera.name === 'webcam0');
     backSlot.replaceChildren(lensField('back'));
     frontSlot.replaceChildren(lensField('front'));
   }
@@ -496,6 +501,12 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
       detail = next.detail ?? '';
       hostCameraCount = next.hostCameraCount ?? 0;
       windowsCount = await countWindowsCameras();
+      // A completed scan is authoritative: never keep saving a route the
+      // emulator did not list. The user can start the provider and Refresh.
+      if (loaded && listed.length === 0) {
+        if (selection.front !== 'emulated' && selection.frontDevice) setDevice('front', '');
+        if (selection.back !== 'emulated' && selection.backDevice) setDevice('back', '');
+      }
       // A camera that is gone, or renamed, loses its check.
       for (const [name, entry] of checks) {
         if (!listed.some((camera) => camera.name === name && keyOf(camera) === entry.key)) checks.delete(name);
