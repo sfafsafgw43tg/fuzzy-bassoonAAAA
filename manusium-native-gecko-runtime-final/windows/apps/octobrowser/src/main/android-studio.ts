@@ -74,10 +74,10 @@ export type BootMode = 'quick' | 'cold';
 export type NetworkSpeed = 'full' | 'lte' | 'umts' | 'edge' | 'gsm';
 /** Provider identity is metadata used to validate the host endpoint. The
  * emulator still receives only its enumerated webcamN endpoint. */
-export type AndroidCameraProvider = 'unity-capture' | 'obs' | 'directshow';
+export type AndroidCameraProvider = 'lensio' | 'unity-capture' | 'obs' | 'directshow';
 
 export function normalizeAndroidCameraProvider(value: unknown): AndroidCameraProvider {
-  return value === 'obs' || value === 'directshow' || value === 'unity-capture' ? value : 'unity-capture';
+  return value === 'lensio' || value === 'obs' || value === 'directshow' || value === 'unity-capture' ? value : 'unity-capture';
 }
 
 export function normalizeNetworkSpeed(value: unknown): NetworkSpeed {
@@ -4200,6 +4200,8 @@ export interface AndroidLaunchPrefs {
   apps: string[];
   /** User-selected APKs for catalogue entries without a stable official URL. */
   appFiles: Record<string, string>;
+  /** Lensio/ApexCam is installed after this profile's guest reaches ADB. */
+  cameraProvider?: AndroidCameraProvider;
 }
 
 function launchPrefsFile(): string {
@@ -4209,7 +4211,7 @@ function launchPrefsFile(): string {
 const DEFAULT_LAUNCH_PREFS: AndroidLaunchPrefs = {
   proxyId: '', cameraFront: 'webcam', cameraBack: 'webcam', cameraFrontDevice: '', cameraBackDevice: '', cameraDevice: '',
   microphoneEnabled: true, microphoneDevice: '', bootMode: 'quick', networkSpeed: 'lte', secondaryDisplay: 'none', locale: '', mediaFolder: '',
-  apps: [], appFiles: {},
+  apps: [], appFiles: {}, cameraProvider: undefined,
 };
 
 export function normalizeAndroidLaunchPrefs(value: Partial<AndroidLaunchPrefs> = {}): AndroidLaunchPrefs {
@@ -4229,6 +4231,7 @@ export function normalizeAndroidLaunchPrefs(value: Partial<AndroidLaunchPrefs> =
     cameraDevice: WEBCAM.test(String(merged.cameraDevice ?? '')) ? String(merged.cameraDevice) : '',
     apps: Array.isArray(merged.apps) ? [...merged.apps] : [],
     appFiles: merged.appFiles && typeof merged.appFiles === 'object' ? { ...merged.appFiles } : {},
+    cameraProvider: merged.cameraProvider ? normalizeAndroidCameraProvider(merged.cameraProvider) : undefined,
   };
 }
 
@@ -4706,12 +4709,23 @@ export function adbPath(): string {
 }
 
 function lensioCamApk(): string {
+  const bundled: string[] = [];
+  for (const root of [__dirname, process.resourcesPath, process.cwd()].filter(Boolean)) {
+    let current = path.resolve(String(root));
+    for (let i = 0; i < 8; i += 1) {
+      bundled.push(path.join(current, 'resources', 'lensio', 'LensioCam.apk'));
+      bundled.push(path.join(current, 'windows', 'resources', 'lensio', 'LensioCam.apk'));
+      const parent = path.dirname(current);
+      if (parent === current) break;
+      current = parent;
+    }
+  }
   const candidates = [
     process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'LensioStudio', 'LensioCam.apk') : '',
     path.join(os.homedir(), '.octobrowser', 'Lensio', 'LensioCam.apk'),
     path.join(os.homedir(), 'Downloads', 'LensioCam.apk'),
     path.resolve(process.cwd(), '.work', 'lensio-release-v2.9.5', 'LensioCam.apk'),
-    process.resourcesPath ? path.join(process.resourcesPath, 'lensio', 'LensioCam.apk') : '',
+  ...bundled,
   ].filter(Boolean);
   return candidates.find((candidate) => fs.existsSync(candidate)) ?? '';
 }

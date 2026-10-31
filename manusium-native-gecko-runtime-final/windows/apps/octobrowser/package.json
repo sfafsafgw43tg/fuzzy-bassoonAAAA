@@ -29,6 +29,10 @@
       {
         "from": "../../resources/addons",
         "to": "addons"
+      },
+      {
+        "from": "../../resources/lensio",
+        "to": "lensio"
       }
     ],
     "linux": {

@@ -2734,6 +2734,7 @@ export class Manager {
       // when the APK is missing, the device did not boot, or package-manager
       // verification failed.
       const lensioRequested = input?.cameraProvider === 'lensio'
+        || androidLaunchPrefs(String(input?.name ?? '')).cameraProvider === 'lensio'
         || selectedHostEndpoints.some((endpoint) => /lensio|apexcam/i.test(endpoint));
       let lensio: { windowsStarted: boolean; installed: boolean; launched: boolean; message: string } | undefined;
       if (lensioRequested) {
@@ -2751,6 +2752,7 @@ export class Manager {
       // A launch that worked is the setting the user wants next time.
       rememberAndroidLaunch(String(input?.name ?? ''), {
         proxyId, cameraFront: input?.cameraFront, cameraBack: input?.cameraBack,
+        cameraProvider: input?.cameraProvider,
         cameraFrontDevice: String(input?.cameraFrontDevice ?? ''), cameraBackDevice: String(input?.cameraBackDevice ?? ''),
         cameraDevice: String(input?.cameraDevice ?? ''), locale: String(input?.locale ?? ''),
         microphoneEnabled: input?.microphoneEnabled !== false, microphoneDevice: String(input?.microphoneDevice ?? ''),

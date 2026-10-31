@@ -32,6 +32,10 @@ extraResources:
   # load an extension directly from inside app.asar.
   - from: ../../resources/addons
     to: addons
+  # Lensio/ApexCam Android companion. It is installed only after the selected
+  # AVD reaches ADB and is verified with pm path.
+  - from: ../../resources/lensio
+    to: lensio
   # Native Chromium and Firefox runtimes are staged before packaging and must
   # remain external files so their executables and supporting libraries work.
   - from: ../../resources/engines

@@ -30,6 +30,7 @@ interface ChromeCameraChoices { webcams: ChromeCameraChoice[]; emulatorAvailable
 interface CustomAndroidBuild { id: string; name: string; release: string; architecture: string; target: string; variant: string; notes: string; createdAt: string; updatedAt: string }
 interface AndroidLaunchPrefs {
   proxyId: string; cameraFront: CameraSource; cameraBack: CameraSource;
+  cameraProvider?: 'lensio' | 'obs' | 'directshow';
   cameraFrontDevice: string; cameraBackDevice: string; cameraDevice: string;
   microphoneEnabled: boolean; microphoneDevice: string; bootMode: BootMode; networkSpeed: NetworkSpeed; secondaryDisplay?: 'none' | 'secondary1080'; locale: string;
 }
@@ -167,6 +168,7 @@ function androidLaunchDialog(machine: AndroidMachine, load: () => Promise<void>,
         back: saved?.cameraBack ?? machine.cameraBack,
         frontDevice: rememberedFrontCamera,
         backDevice: rememberedBackCamera,
+        cameraProvider: saved?.cameraProvider,
       },
     });
     const microphone = toggle(saved?.microphoneEnabled ?? machine.microphoneEnabled, 'android.media.microphone');
