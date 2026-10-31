@@ -157,15 +157,15 @@ function androidLaunchDialog(machine: AndroidMachine, load: () => Promise<void>,
       paintProxyMode();
       toast(t('proxy.added', { n: result.added }), 'ok');
     };
-    const rememberedBackCamera = saved?.cameraBackDevice || machine.cameraBackDevice || saved?.cameraDevice || machine.cameraDevice || '';
-    const rememberedFrontCamera = saved?.cameraFrontDevice || machine.cameraFrontDevice || '';
+    const rememberedBackCamera = saved?.cameraBackDevice || (saved?.cameraBack === 'webcam' ? machine.cameraBackDevice || saved?.cameraDevice || machine.cameraDevice : '');
+    const rememberedFrontCamera = saved?.cameraFrontDevice || (saved?.cameraFront === 'webcam' ? machine.cameraFrontDevice : '');
     // One picker for both lenses. It offers only the cameras that send a picture
     // on this computer right now; a lens with none is Off.
     const cameras = cameraPicker({
       deviceName: machine.name,
       initial: {
-        front: saved?.cameraFront ?? machine.cameraFront,
-        back: saved?.cameraBack ?? machine.cameraBack,
+        front: saved?.cameraFront ?? 'none',
+        back: saved?.cameraBack ?? 'image',
         frontDevice: rememberedFrontCamera,
         backDevice: rememberedBackCamera,
         cameraProvider: saved?.cameraProvider,

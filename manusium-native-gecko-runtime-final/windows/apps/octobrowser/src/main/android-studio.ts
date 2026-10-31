@@ -4213,7 +4213,7 @@ function launchPrefsFile(): string {
 }
 
 const DEFAULT_LAUNCH_PREFS: AndroidLaunchPrefs = {
-  proxyId: '', cameraFront: 'webcam', cameraBack: 'webcam', cameraFrontDevice: '', cameraBackDevice: '', cameraDevice: '',
+  proxyId: '', cameraFront: 'none', cameraBack: 'image', cameraFrontDevice: '', cameraBackDevice: '', cameraDevice: '',
   microphoneEnabled: true, microphoneDevice: '', bootMode: 'quick', networkSpeed: 'lte', secondaryDisplay: 'none', locale: '', mediaFolder: '',
   apps: [], appFiles: {}, cameraProvider: undefined,
 };
@@ -4226,12 +4226,16 @@ export function normalizeAndroidLaunchPrefs(value: Partial<AndroidLaunchPrefs> =
     delete (merged as Record<string, unknown>)[stale];
   }
   const cameras = normalizeCameraSources(merged.cameraFront, merged.cameraBack);
+  const frontDevice = String(merged.cameraFrontDevice ?? '');
+  const backDevice = String(merged.cameraBackDevice ?? '');
+  const imagePath = (source: CameraSource, file: string) => source === 'image' && path.isAbsolute(file)
+    && fs.existsSync(file) && /\.(png|jpe?g)$/i.test(file) ? file : '';
   return {
     ...merged,
     cameraFront: cameras.front,
     cameraBack: cameras.back,
-    cameraFrontDevice: cameras.front === 'webcam' && WEBCAM.test(String(merged.cameraFrontDevice ?? '')) ? String(merged.cameraFrontDevice) : '',
-    cameraBackDevice: cameras.back === 'webcam' && WEBCAM.test(String(merged.cameraBackDevice ?? '')) ? String(merged.cameraBackDevice) : '',
+    cameraFrontDevice: cameras.front === 'webcam' && WEBCAM.test(frontDevice) ? frontDevice : imagePath(cameras.front, frontDevice),
+    cameraBackDevice: cameras.back === 'webcam' && WEBCAM.test(backDevice) ? backDevice : imagePath(cameras.back, backDevice),
     cameraDevice: WEBCAM.test(String(merged.cameraDevice ?? '')) ? String(merged.cameraDevice) : '',
     apps: Array.isArray(merged.apps) ? [...merged.apps] : [],
     appFiles: merged.appFiles && typeof merged.appFiles === 'object' ? { ...merged.appFiles } : {},
@@ -4261,15 +4265,17 @@ export function rememberAndroidLaunch(name: string, prefs: Partial<AndroidLaunch
   const all = readAllLaunchPrefs();
   const rememberedFront = normalizeCameraSource(String(prefs.cameraFront ?? all[clean]?.cameraFront ?? DEFAULT_LAUNCH_PREFS.cameraFront));
   const rememberedBack = normalizeCameraSource(String(prefs.cameraBack ?? all[clean]?.cameraBack ?? DEFAULT_LAUNCH_PREFS.cameraBack));
+  const requestedFrontDevice = String(prefs.cameraFrontDevice ?? all[clean]?.cameraFrontDevice ?? '');
+  const requestedBackDevice = String(prefs.cameraBackDevice ?? all[clean]?.cameraBackDevice ?? '');
+  const validImagePath = (source: CameraSource, file: string) => source === 'image' && path.isAbsolute(file)
+    && fs.existsSync(file) && /\.(png|jpe?g)$/i.test(file) ? file : '';
   const next: AndroidLaunchPrefs = {
     ...DEFAULT_LAUNCH_PREFS,
     ...all[clean],
     ...prefs,
     locale: LOCALE_TAG.test(String(prefs.locale ?? all[clean]?.locale ?? '')) ? String(prefs.locale ?? all[clean]?.locale ?? '') : '',
-    cameraFrontDevice: rememberedFront === 'webcam' && WEBCAM.test(String(prefs.cameraFrontDevice ?? all[clean]?.cameraFrontDevice ?? ''))
-      ? String(prefs.cameraFrontDevice ?? all[clean]?.cameraFrontDevice) : '',
-    cameraBackDevice: rememberedBack === 'webcam' && WEBCAM.test(String(prefs.cameraBackDevice ?? all[clean]?.cameraBackDevice ?? ''))
-      ? String(prefs.cameraBackDevice ?? all[clean]?.cameraBackDevice) : '',
+    cameraFrontDevice: rememberedFront === 'webcam' && WEBCAM.test(requestedFrontDevice) ? requestedFrontDevice : validImagePath(rememberedFront, requestedFrontDevice),
+    cameraBackDevice: rememberedBack === 'webcam' && WEBCAM.test(requestedBackDevice) ? requestedBackDevice : validImagePath(rememberedBack, requestedBackDevice),
     cameraDevice: WEBCAM.test(String(prefs.cameraDevice ?? all[clean]?.cameraDevice ?? ''))
       ? String(prefs.cameraDevice ?? all[clean]?.cameraDevice) : '',
     microphoneDevice: String(prefs.microphoneDevice ?? all[clean]?.microphoneDevice ?? '').replace(/[\u0000-\u001f]/g, '').trim().slice(0, 160),

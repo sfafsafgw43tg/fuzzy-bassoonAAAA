@@ -261,9 +261,9 @@ export function androidCreateWizard(context: CreatorContext): void {
     snapshots: true, camera: false, microphone: true,
     // A single host endpoint must not be opened by both Android lenses: some
     // CameraProvider builds crash when the same DirectShow stream is shared.
-    // The back camera is the safe default; the front lens can be enabled after
-    // the emulator verifies a second endpoint.
-    cameraFront: 'none', cameraBack: 'webcam', cameraFrontDevice: '', cameraBackDevice: '',
+    // Base camera policy: front is off and rear uses the native photo/image
+    // source. The user selects the PNG/JPEG when opening the camera picker.
+    cameraFront: 'none', cameraBack: 'image', cameraFrontDevice: '', cameraBackDevice: '',
     cameraDevice: '',
     locale: '',
     customPackage: '',
