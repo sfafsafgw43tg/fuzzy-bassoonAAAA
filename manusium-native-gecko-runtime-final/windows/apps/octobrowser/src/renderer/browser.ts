@@ -297,6 +297,16 @@ function renderAddress(): void {
   bc.textContent = tab ? String(tab.blocked) : '';
 }
 
+/** Put the caret in a fresh tab's omnibox, matching Chrome's new-tab behavior. */
+function focusNewTabAddress(tabId: number): void {
+  requestAnimationFrame(() => {
+    if (state?.activeId !== tabId || !activeTab()?.url.startsWith('octo://newtab')) return;
+    const addr = $<HTMLInputElement>('address');
+    addr.focus({ preventScroll: true });
+    addr.select();
+  });
+}
+
 function renderStatus(): void {
   if (!state) return;
   const p = state.profile;
@@ -2805,7 +2815,8 @@ function initEvents(): void {
     // A panel, menu or tray left open on one site used to keep the trusted
     // chrome above the page on the next site too - that site then ignored
     // every click. Switching tabs closes them, the way a browser does.
-    if (s.activeId !== lastActiveTabId) {
+    const activeChanged = s.activeId !== lastActiveTabId;
+    if (activeChanged) {
       lastActiveTabId = s.activeId;
       dismissAllPopouts();
     }
@@ -2822,6 +2833,7 @@ function initEvents(): void {
     applyAppearance(s.profile.theme as 'dark' | 'light' | undefined, s.profile.browserShell ?? (s.profile.baseChromeLook ? 'chrome' : 'octo'), s.profile.mobile, s.profile.appMode);
     renderTabs();
     renderAddress();
+    if (activeChanged && activeTab()?.url.startsWith('octo://newtab')) focusNewTabAddress(s.activeId);
     renderStatus();
     void renderBookbar();
     if (panel === 'audio' || panel === 'addons' || panel === 'updates') openPanel(panel, () => void renderPanel(panel!), t(`panel.${panel}`));
