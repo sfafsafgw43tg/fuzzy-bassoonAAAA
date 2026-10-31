@@ -2728,16 +2728,22 @@ export class Manager {
         microphoneEnabled: input?.microphoneEnabled !== false, microphoneDevice: String(input?.microphoneDevice ?? ''),
         networkSpeed: input?.networkSpeed, secondaryDisplay: input?.secondaryDisplay, bootMode: input?.bootMode, proxy,
       });
-      // Lensio is a base companion: start its Windows receiver alongside the
-      // AVD, then install/foreground LensioCam once adb reports the guest.
-      // Both operations are deliberately non-blocking so a missing optional
-      // release asset never prevents the Android device from opening.
-      void startLensioVirtualCamera().then((result) => {
-        if (!result.ok && !/not found/i.test(result.message)) this.ctx.logger.warn('android.lensio.windowsStart', { device: String(input?.name ?? ''), message: result.message });
-      }).catch(() => undefined);
-      void installLensioCamOnAndroid(String(input?.name ?? '')).then((result) => {
-        if (!result.installed && !/not found/i.test(result.reason)) this.ctx.logger.warn('android.lensio.apkInstall', { device: String(input?.name ?? ''), message: result.reason });
-      }).catch(() => undefined);
+      // Lensio is opt-in. Its Windows receiver can start before the AVD, but
+      // Android cannot install an APK until adb reports the guest as ready.
+      // Await both results so the UI never claims that Lensio was preinstalled
+      // when the APK is missing, the device did not boot, or package-manager
+      // verification failed.
+      const lensioRequested = input?.cameraProvider === 'lensio'
+        || selectedHostEndpoints.some((endpoint) => /lensio|apexcam/i.test(endpoint));
+      let lensio: { windowsStarted: boolean; installed: boolean; launched: boolean; message: string } | undefined;
+      if (lensioRequested) {
+        const windows = await startLensioVirtualCamera().catch((error: unknown) => ({ ok: false, message: error instanceof Error ? error.message : String(error) }));
+        const android = await installLensioCamOnAndroid(String(input?.name ?? '')).catch((error: unknown) => ({ installed: false, launched: false, reason: error instanceof Error ? error.message : String(error) }));
+        lensio = { windowsStarted: windows.ok, installed: android.installed, launched: android.launched, message: `${windows.message} ${android.reason}`.trim() };
+        if (!windows.ok || !android.installed || !android.launched) {
+          this.ctx.logger.warn('android.lensio.notReady', { device: String(input?.name ?? ''), message: lensio.message });
+        }
+      }
       // Apps chosen while the device was created are installed as soon as
       // Android is actually up - adb cannot install into a device that is
       // still booting.
@@ -2751,7 +2757,11 @@ export class Manager {
         networkSpeed: input?.networkSpeed, secondaryDisplay: parseSecondaryDisplay(input?.secondaryDisplay), bootMode: input?.bootMode,
       });
       for (const note of launched.notes) this.ctx.logger.warn('android.launch.notApplied', { device: String(input?.name ?? ''), note });
-      return { ok: true, cameraWarning: launched.cameraWarning, notes: launched.notes };
+      const notes = [...launched.notes];
+      if (lensio && (!lensio.windowsStarted || !lensio.installed || !lensio.launched)) {
+        notes.push(`Lensio was not fully started: ${lensio.message}`);
+      }
+      return { ok: !lensio || (lensio.windowsStarted && lensio.installed && lensio.launched), cameraWarning: launched.cameraWarning, notes, lensio };
     });
     // Adopt devices that already exist somewhere on disk: the folder is
     // scanned, the missing pointers are written, and it is remembered.

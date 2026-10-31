@@ -52,6 +52,8 @@ export interface CameraSelection {
   /** What a check measured, so Android is not told a resolution that cannot arrive. */
   frontLimit?: CameraResolution;
   backLimit?: CameraResolution;
+  /** Provider selected for the endpoint, used to request provider-specific setup. */
+  cameraProvider?: 'lensio' | 'obs' | 'directshow';
 }
 
 export interface CameraPickerOptions {
@@ -249,6 +251,7 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
     backDevice: options.initial.back === 'none' || options.initial.back === 'emulated' ? '' : options.initial.backDevice ?? '',
     frontLimit: options.initial.frontLimit,
     backLimit: options.initial.backLimit,
+    cameraProvider: options.initial.cameraProvider,
   };
   // A remembered measurement is a fact about the camera, not about this window.
   const measured = new Map<string, CameraResolution>();
@@ -414,6 +417,7 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
       return;
     }
     setSource(facing, 'webcam', virtual.name);
+    selection.cameraProvider = 'lensio';
     paintLenses(); paintStatus(); emit();
   }
 
@@ -445,6 +449,7 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
     const virtual = listed.find(camera => camera.virtual);
     if (!virtual) { toast(t('android.camera.virtualUnavailable'), 'info'); paintStatus(); return; }
     setSource(facing, 'webcam', virtual.name);
+    selection.cameraProvider = 'lensio';
     paintLenses(); paintStatus(); emit();
   }
 
@@ -579,6 +584,7 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
         return;
       }
       setSource(facing, 'webcam', virtual.name);
+      selection.cameraProvider = 'lensio';
       paintLenses(); paintStatus(); emit();
       return;
     }

@@ -274,8 +274,9 @@ function androidLaunchDialog(machine: AndroidMachine, load: () => Promise<void>,
       // "Starting…" during the emulator's six-second health check.
       closeModal();
       try {
-        const result = await run(api.invoke<{ ok: boolean; cameraWarning?: string; notes?: string[] }>('mgr:android-launch', {
+        const result = await run(api.invoke<{ ok: boolean; cameraWarning?: string; notes?: string[]; lensio?: { installed: boolean; launched: boolean; message: string } }>('mgr:android-launch', {
           name: machine.name, proxyId, cameraFront: camera.front, cameraBack: camera.back,
+          cameraProvider: camera.cameraProvider,
           cameraFrontDevice: camera.frontDevice, cameraBackDevice: camera.backDevice,
           cameraDevice: camera.backDevice || camera.frontDevice,
           cameraLimits: { front: camera.frontLimit, back: camera.backLimit },
@@ -283,7 +284,10 @@ function androidLaunchDialog(machine: AndroidMachine, load: () => Promise<void>,
           bootMode: valueOf(boot), networkSpeed: valueOf(netSpeed), locale: valueOf(language),
           secondaryDisplay: valueOf(display),
         }));
-        if (!result?.ok) return;
+        if (!result?.ok) {
+          toast(result?.lensio?.message || result?.notes?.join(' ') || t('android.launch.notApplied'), 'info');
+          return;
+        }
         if (result.cameraWarning) {
           toast(t('android.camera.disabledForLaunch'), 'info', result.cameraWarning);
         } else if (result.notes?.length) {

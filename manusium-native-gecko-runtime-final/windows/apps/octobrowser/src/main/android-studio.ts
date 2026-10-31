@@ -2882,8 +2882,12 @@ export function configureMediaCompanion(input: {
       fit_mode: input.imageFit ?? String(video.fit_mode ?? 'fill'),
       slideshow_mode: input.playlistMode ?? String(video.slideshow_mode ?? 'manual'),
       slideshow_interval: Math.max(0.5, Math.min(3600, Number(input.playlistInterval ?? video.slideshow_interval ?? 6))),
+      // Live-image mode must never silently fall back to a physical webcam.
+      // Clearing this persisted value is important when the same companion was
+      // previously used with OBS, Unity Capture, or a host camera.
+      source_mode: input.mediaFolder ? 'images' : String(video.source_mode ?? 'auto'),
       orientation: (video.orientation as string | undefined) ?? 'portrait',
-      input_camera_name: clean(input.cameraDevice, String(video.input_camera_name ?? ''), 160),
+      input_camera_name: input.mediaFolder ? '' : clean(input.cameraDevice, String(video.input_camera_name ?? ''), 160),
       input_rotation: input.inputRotation === undefined
         ? normalizeCameraRotation(video.input_rotation)
         : normalizeCameraRotation(input.inputRotation),
@@ -4730,9 +4734,14 @@ export async function installLensioCamOnAndroid(name: string): Promise<{ install
   if (!/^Success\b/im.test(String(output))) {
     return { installed: false, launched: false, reason: `LensioCam.apk could not be installed: ${String(output).trim().slice(-500)}` };
   }
+  const packageCheck = await adbRun(adb, ['-s', serial, 'shell', 'pm', 'path', 'com.apexcam'], 15_000)
+    .catch((error: unknown) => error instanceof Error ? error.message : String(error));
+  if (!/^package:/im.test(String(packageCheck))) {
+    return { installed: false, launched: false, reason: 'adb reported a successful install, but com.apexcam is not present in the Android package manager.' };
+  }
   const launch = await adbRun(adb, ['-s', serial, 'shell', 'monkey', '-p', 'com.apexcam', '1'], 30_000)
     .catch((error: unknown) => error instanceof Error ? error.message : String(error));
-  const launched = !/error|exception|no activity/i.test(String(launch));
+  const launched = !/error|exception|no activity|unable to resolve/i.test(String(launch)) && /monkey finished/i.test(String(launch));
   return { installed: true, launched, reason: launched ? 'LensioCam is installed and running in the Android device.' : 'LensioCam was installed, but Android did not foreground it.' };
 }
 
