@@ -5,6 +5,7 @@ import * as fs from 'node:fs';
 import * as os from 'node:os';
 
 let win: BrowserWindow | undefined;
+let activeImageSource: string | undefined;
 const sdk = process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT || path.join(process.env.LOCALAPPDATA || '', 'Android', 'Sdk');
 const adb = process.env.ADB || path.join(sdk, 'platform-tools', 'adb.exe');
 const emulator = path.join(sdk, 'emulator', 'emulator.exe');
@@ -51,7 +52,23 @@ ipcMain.handle('camera:apply', async (_event, input: { avd: string; source: stri
   const args = ['-avd', input.avd, '-no-snapshot', '-camera-front', 'none', '-camera-back', camera];
   try { await run(adb, ['emu', 'kill'], 10000); } catch { /* no running emulator is fine */ }
   start(emulator, args);
+  activeImageSource = input.type === 'image' ? source : undefined;
   return { ok: true, message: `Started ${input.avd} with ${input.type} source at ${input.width}x${input.height}.`, source };
+});
+ipcMain.handle('camera:apply-live', async (_event, input: { source: string; width: number; height: number; fit: 'stretch' | 'fit' | 'crop'; crop?: { x: number; y: number; width: number; height: number } }) => {
+  if (!activeImageSource) throw new Error('Live image apply is available after starting an image source from this controller.');
+  if (!fs.existsSync(input.source)) throw new Error('Select a readable image first.');
+  const temp = path.join(work, `live-${Date.now()}-${input.width}x${input.height}.jpg`);
+  const scriptCandidates = [
+    path.join(process.resourcesPath, 'android-scripts', 'prepare-octo-camera-image.ps1'),
+    path.resolve(__dirname, '..', '..', '..', '..', 'scripts', 'android', 'prepare-octo-camera-image.ps1'),
+  ];
+  const script = scriptCandidates.find(candidate => fs.existsSync(candidate)) || scriptCandidates[0];
+  const args = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, '-InputPath', input.source, '-OutputPath', temp, '-Width', String(input.width), '-Height', String(input.height), '-Fit', input.fit];
+  if (input.fit === 'crop' && input.crop) args.push('-SourceX', String(Math.round(input.crop.x)), '-SourceY', String(Math.round(input.crop.y)), '-SourceWidth', String(Math.round(input.crop.width)), '-SourceHeight', String(Math.round(input.crop.height)));
+  await run('powershell.exe', args, 60000);
+  fs.copyFileSync(temp, activeImageSource);
+  return { ok: true, message: `Updated the active image source live at ${input.width}x${input.height}.`, source: activeImageSource };
 });
 ipcMain.handle('camera:install-controller', async (_event, serial?: string) => {
   const candidates = [

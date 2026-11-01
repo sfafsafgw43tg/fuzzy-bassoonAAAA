@@ -1,7 +1,7 @@
 {
   "name": "octocamera",
   "productName": "Octo Camera Controller",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "External Android Emulator camera source controller for OctoSuite",
   "author": {
     "name": "OctoSuite contributors",
