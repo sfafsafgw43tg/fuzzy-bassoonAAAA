@@ -2,7 +2,7 @@
 //
 // Bundles Octo.su and/or OctoDetect.su into apps/<app>/dist with esbuild.
 //
-//   node tools/build.mjs              -> both apps
+//   node tools/build.mjs              -> all apps
 //   node tools/build.mjs octobrowser  -> one app
 //   node tools/build.mjs --dev        -> with inline source maps, no minification
 //
@@ -23,13 +23,13 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
 const dev = args.includes('--dev');
 const only = args.filter((a) => !a.startsWith('--'));
-const apps = only.length ? only : ['octobrowser', 'octodetect'];
+const apps = only.length ? only : ['octobrowser', 'octodetect', 'octocamera'];
 const rootPkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 const version = rootPkg.version;
 
 for (const a of apps) {
-  if (!['octobrowser', 'octodetect'].includes(a)) {
-    console.error(`Unknown app "${a}" (expected octobrowser or octodetect)`);
+  if (!['octobrowser', 'octodetect', 'octocamera'].includes(a)) {
+    console.error(`Unknown app "${a}" (expected octobrowser, octodetect, or octocamera)`);
     process.exit(2);
   }
 }
@@ -86,7 +86,7 @@ async function buildShared(dist) {
 }
 
 function buildAssets(app, dist) {
-  const b = path.join(root, 'branding', app);
+  const b = path.join(root, 'branding', app === 'octocamera' ? 'octobrowser' : app);
   const out = path.join(dist, 'assets');
   if (!fs.existsSync(path.join(b, 'icon.ico'))) {
     throw new Error(`Missing branding/${app}/icon.ico - run "npm run icons" first.`);
@@ -127,7 +127,7 @@ async function buildApp(app) {
     copyByExt(path.join(src, 'renderer'), path.join(dist, 'renderer'), ['.html', '.css']);
     await web(path.join(src, 'internal', 'internal.ts'), path.join(dist, 'internal', 'internal.js'));
     copyByExt(path.join(src, 'internal'), path.join(dist, 'internal'), ['.html', '.css']);
-  } else {
+  } else if (app === 'octodetect') {
     await preload(path.join(src, 'preload', 'detect.ts'), path.join(dist, 'preload-detect.js'));
     // Same page shim as OctoBrowser tabs, so preset audits measure the real protections.
     await preload(path.join(root, 'apps', 'octobrowser', 'src', 'preload', 'tab.ts'), path.join(dist, 'preload-shim.js'));
@@ -135,6 +135,10 @@ async function buildApp(app) {
     copyByExt(path.join(src, 'renderer'), path.join(dist, 'renderer'), ['.html', '.css']);
     await web(path.join(src, 'probe', 'probe.ts'), path.join(dist, 'probe', 'probe.js'));
     copyByExt(path.join(src, 'probe'), path.join(dist, 'probe'), ['.html', '.css']);
+  } else {
+    await preload(path.join(src, 'preload.ts'), path.join(dist, 'preload.js'));
+    await web(path.join(src, 'renderer', 'renderer.ts'), path.join(dist, 'renderer', 'renderer.js'));
+    copyByExt(path.join(src, 'renderer'), path.join(dist, 'renderer'), ['.html', '.css']);
   }
   buildAssets(app, dist);
   console.log(`build: ${app} ${version} -> ${path.relative(root, dist)} (${Date.now() - started} ms${dev ? ', dev' : ''})`);

@@ -1,0 +1,22 @@
+{
+  "name": "octocamera",
+  "productName": "Octo Camera Controller",
+  "version": "0.2.3",
+  "description": "External Android Emulator camera source controller for OctoSuite",
+  "author": { "name": "OctoSuite contributors", "email": "octosuite@users.noreply.github.com" },
+  "private": true,
+  "main": "dist/main.js",
+  "build": {
+    "appId": "su.octo.camera",
+    "productName": "Octo Camera Controller",
+    "executableName": "OctoCameraController",
+    "electronVersion": "44.7.0",
+    "files": ["dist/**/*", "package.json"],
+    "extraResources": [
+      { "from": "../../scripts/android", "to": "android-scripts" },
+      { "from": "../../resources/octo-camera", "to": "octo-camera" }
+    ],
+    "win": { "target": [{ "target": "dir", "arch": ["x64"] }] },
+    "publish": null
+  }
+}
