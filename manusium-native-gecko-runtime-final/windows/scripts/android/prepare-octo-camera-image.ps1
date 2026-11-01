@@ -4,7 +4,11 @@ param(
   [Parameter(Mandatory=$true)][string]$OutputPath,
   [int]$Width = 1280,
   [int]$Height = 720,
-  [ValidateSet('stretch','fit','crop')][string]$Fit = 'fit'
+  [ValidateSet('stretch','fit','crop')][string]$Fit = 'fit',
+  [int]$SourceX = 0,
+  [int]$SourceY = 0,
+  [int]$SourceWidth = 0,
+  [int]$SourceHeight = 0
 )
 $ErrorActionPreference = 'Stop'
 if (-not (Test-Path -LiteralPath $InputPath -PathType Leaf)) { throw "Input image was not found: $InputPath" }
@@ -18,7 +22,15 @@ try {
   $graphics.InterpolationMode = [System.Drawing.Drawing2D.InterpolationMode]::HighQualityBicubic
   $graphics.SmoothingMode = [System.Drawing.Drawing2D.SmoothingMode]::HighQuality
   $graphics.PixelOffsetMode = [System.Drawing.Drawing2D.PixelOffsetMode]::HighQuality
-  $sw = [double]$source.Width; $sh = [double]$source.Height
+  $sourceRect = New-Object System.Drawing.Rectangle(0, 0, $source.Width, $source.Height)
+  if ($Fit -eq 'crop' -and $SourceWidth -gt 0 -and $SourceHeight -gt 0) {
+    $sx = [Math]::Max(0, [Math]::Min($SourceX, $source.Width - 1))
+    $sy = [Math]::Max(0, [Math]::Min($SourceY, $source.Height - 1))
+    $swInt = [Math]::Max(1, [Math]::Min($SourceWidth, $source.Width - $sx))
+    $shInt = [Math]::Max(1, [Math]::Min($SourceHeight, $source.Height - $sy))
+    $sourceRect = New-Object System.Drawing.Rectangle($sx, $sy, $swInt, $shInt)
+  }
+  $sw = [double]$sourceRect.Width; $sh = [double]$sourceRect.Height
   if ($Fit -eq 'stretch') {
     $dest = New-Object System.Drawing.Rectangle(0, 0, $Width, $Height)
   } else {
@@ -26,7 +38,7 @@ try {
     $dw = [int][Math]::Round($sw * $scale); $dh = [int][Math]::Round($sh * $scale)
     $dest = New-Object System.Drawing.Rectangle(([int](($Width - $dw) / 2)), ([int](($Height - $dh) / 2)), $dw, $dh)
   }
-  $graphics.DrawImage($source, $dest)
+  $graphics.DrawImage($source, $dest, $sourceRect, [System.Drawing.GraphicsUnit]::Pixel)
   $parent = Split-Path -Parent $OutputPath
   if ($parent) { New-Item -ItemType Directory -Force -Path $parent | Out-Null }
   $bitmap.Save($OutputPath, [System.Drawing.Imaging.ImageFormat]::Jpeg)

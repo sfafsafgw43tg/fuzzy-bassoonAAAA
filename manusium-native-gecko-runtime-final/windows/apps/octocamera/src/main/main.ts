@@ -33,7 +33,7 @@ ipcMain.handle('camera:pick', async (_event, kind: 'image' | 'video') => {
   const result = await dialog.showOpenDialog(win!, { properties: ['openFile'], filters: [{ name: kind === 'image' ? 'Images' : 'Videos', extensions: kind === 'image' ? ['png', 'jpg', 'jpeg', 'webp'] : ['mp4', 'mkv', 'avi', 'mov'] }] });
   return result.canceled ? '' : result.filePaths[0] || '';
 });
-ipcMain.handle('camera:apply', async (_event, input: { avd: string; source: string; type: 'image' | 'video'; width: number; height: number; fit: 'stretch' | 'fit' | 'crop'; serial?: string }) => {
+ipcMain.handle('camera:apply', async (_event, input: { avd: string; source: string; type: 'image' | 'video'; width: number; height: number; fit: 'stretch' | 'fit' | 'crop'; serial?: string; crop?: { x: number; y: number; width: number; height: number } }) => {
   if (!input.avd || !input.source || !fs.existsSync(input.source)) throw new Error('Select an AVD and a readable media file first.');
   let source = input.source;
   if (input.type === 'image') {
@@ -43,7 +43,9 @@ ipcMain.handle('camera:apply', async (_event, input: { avd: string; source: stri
       path.resolve(__dirname, '..', '..', '..', '..', 'scripts', 'android', 'prepare-octo-camera-image.ps1'),
     ];
     const script = scriptCandidates.find(candidate => fs.existsSync(candidate)) || scriptCandidates[0];
-    await run('powershell.exe', ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, '-InputPath', input.source, '-OutputPath', source, '-Width', String(input.width), '-Height', String(input.height), '-Fit', input.fit], 60000);
+    const imageArgs = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, '-InputPath', input.source, '-OutputPath', source, '-Width', String(input.width), '-Height', String(input.height), '-Fit', input.fit];
+    if (input.fit === 'crop' && input.crop) imageArgs.push('-SourceX', String(Math.round(input.crop.x)), '-SourceY', String(Math.round(input.crop.y)), '-SourceWidth', String(Math.round(input.crop.width)), '-SourceHeight', String(Math.round(input.crop.height)));
+    await run('powershell.exe', imageArgs, 60000);
   }
   const camera = `${input.type === 'video' ? 'videofile:' : 'imagefile:'}${source}`;
   const args = ['-avd', input.avd, '-no-snapshot', '-camera-front', 'none', '-camera-back', camera];
