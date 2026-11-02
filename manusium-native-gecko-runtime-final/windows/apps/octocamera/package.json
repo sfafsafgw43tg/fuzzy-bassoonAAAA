@@ -1,7 +1,7 @@
 {
   "name": "octocamera",
   "productName": "Octo Camera Controller",
-  "version": "0.2.5",
+  "version": "0.2.6",
   "description": "External Android Emulator camera source controller for OctoSuite",
   "author": {
     "name": "OctoSuite contributors",
@@ -9,6 +9,9 @@
   },
   "private": true,
   "main": "dist/main.js",
+  "scripts": {
+    "test:live": "node --test tests/live-image-replacement.test.mjs"
+  },
   "build": {
     "appId": "su.octo.camera",
     "productName": "Octo Camera Controller",
