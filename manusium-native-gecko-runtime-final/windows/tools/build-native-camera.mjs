@@ -25,8 +25,10 @@ const tempParent = process.env.TEMP || process.env.TMP || (process.env.SystemDri
 fs.mkdirSync(tempParent, { recursive: true });
 const staging = fs.mkdtempSync(path.join(tempParent, 'octo-cam-'));
 const projects = [
-  { source: path.join(root, 'native', 'octo-camera'), staged: path.join(staging, 'camera'), build: path.join(staging, 'camera-build') },
-  { source: path.join(root, 'native', 'octo-directshow'), staged: path.join(staging, 'directshow'), build: path.join(staging, 'directshow-build') },
+  // Keep the staged directory names aligned with the source-tree relative
+  // include used by native/octo-directshow/CMakeLists.txt (../octo-camera).
+  { source: path.join(root, 'native', 'octo-camera'), staged: path.join(staging, 'octo-camera'), build: path.join(staging, 'camera-build') },
+  { source: path.join(root, 'native', 'octo-directshow'), staged: path.join(staging, 'octo-directshow'), build: path.join(staging, 'directshow-build') },
 ];
 
 fs.mkdirSync(output, { recursive: true });

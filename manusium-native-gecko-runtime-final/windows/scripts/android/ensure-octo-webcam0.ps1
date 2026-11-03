@@ -53,9 +53,19 @@ $source = Require-File (Join-Path $NativeCameraDir 'octo-camera-source.dll') 'Oc
 $directShow = Require-File (Join-Path $NativeCameraDir 'octo-directshow-camera.dll') 'Octo DirectShow camera'
 
 Write-Host "[1/4] Registering Octo native camera backends..."
-& $control install --source $source --directshow $directShow 2>&1 | ForEach-Object { Write-Host $_ }
-if ($LASTEXITCODE -ne 0) {
-  throw "Native camera registration failed with exit code $LASTEXITCODE. Approve the administrator prompt if DirectShow registration requests elevation."
+# Remove only the two legacy Octo per-user entries. They can shadow the current
+# filter after a checkout moves to a different drive.
+foreach ($legacy in @(
+  'Registry::HKEY_CURRENT_USER\Software\Classes\CLSID\{6E5E5D49-7B17-4D0E-A8B3-5E5A4B0C8D21}',
+  'Registry::HKEY_CURRENT_USER\Software\Classes\CLSID\{A6C2B7E1-3D4F-4C9A-8B21-5D7E9F0A4C16}',
+  'Registry::HKEY_CURRENT_USER\Software\Classes\CLSID\{860BB310-5D01-11D0-BD3B-00A0C911CE86}\Instance\Octo Camera (DirectShow)'
+)) { Remove-Item -LiteralPath $legacy -Recurse -Force -ErrorAction SilentlyContinue }
+
+& $control install --source $source 2>&1 | ForEach-Object { Write-Host $_ }
+if ($LASTEXITCODE -ne 0) { throw "Media Foundation registration failed with exit code $LASTEXITCODE." }
+$registration = Start-Process -FilePath $control -Verb RunAs -Wait -PassThru -WindowStyle Hidden -ArgumentList @('register-directshow', "`"$directShow`"")
+if ($registration.ExitCode -ne 0) {
+  throw "DirectShow registration failed with exit code $($registration.ExitCode). Approve the administrator prompt and rerun this script."
 }
 
 Write-Host "[2/4] Verifying registration..."
