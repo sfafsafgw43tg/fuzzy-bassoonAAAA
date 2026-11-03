@@ -6,9 +6,8 @@ import * as os from 'node:os';
 import * as net from 'node:net';
 
 let win: BrowserWindow | undefined;
-let activeImageSource: string | undefined;
-let activeVideoSource: string | undefined;
 let activeSerial: string | undefined;
+let activeAvd: string | undefined;
 const sdk = process.env.ANDROID_HOME || process.env.ANDROID_SDK_ROOT || path.join(process.env.LOCALAPPDATA || '', 'Android', 'Sdk');
 const adb = process.env.ADB || path.join(sdk, 'platform-tools', 'adb.exe');
 const emulator = path.join(sdk, 'emulator', 'emulator.exe');
@@ -64,8 +63,18 @@ async function findRunningEmulator(): Promise<string> {
 }
 
 async function applyVirtualSceneImage(source: string, serial?: string): Promise<{ serial: string; message: string }> {
-  const target = serial || activeSerial || await findRunningEmulator();
-  await consoleCommand(target, `virtualscene-image wall "${source.replace(/"/g, '\\"')}"`);
+  const preferred = serial || activeSerial;
+  const target = preferred || await findRunningEmulator();
+  try {
+    await consoleCommand(target, `virtualscene-image wall "${source.replace(/"/g, '\\"')}"`);
+  } catch (error) {
+    if (!preferred) throw error;
+    const fallback = await findRunningEmulator();
+    if (fallback === target) throw error;
+    await consoleCommand(fallback, `virtualscene-image wall "${source.replace(/"/g, '\\"')}"`);
+    activeSerial = fallback;
+    return { serial: fallback, message: 'Virtual Scene image updated while the Android device stayed running.' };
+  }
   activeSerial = target;
   return { serial: target, message: 'Virtual Scene image updated while the Android device stayed running.' };
 }
@@ -102,25 +111,14 @@ ipcMain.handle('camera:apply', async (_event, input: { avd: string; source: stri
     await run(ffmpeg, [...(input.videoLoop ? ['-stream_loop', '1'] : []), '-y', '-i', input.source, '-vf', `setpts=${1 / Math.max(0.25, Math.min(4, input.videoSpeed || 1))}*PTS`, '-an', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', processed], 120000);
     source = processed;
   }
-  const camera = input.type === 'video' ? `videofile:${source}` : 'environment';
+  const camera = input.type === 'video' ? `videofile:${source}` : `imagefile:${source}`;
+  activeAvd = input.avd;
   const args = ['-avd', input.avd, '-no-snapshot', '-camera-front', 'none', '-camera-back', camera];
   try { await run(adb, ['emu', 'kill'], 10000); } catch { /* no running emulator is fine */ }
   start(emulator, args);
-  activeImageSource = input.type === 'image' ? source : undefined;
-  activeVideoSource = input.type === 'video' ? source : undefined;
-  if (input.type === 'image') {
-    void (async () => {
-      const deadline = Date.now() + 90000;
-      while (Date.now() < deadline) {
-        try { await applyVirtualSceneImage(source, input.serial); return; } catch { await new Promise((resolve) => setTimeout(resolve, 1500)); }
-      }
-    })();
-  }
-  return { ok: true, message: `Started ${input.avd} with Virtual Scene image control at ${input.width}x${input.height}.`, source };
+  return { ok: true, message: `Started ${input.avd} with full-frame photo input at ${input.width}x${input.height}.`, source };
 });
-ipcMain.handle('camera:apply-live', async (_event, input: { source: string; type: 'image' | 'video'; width: number; height: number; fit: 'stretch' | 'fit' | 'crop'; crop?: { x: number; y: number; width: number; height: number }; filter?: 'none' | 'grayscale' | 'sepia' | 'bright' | 'contrast'; videoLoop?: boolean; videoSpeed?: number }) => {
-  const activeSource = input.type === 'image' ? activeImageSource : activeVideoSource;
-  if (!activeSource) throw new Error(`Live ${input.type} apply is available after starting a ${input.type} source from this controller.`);
+ipcMain.handle('camera:apply-live', async (_event, input: { source: string; type: 'image' | 'video'; width: number; height: number; fit: 'stretch' | 'fit' | 'crop'; serial?: string; crop?: { x: number; y: number; width: number; height: number }; filter?: 'none' | 'grayscale' | 'sepia' | 'bright' | 'contrast'; videoLoop?: boolean; videoSpeed?: number }) => {
   if (!fs.existsSync(input.source)) throw new Error('Select a readable media file first.');
   if (input.type === 'video') {
     throw new Error('Android Emulator does not expose a runtime videofile reload command. Use the image mode for no-restart changes, or apply the video and restart the emulator.');
@@ -134,9 +132,12 @@ ipcMain.handle('camera:apply-live', async (_event, input: { source: string; type
   const args = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, '-InputPath', input.source, '-OutputPath', temp, '-Width', String(input.width), '-Height', String(input.height), '-Fit', input.fit, '-Filter', input.filter || 'none'];
   if (input.fit === 'crop' && input.crop) args.push('-SourceX', String(Math.round(input.crop.x)), '-SourceY', String(Math.round(input.crop.y)), '-SourceWidth', String(Math.round(input.crop.width)), '-SourceHeight', String(Math.round(input.crop.height)));
   await run('powershell.exe', args, 60000);
-  const applied = await applyVirtualSceneImage(temp);
-  activeImageSource = temp;
-  return { ok: true, message: `${applied.message} (${input.width}x${input.height}).`, source: temp };
+  const avd = activeAvd || (await run(adb, ['emu', 'avd', 'name']).catch(() => '')) || (await avds())[0];
+  if (!avd) throw new Error('The running emulator AVD name could not be determined. Apply the photo once with an AVD selected.');
+  activeAvd = avd;
+  try { await run(adb, ['emu', 'kill'], 10000); } catch { /* already stopped */ }
+  start(emulator, ['-avd', avd, '-no-snapshot', '-camera-front', 'none', '-camera-back', `imagefile:${temp}`]);
+  return { ok: true, message: `Applied the resized photo as a full-frame camera input. The emulator is restarting to load the new image (${input.width}x${input.height}).`, source: temp };
 });
 ipcMain.handle('camera:install-controller', async (_event, serial?: string) => {
   const candidates = [

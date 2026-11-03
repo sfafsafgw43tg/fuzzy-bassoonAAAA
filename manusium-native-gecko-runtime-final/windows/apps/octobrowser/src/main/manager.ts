@@ -56,7 +56,7 @@ import { androidNetworkStatus, clearAndroidProxy, setAllAndroidNetworkOff, setAn
 import type { QuietBootResult } from './android-quiet-boot';
 import { ScreenStream, execAdb, keyArgs, nextRotation, parseRotation, parseScreenAction, pngDimensions, rotationLockArgs, rotationReadArgs, rotationSetArgs, screencapArgs, tapArgs } from './android-screen';
 import { parseSecondaryDisplay } from './android-displays';
- import { importAvdFolder, type CameraSource, androidCameraChoices, androidMediaCheck, repairAndroidMedia, emulatorWebcams, androidCameraChoicesCached, stopAndroidAvd, stopOwnedAndroidProcesses, androidLaunchPrefs, rememberAndroidLaunch, ANDROID_LOCALES, adbPath, androidSerialFor, openAndroidBrowser, androidChromeStatus, openAndroidChrome, installAndroidChrome, configureMediaCompanion, applyDeviceIdentity, grantAndroidMediaPermissions, reportAndroidProgress, setAndroidProgressSink, type AndroidProgress, acceptAndroidLicenses, androidPackageInstalled, createAndroidAvdFromSpec, quietBootAndroidAvd, installAndroidPackage, updateAvdSettings, type AvdSettingsInput, androidStudioStatusAsync, ANDROID_CATALOG_DEVICES, ANDROID_SYSTEM_IMAGES, androidDiskInfo, androidSdkCandidates, androidSystemImageInstalled, clearAndroidSdkRoot, installAndroidTools, setAndroidSdkRoot, createAndroidAvd, defaultAvdDirectory, deleteAndroidAvd, ensureMediaCompanionAsync, installAndroidSystemImage, launchAndroidAvd, listAndroidAvds, androidInstallRoot, androidInstallTarget, imageRunsHere, setAndroidInstallRoot, clearAndroidInstallRoot, availableSystemImageIds, availableSystemImagePackages, parseAndroidSystemImagePackage, installedAndroidSkins, androidToolLogPath, mediaCompanionStatusAsync, openAndroidAvdFolder, openAndroidStudio, requestMediaCompanionBroadcast, waitForMediaCompanionCamera, startMediaCompanion, stopMediaCompanion, startObsVirtualCamera, startLensioVirtualCamera, installLensioCamOnAndroid, installOctoCameraControllerOnAndroid, setMediaPluginEnabled, mediaPluginActive, startWebMediaCompanionAsync, applyAndroidLocation, applyRandomPolishAndroidLocation, type AndroidAvdCreateInput, type AndroidLaunchInput} from './android-studio';
+ import { importAvdFolder, type CameraSource, androidCameraChoices, androidMediaCheck, repairAndroidMedia, emulatorWebcams, androidCameraChoicesCached, stopAndroidAvd, stopOwnedAndroidProcesses, androidLaunchPrefs, rememberAndroidLaunch, ANDROID_LOCALES, adbPath, androidSerialFor, openAndroidBrowser, androidChromeStatus, openAndroidChrome, installAndroidChrome, configureMediaCompanion, applyDeviceIdentity, grantAndroidMediaPermissions, reportAndroidProgress, setAndroidProgressSink, type AndroidProgress, acceptAndroidLicenses, androidPackageInstalled, createAndroidAvdFromSpec, quietBootAndroidAvd, installAndroidPackage, updateAvdSettings, type AvdSettingsInput, androidStudioStatusAsync, ANDROID_CATALOG_DEVICES, ANDROID_SYSTEM_IMAGES, androidDiskInfo, androidSdkCandidates, androidSystemImageInstalled, clearAndroidSdkRoot, installAndroidTools, setAndroidSdkRoot, createAndroidAvd, defaultAvdDirectory, deleteAndroidAvd, ensureMediaCompanionAsync, installAndroidSystemImage, launchAndroidAvd, listAndroidAvds, androidInstallRoot, androidInstallTarget, imageRunsHere, setAndroidInstallRoot, clearAndroidInstallRoot, availableSystemImageIds, availableSystemImagePackages, parseAndroidSystemImagePackage, installedAndroidSkins, androidToolLogPath, mediaCompanionStatusAsync, openAndroidAvdFolder, openAndroidStudio, requestMediaCompanionBroadcast, waitForMediaCompanionCamera, startMediaCompanion, stopMediaCompanion, startObsVirtualCamera, startLensioVirtualCamera, installLensioCamOnAndroid, installOctoCameraControllerOnAndroid, setMediaPluginEnabled, mediaPluginActive, startWebMediaCompanionAsync, applyAndroidLocation, applyRandomPolishAndroidLocation, normalizeAndroidCameraProvider, type AndroidAvdCreateInput, type AndroidLaunchInput} from './android-studio';
 import { ANDROID_STORES, androidStore, androidStoreStates, changeAndroidStoreState, installAndroidStores, readMediaFolder, pushMediaToDevice } from './android-stores';
 import { addCustomImage, customCataloguePath, importSystemImageArchive, importSystemImageDirectory, inspectSystemImageDirectory, readCustomCatalogue, removeCustomImage, validCustomPackage } from './android-custom';
 import { customAndroidBuildGuide, customAndroidBuildPath, deleteCustomAndroidBuild, exportCustomAndroidBuilds, readCustomAndroidBuilds, saveCustomAndroidBuild, supportedCustomAndroidBuildTargets, validateCustomAndroidBuild } from './android-custom-build';
@@ -74,6 +74,20 @@ import { installNativeCamera, nativeCameraStatus, uninstallNativeCamera } from '
 import { detectBrowserIntegrations, launchBrowserIntegration } from './browser-integrations';
 
 let importedHandsetsLoaded = false;
+
+function openOctoCameraController(): { ok: boolean; message: string; path?: string } {
+  const candidates = [
+    process.env.OCTO_CAMERA_CONTROLLER,
+    path.join(process.resourcesPath, 'octocamera', 'OctoCameraController.exe'),
+    path.resolve(process.resourcesPath, '..', 'OctoCameraController.exe'),
+    path.resolve(app.getAppPath(), '..', 'octocamera', 'dist', 'win-unpacked', 'OctoCameraController.exe'),
+    path.resolve(__dirname, '..', '..', 'octocamera', 'dist', 'win-unpacked', 'OctoCameraController.exe'),
+  ].filter((value): value is string => Boolean(value));
+  const controller = candidates.find((candidate) => fs.existsSync(candidate));
+  if (!controller) return { ok: false, message: 'Octo Camera Controller is not installed beside Octo.su. Install the standalone controller release first.' };
+  launchDetached(controller);
+  return { ok: true, message: 'Octo Camera Controller opened.', path: controller };
+}
 
 const LAUNCHER_CHROME_COLORS: Record<string, { color: string; symbolColor: string }> = {
   ink: { color: '#111315', symbolColor: '#d8e2ec' }, obsidian: { color: '#090a0d', symbolColor: '#eef1f5' },
@@ -2528,6 +2542,7 @@ export class Manager {
     handle('mgr:archived', L, () => this.profileList(false, true));
     handle('mgr:chromium-catalog', L, () => listInstalled(path.join(ctx.layout.engine, 'runtimes', 'chromium'), process.platform, process.arch, engineResourceRoots()));
     handle('mgr:browser-integrations', L, () => detectBrowserIntegrations());
+    handle('mgr:open-octo-camera-controller', L, () => openOctoCameraController());
     handle('mgr:browser-pick-executable', L, async (e) => {
       const owner = BrowserWindow.fromWebContents(e.sender);
       if (!owner) return '';
@@ -2711,8 +2726,21 @@ export class Manager {
       // to an empty webcam0 and cause "Camera keeps stopping". This remains
       // opt-in: it runs only when vStudio Mobile is enabled and a host-camera
       // endpoint was selected.
+      const savedLaunch = androidLaunchPrefs(String(input?.name ?? ''));
+      const requestedProvider = normalizeAndroidCameraProvider(input?.cameraProvider ?? savedLaunch.cameraProvider);
+      const hybridCameraRequested = requestedProvider === 'unity-capture' || requestedProvider === 'directshow';
       const selectedHostEndpoints = [String(input?.cameraFrontDevice ?? ''), String(input?.cameraBackDevice ?? '')].filter(Boolean);
+      const selectedCameraSources = [String(input?.cameraFront ?? ''), String(input?.cameraBack ?? '')];
+      const hostCameraRequested = selectedCameraSources.includes('webcam') || selectedHostEndpoints.length > 0;
+      if (hybridCameraRequested && hostCameraRequested && !selectedHostEndpoints.length) {
+        // The native Octo feed is intentionally deterministic: one endpoint is
+        // exposed and it is always webcam0. The launch still verifies this with
+        // the emulator before spawning it, so a missing provider cannot be
+        // mistaken for a successful camera launch.
+        selectedHostEndpoints.push('webcam0');
+      }
       if (selectedHostEndpoints.length) {
+        if (hybridCameraRequested) setMediaPluginEnabled('vstudio-mobile', true);
         const companion = await mediaCompanionStatusAsync('vstudio-mobile');
         if (companion.enabled && !companion.running) {
           await ensureMediaCompanionAsync('vstudio-mobile');
@@ -2723,7 +2751,9 @@ export class Manager {
       }
       const launched = await launchAndroidAvd({
         name: String(input?.name ?? ''), cameraFront: input?.cameraFront, cameraBack: input?.cameraBack,
-        cameraFrontDevice: String(input?.cameraFrontDevice ?? ''), cameraBackDevice: String(input?.cameraBackDevice ?? ''),
+        cameraProvider: requestedProvider,
+        cameraFrontDevice: String(input?.cameraFrontDevice || (hybridCameraRequested && input?.cameraFront === 'webcam' ? 'webcam0' : '')),
+        cameraBackDevice: String(input?.cameraBackDevice || (hybridCameraRequested && input?.cameraBack === 'webcam' ? 'webcam0' : '')),
         cameraDevice: String(input?.cameraDevice ?? ''), locale: String(input?.locale ?? ''),
         microphoneEnabled: input?.microphoneEnabled !== false, microphoneDevice: String(input?.microphoneDevice ?? ''),
         networkSpeed: input?.networkSpeed, secondaryDisplay: input?.secondaryDisplay, bootMode: input?.bootMode, proxy,
@@ -2735,8 +2765,7 @@ export class Manager {
       // Await both results so the UI never claims that Lensio was preinstalled
       // when the APK is missing, the device did not boot, or package-manager
       // verification failed.
-      const lensioRequested = input?.cameraProvider === 'lensio'
-        || androidLaunchPrefs(String(input?.name ?? '')).cameraProvider === 'lensio'
+      const lensioRequested = requestedProvider === 'lensio'
         || selectedHostEndpoints.some((endpoint) => /lensio|apexcam/i.test(endpoint));
       let lensio: { windowsStarted: boolean; installed: boolean; launched: boolean; message: string } | undefined;
       if (lensioRequested) {
@@ -3223,10 +3252,16 @@ export class Manager {
       repairAndroidMedia(String(name ?? ''), { cameraDevice: String(input?.cameraDevice ?? '') }));
     handle('mgr:android-open-browser', L, async (_e, name: string) => {
       if (!this.ctx.settings.load().androidVirtualBrowserBeta) return { opened: false, reason: 'The Virtual Android Browser beta is switched off in Settings.' };
-      return openAndroidBrowser(String(name ?? ''));
+      const result = await openAndroidBrowser(String(name ?? ''));
+      if (result?.opened) openOctoCameraController();
+      return result;
     });
     handle('mgr:android-chrome-status', L, (_e, name: string) => androidChromeStatus(String(name ?? '')));
-    handle('mgr:android-open-chrome', L, (_e, name: string, url?: string) => openAndroidChrome(String(name ?? ''), typeof url === 'string' ? url : undefined));
+    handle('mgr:android-open-chrome', L, async (_e, name: string, url?: string) => {
+      const result = await openAndroidChrome(String(name ?? ''), typeof url === 'string' ? url : undefined);
+      if (result?.opened) openOctoCameraController();
+      return result;
+    });
     handle('mgr:android-install-chrome', L, (_e, name: string) => installAndroidChrome(String(name ?? '')));
     handle('mgr:native-camera-status', L, () => nativeCameraStatus());
     handle('mgr:native-camera-install', L, async () => {

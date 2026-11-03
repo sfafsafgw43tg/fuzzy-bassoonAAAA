@@ -1,7 +1,7 @@
 {
   "name": "octobrowser",
   "productName": "Octo.su",
-  "version": "0.2.6",
+  "version": "0.2.7",
   "description": "Private, secure multi-purpose browser (OctoSuite)",
   "homepage": "https://github.com/sff4gds/newrepo",
   "repository": "https://github.com/sfafsafgw43tg/manusium",
@@ -37,6 +37,14 @@
       {
         "from": "../../resources/octo-camera",
         "to": "octo-camera"
+      },
+      {
+        "from": "../octocamera/dist/win-unpacked",
+        "to": "octocamera",
+        "filter": [
+          "OctoCameraController.exe",
+          "resources/**"
+        ]
       }
     ],
     "linux": {

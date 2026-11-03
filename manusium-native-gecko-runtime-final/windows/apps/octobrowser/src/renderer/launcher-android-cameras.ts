@@ -53,7 +53,7 @@ export interface CameraSelection {
   frontLimit?: CameraResolution;
   backLimit?: CameraResolution;
   /** Provider selected for the endpoint, used to request provider-specific setup. */
-  cameraProvider?: 'lensio' | 'obs' | 'directshow';
+  cameraProvider?: 'lensio' | 'unity-capture' | 'obs' | 'directshow';
 }
 
 export interface CameraPickerOptions {
@@ -360,6 +360,15 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
     obsButton.disabled = false;
     await scan(true);
   };
+  const controllerButton = h('button', { type: 'button', class: 'btn small', text: 'Open Octo Camera Controller' }) as HTMLButtonElement;
+  controllerButton.onclick = async () => {
+    controllerButton.disabled = true;
+    const result = await api.invoke<{ ok: boolean; message: string }>('mgr:open-octo-camera-controller')
+      .catch((error: unknown) => ({ ok: false, message: errText(error) }));
+    toast(result.message, result.ok ? 'ok' : 'info');
+    previewStatus.textContent = result.message;
+    controllerButton.disabled = false;
+  };
   const refreshButton = h('button', { type: 'button', class: 'btn small' },
     icon('refreshCircle', 14), h('span', { text: t('common.refresh') })) as HTMLButtonElement;
   refreshButton.onclick = () => void scan(true);
@@ -389,6 +398,7 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
       return;
     }
     setSource(facing, 'webcam', virtual.name);
+    selection.cameraProvider = 'obs';
     paintLenses(); paintStatus(); emit();
   }
 
@@ -424,7 +434,7 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
       return;
     }
     setSource(facing, 'webcam', virtual.name);
-    selection.cameraProvider = 'lensio';
+    selection.cameraProvider = 'unity-capture';
     paintLenses(); paintStatus(); emit();
   }
 
@@ -456,7 +466,7 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
     const virtual = listed.find(camera => camera.virtual);
     if (!virtual) { toast(t('android.camera.virtualUnavailable'), 'info'); paintStatus(); return; }
     setSource(facing, 'webcam', virtual.name);
-    selection.cameraProvider = 'lensio';
+    selection.cameraProvider = 'unity-capture';
     paintLenses(); paintStatus(); emit();
   }
 
@@ -556,7 +566,7 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
     manager,
     livePanel,
     h('div', { class: 'grid2' }, backSlot, frontSlot),
-    h('div', { class: 'camera-picker-foot' }, refreshButton, obsButton, previewButton),
+    h('div', { class: 'camera-picker-foot' }, refreshButton, obsButton, controllerButton, previewButton),
     previewVideo,
     previewStatus,
     statusSlot);
@@ -573,6 +583,8 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
 
   function deviceOf(facing: CameraFacing): string {
     const source = facing === 'front' ? selection.front : selection.back;
+    if (source === 'image') return 'image';
+    if (source === 'video') return 'video';
     return source === 'emulated' ? 'emulated' : facing === 'front' ? selection.frontDevice : selection.backDevice;
   }
 
@@ -598,22 +610,7 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
   async function choose(facing: CameraFacing, id: string): Promise<void> {
     stopPreview();
     if (id === 'emulated') { setSource(facing, 'emulated'); paintLenses(); paintStatus(); emit(); return; }
-    if (id === 'virtualcam') {
-      const result = await api.invoke<{ ok: boolean; message: string }>('mgr:android-start-lensio')
-        .catch((error: unknown) => ({ ok: false, message: errText(error) }));
-      toast(result.message, result.ok ? 'ok' : 'info');
-      await scan(true);
-      const virtual = listed.find(camera => camera.virtual);
-      if (!virtual) {
-        toast(t('android.camera.virtualUnavailable'), 'info');
-        paintStatus();
-        return;
-      }
-      setSource(facing, 'webcam', virtual.name);
-      selection.cameraProvider = 'lensio';
-      paintLenses(); paintStatus(); emit();
-      return;
-    }
+    if (id === 'virtualcam') { await useLiveImage(facing); return; }
     if (id === 'image') {
       await pickImage(facing); return;
     }
@@ -622,6 +619,10 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
     }
     if (id && !/^webcam\d+$/.test(id)) return;
     setSource(facing, id ? 'webcam' : 'none', id);
+    if (id) {
+      const camera = listed.find((item) => item.name === id);
+      selection.cameraProvider = /obs\s*virtual|obs/i.test(`${id} ${camera?.device ?? ''}`) ? 'obs' : 'directshow';
+    }
     paintLenses(); paintStatus(); emit();
   }
 
@@ -632,10 +633,23 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
     // it after a completed discovery pass.
     const options: Array<[string, string]> = [
       ['', t('android.camera.off')],
+      ['emulated', t('android.camera.virtualScene')],
+      ['virtualcam', 'Live image · Unity Capture'],
       ['image', t('android.camera.imageFile')],
       ['video', t('android.camera.videoFile')],
     ];
     const source = facing === 'front' ? selection.front : selection.back;
+    const currentDevice = deviceOf(facing);
+    for (const camera of listed) {
+      const id = camera.name;
+      if (!options.some(([optionId]) => optionId === id)) {
+        const label = camera.device || t('android.camera.manualEndpoint', { endpoint: id });
+        options.push([id, `${label} · ${id}`]);
+      }
+    }
+    if (source === 'webcam' && currentDevice && !options.some(([id]) => id === currentDevice)) {
+      options.push([currentDevice, `${currentDevice} · unavailable`]);
+    }
     const video = h('button', { type: 'button', class: 'btn small camera-quick-switch', text: t('android.camera.quickVideo') }) as HTMLButtonElement;
     video.onclick = () => { void pickVideo(facing); };
     const photo = h('button', { type: 'button', class: 'btn small camera-quick-switch', text: t('android.camera.choosePhoto') }) as HTMLButtonElement;
@@ -648,7 +662,6 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
       const speed = select<string>(String(settings.speed), [['0.25', '0.25×'], ['0.5', '0.5×'], ['0.75', '0.75×'], ['1', '1×'], ['1.25', '1.25×'], ['1.5', '1.5×'], ['2', '2×']], value => { settings.speed = Number(value) || 1; videoSettings.set(facing, settings); void prepareVideo(facing); });
       videoSettingsPanel.append(field('Loop video (3 cycles)', loop), field('Playback speed', speed));
     }
-    const currentDevice = deviceOf(facing);
     const currentCamera = currentDevice ? listed.find(camera => camera.name === currentDevice) : undefined;
     const currentCheck = currentCamera ? checkOf(currentCamera) : undefined;
     const isDetected = source === 'emulated' || source === 'image' || (source === 'video' ? (videoDetected.get(facing) ?? Boolean(currentDevice && /\.(mp4|mkv|avi|mov)$/i.test(currentDevice))) : Boolean(currentDevice && listed.some(camera => camera.name === currentDevice)));
@@ -656,7 +669,7 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
     const isLive = source === 'webcam' ? currentCheck?.ok === true : undefined;
     const badge = (label: string, state: boolean | undefined): HTMLElement => h('span', { class: `camera-source-badge ${state === true ? 'ok' : state === false ? 'off' : 'unknown'}`, text: `${label}: ${state === true ? t('android.camera.statusYes') : state === false ? t('android.camera.statusNo') : t('android.camera.statusUnknown')}` });
     return field(key, h('div', { class: 'camera-source-controls' },
-      select<string>(source === 'video' ? 'video' : source === 'image' ? 'image' : '', options, id => { void choose(facing, id); }),
+      select<string>(source === 'video' ? 'video' : deviceOf(facing), options, id => { void choose(facing, id); }),
       h('div', { class: 'camera-source-status', 'aria-label': t('android.camera.sourceStatus') },
         badge(t('android.camera.detected'), isDetected), badge(t('android.camera.configured'), isConfigured), badge(t('android.camera.liveFrames'), isLive)),
       h('div', { class: 'camera-quick-switches' }, photo, video), videoSettingsPanel));
@@ -675,7 +688,11 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
   /** Keep configured, enumerated and capture-verified camera states distinct. */
   function paintStatus(): void {
     const lines: HTMLElement[] = [];
-    if (!cameraTests.enabled) lines.push(line(false, t('android.camera.testingOff')));
+    if (!cameraTests.enabled && selection.cameraProvider !== 'unity-capture'
+      && selection.front !== 'image' && selection.back !== 'image'
+      && selection.front !== 'video' && selection.back !== 'video') {
+      lines.push(line(false, t('android.camera.testingOff')));
+    }
     if (selection.front === 'image' || selection.back === 'image') lines.push(line(false, t('android.camera.imageFileHint')));
     if (selection.front === 'video' || selection.back === 'video') lines.push(line(false, t('android.camera.videoFileHint')));
     if (selection.frontDevice && selection.frontDevice === selection.backDevice) lines.push(line(true, t('android.camera.sharedWarning')));

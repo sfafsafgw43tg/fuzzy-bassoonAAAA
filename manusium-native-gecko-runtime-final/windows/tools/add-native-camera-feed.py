@@ -79,6 +79,45 @@ class NativeNv12Publisher:
         self.active = False
 '''
 
+request_poller = r'''
+    def _octo_runtime(self, **values):
+        """Write a small atomic status file consumed by OctoSuite."""
+        try:
+            import json as _json
+            import os as _os
+            import tempfile as _tempfile
+            payload = {"pid": _os.getpid(), "broadcasting": bool(self.broadcasting),
+                       "cameraActive": bool(self.video and self.video.vcam_active), **values}
+            target = _os.path.join(APP_DIR, ".octo-runtime.json")
+            fd, temporary = _tempfile.mkstemp(prefix=".octo-runtime-", dir=APP_DIR, text=True)
+            with _os.fdopen(fd, "w", encoding="utf-8") as stream:
+                _json.dump(payload, stream)
+            _os.replace(temporary, target)
+        except Exception:
+            pass
+
+    def _octo_poll_broadcast_request(self):
+        """Accept one-shot start/stop requests written by OctoSuite."""
+        try:
+            import json as _json
+            with open(CONFIG_PATH, "r", encoding="utf-8") as stream:
+                config = _json.load(stream)
+            request = str((config.get("octobrowser") or {}).get("broadcastRequest") or "")
+            if request and request != getattr(self, "_octo_last_request", ""):
+                self._octo_last_request = request
+                if request.startswith("start:"):
+                    ok, message = self.video.start_virtual() if self.video else (False, "video engine unavailable")
+                    self.broadcasting = bool(ok)
+                    self._octo_runtime(broadcastRequest=request, cameraError="" if ok else str(message))
+                elif request.startswith("stop:"):
+                    self._stop_broadcast()
+                    self._octo_runtime(broadcastRequest=request)
+        except Exception as error:
+            self._octo_runtime(cameraError=str(error))
+        if not self._closing:
+            self.after(250, self._octo_poll_broadcast_request)
+'''
+
 with zipfile.ZipFile(archive, 'r') as source, zipfile.ZipFile(tmp, 'w') as target:
     for info in source.infolist():
         data = source.read(info.filename)
@@ -97,6 +136,9 @@ with zipfile.ZipFile(archive, 'r') as source, zipfile.ZipFile(tmp, 'w') as targe
             if '"native_camera_feed": True' not in text:
                 text = text.replace('        "loop_blend": 0.35,\n', '        "loop_blend": 0.35,\n        "native_camera_feed": True,\n', 1)
                 text = text.replace('        "loop_video": True, "loop_blend": 0.35,\n', '        "loop_video": True, "loop_blend": 0.35, "native_camera_feed": True,\n', 1)
+            if 'def _octo_poll_broadcast_request(self):' not in text:
+                text = text.replace('\n    # ---------------------------------------------------------- pomocnicze\n', '\n' + request_poller + '\n    # ---------------------------------------------------------- pomocnicze\n', 1)
+                text = text.replace('        self.after(400, self._v13_restore_music)\n', '        self.after(400, self._v13_restore_music)\n        self._octo_last_request = ""\n        self.after(250, self._octo_poll_broadcast_request)\n', 1)
             data = text.encode('utf-8')
         elif info.filename == config_name:
             text = data.decode('utf-8')
