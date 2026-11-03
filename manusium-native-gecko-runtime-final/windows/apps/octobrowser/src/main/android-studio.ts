@@ -2501,14 +2501,14 @@ export function importAvdFolder(dir: string): { added: number; names: string[] }
 }
 
 /** Devices found on disk, without asking any Android tool. */
-export function scanAvdFolders(): AvdLocation[] {
+export function scanAvdFolders(searchDirectories: string[] = avdSearchDirectories()): AvdLocation[] {
   const found = new Map<string, AvdLocation>();
   const add = (name: string, dir: string) => {
     if (!name || found.has(name) || !NAME.test(name)) return;
     if (!fs.existsSync(path.join(dir, 'config.ini'))) return;
     found.set(name, { name, path: dir, target: describeAvd(dir) });
   };
-  for (const dir of avdSearchDirectories()) {
+  for (const dir of searchDirectories.filter((entry) => ABSOLUTE(entry))) {
     let entries: fs.Dirent[] = [];
     try { entries = fs.readdirSync(dir, { withFileTypes: true }); } catch { continue; }
     for (const entry of entries) {
