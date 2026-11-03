@@ -351,17 +351,16 @@ describe('vStudio Mobile inside the phones', () => {
     expect(manager).toContain('repairAndroidMedia(String(name ?? \'\'), { cameraDevice');
   });
 
-  it('offers explicit manual endpoints, Off, and the stable Virtual scene source', () => {
+  it('offers explicit manual endpoints, None, and the stable Emulated source', () => {
     expect(page).toContain('androidMediaDialog({ name: machine.name');
     // Off is selectable and webcam0 remains configurable when enumeration fails.
     expect(cameraUi).toContain("select<string>(source === 'video' ? 'video' : deviceOf(facing), options");
     expect(cameraUi).toContain("t('android.camera.manualEndpoint', { endpoint: id })");
-    expect(cameraUi).toContain("['emulated', t('android.camera.virtualScene')]");
+    expect(cameraUi).toContain("['emulated', t('android.camera.emulated')]");
     expect(cameraUi).toContain("source === 'emulated'");
-    expect(cameraUi).not.toContain("'android.camera.none'");
-    expect(cameraUi).not.toContain("'android.camera.emulated'");
+    expect(cameraUi).toContain("'android.camera.none'");
+    expect(cameraUi).toContain("'android.camera.emulated'");
     expect(cameraUi).not.toContain("'android.camera.virtualscene'");
-    expect(cameraUi).toContain("t('android.camera.off')");
     expect(cameraUi).toContain("'android.camera.sharedWarning'");
     expect(cameraUi).toContain("'android.camera.msgNone'");
     // Manual mappings carry an explicit unverified warning, not a success badge.

@@ -636,12 +636,14 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
     // Do not invent webcam0 when the emulator returned an empty list. Keep a
     // currently selected endpoint visible only long enough for scan() to clear
     // it after a completed discovery pass.
+    // Keep the startup selector identical to Android Studio: Off, Emulated,
+    // and the host webcams enumerated by the emulator. The integrated photo /
+    // video bridge remains available through the quick actions below and is
+    // represented by its enumerated Unity Capture webcam endpoint after it is
+    // started; it is not exposed as a non-standard lens mode.
     const options: Array<[string, string]> = [
-      ['', t('android.camera.off')],
-      ['emulated', t('android.camera.virtualScene')],
-      ['virtualcam', 'Live image · Unity Capture'],
-      ['image', t('android.camera.imageFile')],
-      ['video', t('android.camera.videoFile')],
+      ['', t('android.camera.none')],
+      ['emulated', t('android.camera.emulated')],
     ];
     const source = facing === 'front' ? selection.front : selection.back;
     const currentDevice = deviceOf(facing);

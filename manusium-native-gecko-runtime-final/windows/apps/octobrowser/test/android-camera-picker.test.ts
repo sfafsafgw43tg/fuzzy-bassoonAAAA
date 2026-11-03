@@ -21,9 +21,20 @@ describe('the camera picker follows the cameras by itself', () => {
 
   it('labels virtual endpoints and confirms a selected source only after a live frame check', () => {
     expect(picker).toContain("camera.virtual ? `${t('android.camera.virtualDevice')} · ${label}` : label");
-    expect(picker).toContain("['emulated', t('android.camera.virtualScene')]");
+    expect(picker).toContain("['emulated', t('android.camera.emulated')]");
     expect(picker).toContain("if (id === 'emulated')");
     expect(picker).toContain("t('android.camera.selectedWorking', { cameras: selected.join(', ') })");
     expect(picker).toContain('cameraTests.enabled && working().length');
+  });
+
+  it('keeps the startup lens selector limited to Android Studio modes while preserving the integrated quick actions', () => {
+    expect(picker).toContain("['', t('android.camera.none')]");
+    expect(picker).toContain("['emulated', t('android.camera.emulated')]");
+    expect(picker).not.toContain("['virtualcam', 'Live image · Unity Capture']");
+    expect(picker).not.toContain("['image', t('android.camera.imageFile')]");
+    expect(picker).not.toContain("['video', t('android.camera.videoFile')]");
+    expect(picker).toContain("const photo = h('button'");
+    expect(picker).toContain("const video = h('button'");
+    expect(picker).toContain("selection.cameraProvider = 'unity-capture'");
   });
 });
