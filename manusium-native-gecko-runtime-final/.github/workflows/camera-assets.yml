@@ -7,6 +7,11 @@ on:
         description: OpenStream release tag, or latest
         required: false
         default: latest
+  pull_request:
+    paths:
+      - 'windows/scripts/setup-openstream-camera.ps1'
+      - 'windows/docs/openstream-vs-octosuite-camera.md'
+      - '.github/workflows/camera-assets.yml'
   push:
     branches: ['arena/c10966b9-fuzzy-bassoonaaaa']
     paths:
