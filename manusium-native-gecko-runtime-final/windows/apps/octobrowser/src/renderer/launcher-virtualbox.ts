@@ -265,9 +265,19 @@ function androidLaunchDialog(machine: AndroidMachine, load: () => Promise<void>,
     const launch = h('button', { class: 'btn primary', text: t('android.launch') });
     const cancel = h('button', { class: 'btn', text: t('common.cancel') });
     cancel.onclick = () => { stopMicrophonePreview(); closeModal(); };
+    const askStartObs = (): Promise<boolean> => new Promise((resolve) => {
+      modal(t('android.startObs.title'), (prompt) => {
+        const no = h('button', { class: 'btn', text: t('android.startObs.no') }) as HTMLButtonElement;
+        const yes = h('button', { class: 'btn primary', text: t('android.startObs.yes') }) as HTMLButtonElement;
+        no.onclick = () => { closeModal(); resolve(false); };
+        yes.onclick = () => { closeModal(); resolve(true); };
+        prompt.append(h('p', { text: t('android.startObs.body') }), h('div', { class: 'modal-actions' }, no, yes));
+      }, 'wide');
+    });
     launch.onclick = async () => {
       stopMicrophonePreview();
       const camera = cameras.value();
+      const startObs = await askStartObs();
       launch.disabled = true;
       const label = launch.textContent;
       launch.textContent = t('android.starting');
@@ -276,6 +286,10 @@ function androidLaunchDialog(machine: AndroidMachine, load: () => Promise<void>,
       // "Starting…" during the emulator's six-second health check.
       closeModal();
       try {
+        if (startObs) {
+          const obs = await run(api.invoke<{ ok: boolean; message: string }>('mgr:android-start-obs'));
+          if (!obs?.ok) toast(obs?.message || 'OBS Studio could not be started.', 'info');
+        }
         const result = await run(api.invoke<{ ok: boolean; cameraWarning?: string; notes?: string[]; lensio?: { installed: boolean; launched: boolean; message: string } }>('mgr:android-launch', {
           name: machine.name, proxyId, cameraFront: camera.front, cameraBack: camera.back,
           cameraProvider: camera.cameraProvider,
