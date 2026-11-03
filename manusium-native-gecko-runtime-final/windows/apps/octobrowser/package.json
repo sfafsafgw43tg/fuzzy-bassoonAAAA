@@ -37,14 +37,6 @@
       {
         "from": "../../resources/octo-camera",
         "to": "octo-camera"
-      },
-      {
-        "from": "../octocamera/dist/win-unpacked",
-        "to": "octocamera",
-        "filter": [
-          "OctoCameraController.exe",
-          "resources/**"
-        ]
       }
     ],
     "linux": {

@@ -360,15 +360,18 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
     obsButton.disabled = false;
     await scan(true);
   };
-  const controllerButton = h('button', { type: 'button', class: 'btn small', text: 'Open Octo Camera Controller' }) as HTMLButtonElement;
-  controllerButton.onclick = async () => {
-    controllerButton.disabled = true;
-    const result = await api.invoke<{ ok: boolean; message: string }>('mgr:open-octo-camera-controller')
-      .catch((error: unknown) => ({ ok: false, message: errText(error) }));
-    toast(result.message, result.ok ? 'ok' : 'info');
-    previewStatus.textContent = result.message;
-    controllerButton.disabled = false;
+  const streamButton = h('button', { type: 'button', class: 'btn small', text: 'Check live photo stream', 'aria-label': 'Check the local live photo camera stream' }) as HTMLButtonElement;
+  const streamStatus = h('p', { class: 'hint', role: 'status', 'aria-live': 'polite', text: 'Local photo stream is starting…' });
+  const updateStreamStatus = async (): Promise<void> => {
+    streamButton.disabled = true;
+    const result = await api.invoke<{ running: boolean; port: number; mjpegUrl: string; frameBytes: number }>('mgr:android-live-stream-status')
+      .catch(() => null);
+    streamStatus.textContent = result?.running
+      ? `Live photo stream ready on localhost:${result.port}${result.frameBytes ? ` · ${result.frameBytes} bytes` : ' · waiting for a selected photo'}`
+      : 'Live photo stream is unavailable.';
+    streamButton.disabled = false;
   };
+  streamButton.onclick = () => { void updateStreamStatus(); };
   const refreshButton = h('button', { type: 'button', class: 'btn small' },
     icon('refreshCircle', 14), h('span', { text: t('common.refresh') })) as HTMLButtonElement;
   refreshButton.onclick = () => void scan(true);
@@ -479,6 +482,7 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
         class: `camera-live-image-card${index === liveImageIndex ? ' active' : ''}`,
         title: t('android.camera.selectImage', { n: String(index + 1) }),
         'aria-label': t('android.camera.selectImage', { n: String(index + 1) }),
+        'aria-pressed': index === liveImageIndex ? 'true' : 'false',
       }) as HTMLButtonElement;
       const image = h('img', { class: 'camera-live-image-thumb', alt: t('android.camera.selectImage', { n: String(index + 1) }) }) as HTMLImageElement;
       const caption = h('span', { class: 'camera-live-image-caption', text: `${index + 1}` });
@@ -495,7 +499,7 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
       ['manual', t('android.camera.playlistManual')], ['auto', t('android.camera.playlistAuto')],
       ['random', t('android.camera.playlistRandom')],
     ], (value) => { liveMode = value as typeof liveMode; void activateLiveImage(liveFacing, liveImageIndex); });
-    const interval = h('input', { type: 'number', min: '0.5', max: '3600', step: '0.5', value: String(liveInterval), title: t('android.camera.playlistInterval') }) as HTMLInputElement;
+    const interval = h('input', { type: 'number', min: '0.5', max: '3600', step: '0.5', value: String(liveInterval), title: t('android.camera.playlistInterval'), 'aria-label': t('android.camera.playlistInterval') }) as HTMLInputElement;
     interval.onchange = () => { liveInterval = Math.max(0.5, Math.min(3600, Number(interval.value) || 6)); interval.value = String(liveInterval); void activateLiveImage(liveFacing, liveImageIndex); };
     livePanel.replaceChildren(
       h('div', { class: 'camera-live-panel-head' },
@@ -566,9 +570,10 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
     manager,
     livePanel,
     h('div', { class: 'grid2' }, backSlot, frontSlot),
-    h('div', { class: 'camera-picker-foot' }, refreshButton, obsButton, controllerButton, previewButton),
+    h('div', { class: 'camera-picker-foot' }, refreshButton, obsButton, streamButton, previewButton),
     previewVideo,
     previewStatus,
+    streamStatus,
     statusSlot);
 
   const emit = (): void => {
@@ -657,7 +662,7 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
     const videoSettingsPanel = h('div', { class: 'camera-video-settings' });
     if (source === 'video') {
       const settings = videoSettings.get(facing) ?? { loop: true, speed: 1 };
-      const loop = h('input', { type: 'checkbox', checked: settings.loop ? 'true' : undefined }) as HTMLInputElement;
+      const loop = h('input', { type: 'checkbox', checked: settings.loop ? 'true' : undefined, 'aria-label': 'Loop video playback' }) as HTMLInputElement;
       loop.onchange = () => { settings.loop = loop.checked; videoSettings.set(facing, settings); void prepareVideo(facing); };
       const speed = select<string>(String(settings.speed), [['0.25', '0.25×'], ['0.5', '0.5×'], ['0.75', '0.75×'], ['1', '1×'], ['1.25', '1.25×'], ['1.5', '1.5×'], ['2', '2×']], value => { settings.speed = Number(value) || 1; videoSettings.set(facing, settings); void prepareVideo(facing); });
       videoSettingsPanel.append(field('Loop video (3 cycles)', loop), field('Playback speed', speed));
@@ -837,6 +842,7 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
 
   paintLenses();
   paintStatus();
+  void updateStreamStatus();
   void scan(false);
   return {
     element,

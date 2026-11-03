@@ -71,23 +71,10 @@ import { discoverFirefoxRuntime, geckoCatalogEntry, installFirefoxRuntime, inspe
 import { chromiumPrivacyArgs, prepareChromiumPrivacy, prepareFirefoxPrivacy } from '@octo/shell/engine-privacy';
 import { inspectLocalChromeExtension, nativeBundledExtensionPaths, toProfileChromeExtension } from './extensions';
 import { installNativeCamera, nativeCameraStatus, uninstallNativeCamera } from './native-camera';
+import { LiveCameraStreamServer } from './live-camera-server';
 import { detectBrowserIntegrations, launchBrowserIntegration } from './browser-integrations';
 
 let importedHandsetsLoaded = false;
-
-function openOctoCameraController(): { ok: boolean; message: string; path?: string } {
-  const candidates = [
-    process.env.OCTO_CAMERA_CONTROLLER,
-    path.join(process.resourcesPath, 'octocamera', 'OctoCameraController.exe'),
-    path.resolve(process.resourcesPath, '..', 'OctoCameraController.exe'),
-    path.resolve(app.getAppPath(), '..', 'octocamera', 'dist', 'win-unpacked', 'OctoCameraController.exe'),
-    path.resolve(__dirname, '..', '..', 'octocamera', 'dist', 'win-unpacked', 'OctoCameraController.exe'),
-  ].filter((value): value is string => Boolean(value));
-  const controller = candidates.find((candidate) => fs.existsSync(candidate));
-  if (!controller) return { ok: false, message: 'Octo Camera Controller is not installed beside Octo.su. Install the standalone controller release first.' };
-  launchDetached(controller);
-  return { ok: true, message: 'Octo Camera Controller opened.', path: controller };
-}
 
 const LAUNCHER_CHROME_COLORS: Record<string, { color: string; symbolColor: string }> = {
   ink: { color: '#111315', symbolColor: '#d8e2ec' }, obsidian: { color: '#090a0d', symbolColor: '#eef1f5' },
@@ -436,6 +423,8 @@ export class Manager {
   private readonly nativeChromium = new Map<string, { engine: NativeEngineProcess; tabs: NativeChromiumTabs; startedAt: number; runtimeVersion: string }>();
   /** Native Gecko processes launched for Firefox-base profiles. */
   private readonly nativeFirefox = new Map<string, { engine: NativeEngineProcess; bidi: FirefoxBidi; startedAt: number; runtimeVersion: string }>();
+  /** Local-only repeated-frame stream used by the camera bridge. */
+  private readonly liveCameraStream = new LiveCameraStreamServer();
   private locking = false;
   /** Dead man's switch: no browser profile and no Android device may use the net. */
   private killSwitchOn = false;
@@ -506,6 +495,7 @@ export class Manager {
   /** Start the profile manager and invoke `onLauncherReady` when its UI can be shown. */
   start(onLauncherReady?: () => void): void {
     this.guardLauncherSession(session.defaultSession);
+    void this.liveCameraStream.start().catch((error) => this.ctx.logger.warn('camera.stream-start-failed', { error: String(error) }));
     const names = Object.fromEntries(PROFILE_KINDS.map((k) => [k, this.t(`profile.kind.${k}`)])) as Record<ProfileKind, string>;
     // First run: one ready-to-use antidetect profile (works like a normal browser).
     this.profiles.ensureDefaults({ ...names, antidetect: `${this.t('profile.defaultName')} 1` }, ['antidetect']);
@@ -523,6 +513,7 @@ export class Manager {
     // Explicit quit/relaunch/reset paths must not be mistaken for a title-bar X.
     app.on('before-quit', () => {
       this.appQuitting = true;
+      void this.liveCameraStream.stop();
       this.tray?.destroy();
       this.tray = null;
     });
@@ -2542,7 +2533,6 @@ export class Manager {
     handle('mgr:archived', L, () => this.profileList(false, true));
     handle('mgr:chromium-catalog', L, () => listInstalled(path.join(ctx.layout.engine, 'runtimes', 'chromium'), process.platform, process.arch, engineResourceRoots()));
     handle('mgr:browser-integrations', L, () => detectBrowserIntegrations());
-    handle('mgr:open-octo-camera-controller', L, () => openOctoCameraController());
     handle('mgr:browser-pick-executable', L, async (e) => {
       const owner = BrowserWindow.fromWebContents(e.sender);
       if (!owner) return '';
@@ -3188,6 +3178,9 @@ export class Manager {
     handle('mgr:android-webcams', L, () => emulatorWebcams());
     handle('mgr:android-start-obs', L, () => startObsVirtualCamera());
     handle('mgr:android-start-lensio', L, () => startLensioVirtualCamera());
+    handle('mgr:android-live-stream-status', L, () => this.liveCameraStream.status());
+    handle('mgr:android-live-stream-start', L, () => this.liveCameraStream.start());
+    handle('mgr:android-live-stream-stop', L, async () => { await this.liveCameraStream.stop(); return this.liveCameraStream.status(); });
     handle('mgr:android-live-image', L, async (_e, input: { deviceName?: string; imagePath?: string; imagePaths?: string[]; activeIndex?: number; imageFit?: 'fill' | 'fit' | 'stretch' | 'blur'; playlistMode?: 'manual' | 'auto' | 'random'; playlistInterval?: number }) => {
       const deviceName = String(input?.deviceName ?? '').trim();
       if (!/^[A-Za-z0-9._-]{1,64}$/.test(deviceName)) throw new Error('Invalid Android device name');
@@ -3228,6 +3221,12 @@ export class Manager {
       }
       if (!playlist.length) throw new Error('No live images are configured');
       const activeIndex = ((Number(input?.activeIndex ?? 0) % playlist.length) + playlist.length) % playlist.length;
+      await this.liveCameraStream.start();
+      const activeImage = playlist[activeIndex];
+      const activeBytes = await fsp.readFile(activeImage);
+      const activeType = /\.png$/i.test(activeImage) ? 'image/png' : /\.(jpg|jpeg)$/i.test(activeImage) ? 'image/jpeg' : '';
+      if (!activeType) throw new Error('The live HTTP camera stream currently accepts JPG, JPEG, and PNG photos');
+      this.liveCameraStream.setImage(activeBytes, activeType);
       const imageFit = input?.imageFit === 'fit' || input?.imageFit === 'stretch' || input?.imageFit === 'blur' ? input.imageFit : 'fill';
       const playlistMode = input?.playlistMode === 'auto' || input?.playlistMode === 'random' ? input.playlistMode : 'manual';
       const playlistInterval = Math.max(0.5, Math.min(3600, Number(input?.playlistInterval ?? 6) || 6));
@@ -3244,7 +3243,8 @@ export class Manager {
       const request = requestMediaCompanionBroadcast('vstudio-mobile', true);
       const started = startMediaCompanion('vstudio-mobile');
       await waitForMediaCompanionCamera('vstudio-mobile', request);
-      return { ok: true, started: started.started, index: activeIndex, total: playlist.length, mode: playlistMode, interval: playlistInterval, fit: imageFit, message: `Live image ${activeIndex + 1} of ${playlist.length} is broadcasting through ${started.message}` };
+      const stream = this.liveCameraStream.status();
+      return { ok: true, started: started.started, index: activeIndex, total: playlist.length, mode: playlistMode, interval: playlistInterval, fit: imageFit, stream, message: `Live image ${activeIndex + 1} of ${playlist.length} is broadcasting through ${started.message}` };
     });
     handle('mgr:android-camera-choices', L, () => androidCameraChoicesCached());
     handle('mgr:android-media-check', L, (_e, name: string) => androidMediaCheck(String(name ?? '')));
@@ -3252,15 +3252,11 @@ export class Manager {
       repairAndroidMedia(String(name ?? ''), { cameraDevice: String(input?.cameraDevice ?? '') }));
     handle('mgr:android-open-browser', L, async (_e, name: string) => {
       if (!this.ctx.settings.load().androidVirtualBrowserBeta) return { opened: false, reason: 'The Virtual Android Browser beta is switched off in Settings.' };
-      const result = await openAndroidBrowser(String(name ?? ''));
-      if (result?.opened) openOctoCameraController();
-      return result;
+      return openAndroidBrowser(String(name ?? ''));
     });
     handle('mgr:android-chrome-status', L, (_e, name: string) => androidChromeStatus(String(name ?? '')));
     handle('mgr:android-open-chrome', L, async (_e, name: string, url?: string) => {
-      const result = await openAndroidChrome(String(name ?? ''), typeof url === 'string' ? url : undefined);
-      if (result?.opened) openOctoCameraController();
-      return result;
+      return openAndroidChrome(String(name ?? ''), typeof url === 'string' ? url : undefined);
     });
     handle('mgr:android-install-chrome', L, (_e, name: string) => installAndroidChrome(String(name ?? '')));
     handle('mgr:native-camera-status', L, () => nativeCameraStatus());

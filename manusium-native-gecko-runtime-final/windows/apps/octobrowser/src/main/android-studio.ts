@@ -2102,15 +2102,12 @@ export async function androidCameraChoices(deps = { tools: optionalSdk, cameraNa
     if (report.webcams.length) return { webcams: report.webcams, emulatorAvailable: true, hostCameraCount, emulatorPath: emulator, sdkRoot: root, problem: '', detail: '' };
     last = report;
   }
-  // Some Windows emulator builds fail `-webcam-list` after a virtual camera is
-  // hot-plugged, even though the host still has a usable capture endpoint. Keep
-  // the picker actionable with the emulator's conventional first endpoint, but
-  // mark it unverified so the UI never presents it as a successful probe.
-  const fallback = automaticWebcamFallback(hostCameraCount ?? 0, last, process.platform);
-  const detail = fallback.length
-    ? `${last.detail || 'The emulator did not return its camera list.'} webcam0 is shown as an unverified fallback.`.trim()
-    : last.detail;
-  return { webcams: fallback, emulatorAvailable: true, hostCameraCount, emulatorPath: candidates[0], sdkRoot: path.dirname(path.dirname(candidates[0] ?? '')), problem: last.problem, detail };
+  // Never invent webcam0. The emulator must enumerate the endpoint itself;
+  // otherwise Android will boot with a stale/unopenable camera route.
+  const detail = last.detail || (hostCameraCount
+    ? `Windows reports ${hostCameraCount} camera device(s), but this emulator did not enumerate one. Start the camera driver, close other camera apps, then Refresh.`
+    : 'Windows reports no camera device and the emulator returned an empty webcam list.');
+  return { webcams: [], emulatorAvailable: true, hostCameraCount, emulatorPath: candidates[0], sdkRoot: path.dirname(path.dirname(candidates[0] ?? '')), problem: last.problem, detail };
 }
 
 export interface ActiveCameraAssignments {
@@ -3147,8 +3144,7 @@ export async function repairAndroidMedia(name: string, input: { cameraDevice?: s
     ? (await emulatorWebcamsFrom(emulator, rootForPackage(imagePackage) || sdk?.root || '', CAMERA_LAUNCH_LIMIT_MS, clean)).webcams
     : [];
   const hostCameraCount = (await windowsCameraNames()).length;
-  const fallback = automaticWebcamFallback(hostCameraCount, { webcams, problem: 'reported', detail: '' });
-  const usableWebcams = webcams.length ? webcams : fallback;
+  const usableWebcams = webcams;
   // A camera the caller picked goes to the rear lens. Otherwise the saved
   // choices stand, and a lens without a camera takes an active one.
   const wanted = input.cameraDevice && usableWebcams.some((item) => item.name === input.cameraDevice) ? input.cameraDevice : '';
@@ -3168,7 +3164,6 @@ export async function repairAndroidMedia(name: string, input: { cameraDevice?: s
     microphoneEnabled: true,
   });
   changed.push('camera', 'microphone');
-  if (fallback.length) changed.push('automatic-webcam-fallback');
   return { changed, check: await androidMediaCheck(clean) };
 }
 
@@ -3941,13 +3936,7 @@ export async function launchAndroidAvd(input: AndroidLaunchInput): Promise<Andro
     input.cameraBackDevice ?? avd.cameraBackDevice ?? '',
     input.cameraDevice ?? avd.cameraDevice ?? '',
   ];
-  const fallback = needsHostCamera
-    ? automaticWebcamFallback(await windowsCameraNames().then((items) => items.length), webcamReport, process.platform, selectedEndpoints)
-    : [];
-  if (fallback.length) {
-    launchNotes.push('The emulator camera list was temporarily unavailable; the saved Windows endpoint will be verified by the Android camera check after boot.');
-  }
-  const webcams = webcamReport.webcams.length ? webcamReport.webcams : fallback;
+  const webcams = webcamReport.webcams;
   if (needsHostCamera && !webcams.length) {
     throw new Error([
       `The Android Emulator did not verify a host camera for ${name}.`,

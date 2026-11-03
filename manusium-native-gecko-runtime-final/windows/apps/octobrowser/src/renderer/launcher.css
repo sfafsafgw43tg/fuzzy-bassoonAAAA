@@ -2013,6 +2013,7 @@ textarea.ua, .frow-info-card { max-width: 760px; }
 .camera-live-image-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(92px, 1fr)); gap: 8px; }
 .camera-live-image-card { position: relative; min-height: 76px; padding: 3px; border: 1px solid var(--line); border-radius: 8px; background: var(--bg); cursor: pointer; overflow: hidden; }
 .camera-live-image-card:hover { border-color: var(--accent); }
+.camera-live-image-card:focus-visible { outline: 2px solid var(--accent-h); outline-offset: 3px; }
 .camera-live-image-card.active { border: 2px solid var(--accent); padding: 2px; box-shadow: 0 0 0 2px color-mix(in srgb, var(--accent) 18%, transparent); }
 .camera-live-image-thumb { display: block; width: 100%; height: 72px; object-fit: cover; border-radius: 5px; background: var(--bg3); }
 .camera-live-image-caption { position: absolute; right: 5px; bottom: 5px; min-width: 19px; padding: 1px 5px; border-radius: 10px; color: #fff; background: rgba(0,0,0,.7); font-size: 11px; text-align: center; }
@@ -2022,3 +2023,11 @@ textarea.ua, .frow-info-card { max-width: 760px; }
 .camera-source-badge.ok { border-color: color-mix(in srgb, var(--ok) 55%, var(--line)); color: var(--ok); }
 .camera-source-badge.off { border-color: color-mix(in srgb, var(--danger) 45%, var(--line)); color: var(--danger); }
 .camera-source-badge.unknown { border-style: dashed; }
+.camera-picker button,
+.camera-picker input,
+.camera-picker .select-trigger { min-width: 24px; min-height: 24px; }
+@media (prefers-reduced-motion: reduce) {
+  .camera-picker *,
+  .camera-picker *::before,
+  .camera-picker *::after { transition-duration: .01ms !important; animation-duration: .01ms !important; }
+}
