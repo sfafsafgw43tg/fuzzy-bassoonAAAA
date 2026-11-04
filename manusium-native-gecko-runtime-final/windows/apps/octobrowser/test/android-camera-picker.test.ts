@@ -44,4 +44,9 @@ describe('the camera picker follows the cameras by itself', () => {
     expect(picker).toContain("setDevice('back', 'webcam0')");
     expect(picker).not.toContain("setDevice('front', 'webcam0'); setDevice('back', 'webcam0')");
   });
+
+  it('labels the localhost stream as preview-only and keeps webcam0 as the emulator endpoint', () => {
+    expect(picker).toContain('The emulator transport is the native webcam endpoint selected below.');
+    expect(picker).toContain('Native virtual camera connection is not active.');
+  });
 });

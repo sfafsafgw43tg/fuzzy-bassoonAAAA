@@ -360,15 +360,15 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
     obsButton.disabled = false;
     await scan(true);
   };
-  const streamButton = h('button', { type: 'button', class: 'btn small', text: 'Check live photo stream', 'aria-label': 'Check the local live photo camera stream' }) as HTMLButtonElement;
-  const streamStatus = h('p', { class: 'hint', role: 'status', 'aria-live': 'polite', text: 'Local photo stream is starting…' });
+  const streamButton = h('button', { type: 'button', class: 'btn small', text: 'Check virtual camera connection', 'aria-label': 'Check the native virtual camera connection to the Android Emulator' }) as HTMLButtonElement;
+  const streamStatus = h('p', { class: 'hint', role: 'status', 'aria-live': 'polite', text: 'Native virtual camera connection is not active.' });
   const updateStreamStatus = async (): Promise<void> => {
     streamButton.disabled = true;
-    const result = await api.invoke<{ running: boolean; port: number; mjpegUrl: string; frameBytes: number }>('mgr:android-live-stream-status')
+    const result = await api.invoke<{ running: boolean; port: number; mjpegUrl: string; frameBytes: number; transport?: string; emulatorEndpoint?: string; cameraDevice?: string }>('mgr:android-live-stream-status')
       .catch(() => null);
     streamStatus.textContent = result?.running
-      ? `Live photo stream ready on localhost:${result.port}${result.frameBytes ? ` · ${result.frameBytes} bytes` : ' · waiting for a selected photo'}`
-      : 'Live photo stream is unavailable.';
+      ? `Diagnostic preview ready on localhost:${result.port}${result.frameBytes ? ` · ${result.frameBytes} bytes` : ''}. The emulator transport is the native webcam endpoint selected below.`
+      : 'Native virtual camera connection is not active. Select a photo or start OBS first.';
     streamButton.disabled = false;
   };
   streamButton.onclick = () => { void updateStreamStatus(); };

@@ -3221,12 +3221,10 @@ export class Manager {
       }
       if (!playlist.length) throw new Error('No live images are configured');
       const activeIndex = ((Number(input?.activeIndex ?? 0) % playlist.length) + playlist.length) % playlist.length;
-      await this.liveCameraStream.start();
       const activeImage = playlist[activeIndex];
       const activeBytes = await fsp.readFile(activeImage);
       const activeType = /\.png$/i.test(activeImage) ? 'image/png' : /\.(jpg|jpeg)$/i.test(activeImage) ? 'image/jpeg' : '';
-      if (!activeType) throw new Error('The live HTTP camera stream currently accepts JPG, JPEG, and PNG photos');
-      this.liveCameraStream.setImage(activeBytes, activeType);
+      if (!activeType) throw new Error('The selected live image must be a JPG, JPEG, or PNG photo');
       const imageFit = input?.imageFit === 'fit' || input?.imageFit === 'stretch' || input?.imageFit === 'blur' ? input.imageFit : 'fill';
       const playlistMode = input?.playlistMode === 'auto' || input?.playlistMode === 'random' ? input.playlistMode : 'manual';
       const playlistInterval = Math.max(0.5, Math.min(3600, Number(input?.playlistInterval ?? 6) || 6));
@@ -3242,9 +3240,28 @@ export class Manager {
       configureMediaCompanion({ deviceName, mediaFolder: mediaDir, imageFit, playlistMode, playlistInterval, autoBroadcast: true });
       const request = requestMediaCompanionBroadcast('vstudio-mobile', true);
       const started = startMediaCompanion('vstudio-mobile');
-      await waitForMediaCompanionCamera('vstudio-mobile', request);
+      const runtime = await waitForMediaCompanionCamera('vstudio-mobile', request);
+      // The Android Emulator consumes a Windows camera endpoint, not HTTP.
+      // Keep the local stream as an optional diagnostic preview only and do not
+      // report it as the camera connection. Readiness above proves that the
+      // native vStudio/Unity Capture publisher has opened its virtual camera.
+      await this.liveCameraStream.start();
+      this.liveCameraStream.setImage(activeBytes, activeType);
       const stream = this.liveCameraStream.status();
-      return { ok: true, started: started.started, index: activeIndex, total: playlist.length, mode: playlistMode, interval: playlistInterval, fit: imageFit, stream, message: `Live image ${activeIndex + 1} of ${playlist.length} is broadcasting through ${started.message}` };
+      return {
+        ok: true,
+        started: started.started,
+        index: activeIndex,
+        total: playlist.length,
+        mode: playlistMode,
+        interval: playlistInterval,
+        fit: imageFit,
+        transport: 'native-virtual-camera',
+        emulatorEndpoint: 'webcam0',
+        cameraDevice: runtime.cameraDevice ?? '',
+        stream,
+        message: `Live image ${activeIndex + 1} of ${playlist.length} is broadcasting through webcam0 (${runtime.cameraDevice || 'native virtual camera'}). The local HTTP stream is preview-only.`,
+      };
     });
     handle('mgr:android-camera-choices', L, () => androidCameraChoicesCached());
     handle('mgr:android-media-check', L, (_e, name: string) => androidMediaCheck(String(name ?? '')));
