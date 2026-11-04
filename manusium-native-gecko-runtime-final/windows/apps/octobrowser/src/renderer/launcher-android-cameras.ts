@@ -378,11 +378,14 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
   const hostToggle = h('input', { type: 'checkbox' }) as HTMLInputElement;
   hostToggle.checked = cameraTests.enabled;
   hostToggle.onchange = () => cameraTests.setEnabled(hostToggle.checked);
-  const both = h('button', { type: 'button', class: 'btn small', text: t('android.camera.useWebcam0Both') });
+  const both = h('button', { type: 'button', class: 'btn small', text: 'Connect webcam0 to back camera', 'aria-label': 'Connect webcam0 to the Android Emulator back camera' });
   both.onclick = () => {
     if (!listed.some((camera) => camera.name === 'webcam0')) return;
     cameraTests.setEnabled(false);
-    setDevice('front', 'webcam0'); setDevice('back', 'webcam0');
+    // One host endpoint cannot safely be opened by both Android lenses.
+    if (selection.frontDevice === 'webcam0') setSource('front', 'emulated');
+    setDevice('back', 'webcam0');
+    selection.cameraProvider = /obs\s*virtual|obs/i.test(listed.find((camera) => camera.name === 'webcam0')?.device ?? '') ? 'obs' : 'directshow';
     paintLenses(); paintStatus(); emit();
   };
   const off = h('button', { type: 'button', class: 'btn small', text: t('android.camera.disableBoth') });
@@ -394,7 +397,7 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
       .catch((error: unknown) => ({ ok: false, message: errText(error) }));
     toast(result.message, result.ok ? 'ok' : 'info');
     await scan(true);
-    const virtual = listed.find(camera => camera.virtual);
+    const virtual = listed.find(camera => camera.name === 'webcam0') ?? listed.find(camera => camera.virtual);
     if (!virtual) {
       toast(t('android.camera.virtualUnavailable'), 'info');
       paintStatus();
@@ -430,7 +433,7 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
     liveImageIndex = 0;
     paintLivePanel();
     await scan(true);
-    const virtual = listed.find(camera => camera.virtual);
+    const virtual = listed.find(camera => camera.name === 'webcam0') ?? listed.find(camera => camera.virtual);
     if (!virtual) {
       toast(t('android.camera.virtualUnavailable'), 'info');
       paintStatus();
@@ -466,7 +469,7 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
     if (!result.ok) return;
     paintLivePanel();
     await scan(true);
-    const virtual = listed.find(camera => camera.virtual);
+    const virtual = listed.find(camera => camera.name === 'webcam0') ?? listed.find(camera => camera.virtual);
     if (!virtual) { toast(t('android.camera.virtualUnavailable'), 'info'); paintStatus(); return; }
     setSource(facing, 'webcam', virtual.name);
     selection.cameraProvider = 'unity-capture';

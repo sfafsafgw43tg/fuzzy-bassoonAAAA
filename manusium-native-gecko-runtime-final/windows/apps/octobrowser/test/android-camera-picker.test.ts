@@ -37,4 +37,11 @@ describe('the camera picker follows the cameras by itself', () => {
     expect(picker).toContain("const video = h('button'");
     expect(picker).toContain("selection.cameraProvider = 'unity-capture'");
   });
+
+  it('connects live OBS and selected-image output through webcam0 when available', () => {
+    expect(picker).toContain("listed.find(camera => camera.name === 'webcam0') ?? listed.find(camera => camera.virtual)");
+    expect(picker).toContain("text: 'Connect webcam0 to back camera'");
+    expect(picker).toContain("setDevice('back', 'webcam0')");
+    expect(picker).not.toContain("setDevice('front', 'webcam0'); setDevice('back', 'webcam0')");
+  });
 });
