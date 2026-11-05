@@ -2748,7 +2748,10 @@ export class Manager {
         microphoneEnabled: input?.microphoneEnabled !== false, microphoneDevice: String(input?.microphoneDevice ?? ''),
         networkSpeed: input?.networkSpeed, secondaryDisplay: input?.secondaryDisplay, bootMode: input?.bootMode, proxy,
       });
-      const controller = await installOctoCameraControllerOnAndroid(String(input?.name ?? ''), this.liveCameraStream.status().port)
+      const liveStream = this.liveCameraStream.status().running
+        ? this.liveCameraStream.status()
+        : await this.liveCameraStream.start();
+      const controller = await installOctoCameraControllerOnAndroid(String(input?.name ?? ''), liveStream.port)
         .catch((error: unknown) => ({ installed: false, launched: false, reason: error instanceof Error ? error.message : String(error) }));
       // Lensio is opt-in. Its Windows receiver can start before the AVD, but
       // Android cannot install an APK until adb reports the guest as ready.
@@ -3043,6 +3046,7 @@ export class Manager {
       /** An SDK package the user added themselves, used instead of the variant. */
       customPackage?: string;
       ramMb?: number; cpus?: number; diskGb?: number; cameraFront?: string; cameraBack?: string; microphoneEnabled?: boolean;
+      cameraProvider?: 'lensio' | 'unity-capture' | 'obs' | 'directshow';
       width?: number; height?: number; dpi?: number; heapMb?: number; sdCardMb?: number;
       skinPath?: string;
       gpuMode?: string; bootMode?: string; snapshots?: boolean;
@@ -3120,6 +3124,7 @@ export class Manager {
       // from now on; the apps are installed the first time it boots.
       rememberAndroidLaunch(avdName, {
         locale: String(input?.locale ?? ''), cameraDevice: createdAvd.cameraBackDevice || createdAvd.cameraFrontDevice,
+        cameraProvider: input?.cameraProvider,
         cameraFrontDevice: createdAvd.cameraFrontDevice, cameraBackDevice: createdAvd.cameraBackDevice,
         cameraFront: createdAvd.cameraFront, cameraBack: createdAvd.cameraBack,
         microphoneEnabled: input?.microphoneEnabled !== false,

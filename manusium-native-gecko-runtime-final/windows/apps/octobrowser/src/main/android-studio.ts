@@ -3939,7 +3939,12 @@ export async function launchAndroidAvd(input: AndroidLaunchInput): Promise<Andro
     input.cameraDevice ?? avd.cameraDevice ?? '',
   ];
   const webcams = webcamReport.webcams;
-  if (needsHostCamera && !webcams.length) {
+  // The Unity preset deliberately persists webcam0 before the Windows/Emulator
+  // probe is ready. Keep that explicit binding instead of silently changing it
+  // to Off; the warning below remains truthful until webcam0 is enumerated.
+  const explicitUnityWebcam0 = input.cameraProvider === 'unity-capture'
+    && selectedEndpoints.some((endpoint) => endpoint.toLowerCase() === 'webcam0');
+  if (needsHostCamera && !webcams.length && !explicitUnityWebcam0) {
     throw new Error([
       `The Android Emulator did not verify a host camera for ${name}.`,
       'Close other camera apps, refresh the camera list, enable the camera in the AVD, and cold-boot again.',
@@ -3959,7 +3964,7 @@ export async function launchAndroidAvd(input: AndroidLaunchInput): Promise<Andro
     const available = new Set(webcams.map((item) => item.name));
     const selectedEndpoints = [assignments.frontDevice, assignments.backDevice].filter(Boolean);
     const missing = selectedEndpoints.filter((endpoint) => !available.has(endpoint));
-    if (missing.length) {
+    if (missing.length && !explicitUnityWebcam0) {
       throw new Error(`The selected host camera endpoint is not verified by the Android Emulator: ${[...new Set(missing)].join(', ')}. Refresh the camera list before launching.`);
     }
     if (assignments.frontDevice && assignments.frontDevice === assignments.backDevice) {
@@ -4795,9 +4800,18 @@ export async function installOctoCameraControllerOnAndroid(name: string, streamP
   const apk = octoCameraControllerApk();
   if (!apk) return { installed: false, launched: false, reason: 'OctoCameraController.apk was not found.' };
   const clean = assertName(name);
-  const serial = await emulatorSerial(clean).catch(() => '');
   const adb = adbPath();
-  if (!serial || !adb) return { installed: false, launched: false, reason: 'The Android device did not become ADB-ready for the camera controller.' };
+  if (!adb) return { installed: false, launched: false, reason: 'adb was not found.' };
+  // launchAndroidAvd returns once the emulator process is alive, not when the
+  // guest has registered with adb. Poll the selected AVD instead of attempting
+  // one early install that can be lost while package-manager is starting.
+  let serial = '';
+  const serialDeadline = Date.now() + 150_000;
+  while (!serial && Date.now() < serialDeadline) {
+    serial = await emulatorSerial(clean).catch(() => '');
+    if (!serial) await new Promise((resolve) => setTimeout(resolve, 2_000));
+  }
+  if (!serial) return { installed: false, launched: false, reason: 'The Android device did not become ADB-ready for the camera controller within 150 seconds.' };
   const port = Number.isInteger(streamPort) && streamPort > 0 && streamPort <= 65535 ? streamPort : 8765;
   const reverse = await adbRun(adb, ['-s', serial, 'reverse', `tcp:${port}`, `tcp:${port}`], 15_000)
     .catch((error: unknown) => error instanceof Error ? error.message : String(error));

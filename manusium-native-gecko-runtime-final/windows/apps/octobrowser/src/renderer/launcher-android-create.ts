@@ -981,9 +981,9 @@ export function androidCreateWizard(context: CreatorContext): void {
     // resolution Android is told about.
     const cameras = cameraPicker({
       initial: {
-        front: draft.cameraPresetEnabled ? 'webcam' : draft.cameraFront,
+        front: draft.cameraPresetEnabled ? 'none' : draft.cameraFront,
         back: draft.cameraPresetEnabled ? 'webcam' : draft.cameraBack,
-        frontDevice: draft.cameraPresetEnabled ? 'webcam0' : draft.cameraFrontDevice,
+        frontDevice: draft.cameraPresetEnabled ? '' : draft.cameraFrontDevice,
         backDevice: draft.cameraPresetEnabled ? 'webcam0' : draft.cameraBackDevice,
         frontLimit: cameraLimits.front, backLimit: cameraLimits.back,
       },
@@ -1003,9 +1003,9 @@ export function androidCreateWizard(context: CreatorContext): void {
       draft.cameraPresetEnabled = enabled;
       if (enabled) {
         draft.camera = true;
-        draft.cameraFront = 'webcam';
+        draft.cameraFront = 'none';
         draft.cameraBack = 'webcam';
-        draft.cameraFrontDevice = 'webcam0';
+        draft.cameraFrontDevice = '';
         draft.cameraBackDevice = 'webcam0';
         draft.cameraDevice = 'webcam0';
         draft.cameraProvider = 'unity-capture';

@@ -409,10 +409,10 @@ export function deviceSettingsDialog(target: {
     // a lens with none is Off.
     const cameras = cameraPicker({
       initial: {
-        front: (target.cameraPresetEnabled ? 'webcam' : target.cameraFront ?? 'webcam') as CameraSource,
+        front: (target.cameraPresetEnabled ? 'none' : target.cameraFront ?? 'webcam') as CameraSource,
         back: (target.cameraPresetEnabled ? 'webcam' : target.cameraBack ?? 'webcam') as CameraSource,
-        frontDevice: rememberedFrontCamera,
-        backDevice: rememberedBackCamera,
+        frontDevice: target.cameraPresetEnabled ? '' : rememberedFrontCamera,
+        backDevice: target.cameraPresetEnabled ? 'webcam0' : rememberedBackCamera,
       },
     });
     const virtualCameraPreset = toggle(target.cameraPresetEnabled === true, 'Virtual camera preset: auto-install APK, use Unity Capture, and bind webcam0');
@@ -432,9 +432,9 @@ export function deviceSettingsDialog(target: {
       const camera = cameras.value();
       const preset = checked(virtualCameraPreset);
       if (preset) {
-        camera.front = 'webcam';
+        camera.front = 'none';
         camera.back = 'webcam';
-        camera.frontDevice = 'webcam0';
+        camera.frontDevice = '';
         camera.backDevice = 'webcam0';
         camera.cameraProvider = 'unity-capture';
       }
@@ -630,5 +630,4 @@ export function androidNetworkBar(reload: () => Promise<void>): HTMLElement {
   void refresh();
   return bar;
 }
-
 
