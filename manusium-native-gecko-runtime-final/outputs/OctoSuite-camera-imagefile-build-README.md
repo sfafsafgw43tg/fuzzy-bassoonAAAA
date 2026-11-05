@@ -31,6 +31,8 @@ The receiver UI includes a port field with Connect, Pause/Resume preview, and Fi
 
 Open **Devices**, select a running Android device, and open **Camera & microphone**. The dialog now contains **Open Octo Camera Controller**. That action starts the local MJPEG endpoint if necessary, creates the ADB reverse tunnel, waits for Android's package service, installs/verifies `app.octo.avdcamera`, and foregrounds the receiver. The existing camera picker, photo/video controls, preview, refresh, repair, microphone test, and live-image playlist controls remain in the same dialog.
 
+The Devices page no longer mounts the separate Chrome Android workspace. **Custom Android Build** remains available in the Devices page but is collapsed by default; expand its header when you need build plans, exports, or remote jobs.
+
 ## Verified results
 
 - TypeScript typecheck: passed.
