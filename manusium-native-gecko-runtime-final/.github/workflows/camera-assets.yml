@@ -1,0 +1,52 @@
+name: Camera asset bootstrap
+
+on:
+  workflow_dispatch:
+    inputs:
+      openstream_version:
+        description: OpenStream release tag, or latest
+        required: false
+        default: latest
+  pull_request:
+    paths:
+      - 'windows/scripts/setup-openstream-camera.ps1'
+      - 'windows/docs/openstream-vs-octosuite-camera.md'
+      - '.github/workflows/camera-assets.yml'
+  push:
+    branches: ['arena/c10966b9-fuzzy-bassoonaaaa']
+    paths:
+      - 'windows/scripts/setup-openstream-camera.ps1'
+      - 'windows/docs/openstream-vs-octosuite-camera.md'
+      - '.github/workflows/camera-assets.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  stage-camera-assets:
+    runs-on: windows-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Stage and verify OpenStream release assets
+        shell: pwsh
+        env:
+          OPENSTREAM_VERSION: ${{ inputs.openstream_version || 'latest' }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $out = Join-Path $env:RUNNER_TEMP 'openstream-camera-assets'
+          ./windows/scripts/setup-openstream-camera.ps1 `
+            -Version $env:OPENSTREAM_VERSION `
+            -OutputRoot $out `
+            -StageOnly
+          if ($LASTEXITCODE -ne 0) { throw 'Camera asset bootstrap failed.' }
+          Get-ChildItem $out -File | Format-Table Name,Length
+
+      - name: Upload verified camera assets
+        uses: actions/upload-artifact@v4
+        with:
+          name: openstream-camera-assets-${{ inputs.openstream_version || 'latest' }}
+          path: ${{ runner.temp }}/openstream-camera-assets
+          if-no-files-found: error
+          retention-days: 14

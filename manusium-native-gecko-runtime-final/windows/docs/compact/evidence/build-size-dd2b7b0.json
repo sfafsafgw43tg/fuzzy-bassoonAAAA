@@ -1,0 +1,9 @@
+{
+  "schema": "octo.compact-build-size.v1",
+  "note": "Logical bytes at the end of packaging, not peak allocation. Cache entries and installer staging may coexist during packaging.",
+  "dependenciesBytes": 197799585,
+  "appBundleBytes": 380210,
+  "packageAndInstallerBytes": 507093926,
+  "electronCacheBytes": 0,
+  "builderCacheBytes": 16183252
+}

@@ -1,0 +1,21 @@
+Octo.su build priorities
+=========================
+
+1. Complete Android Devices
+   - Finish AVD creation and configuration persistence.
+   - Ensure emulator startup completes its first setup.
+   - Finish camera discovery and virtual/host camera verification.
+   - Finish location assignment per launch, including proxy proximity when available.
+   - Finish app preinstallation and device naming behavior.
+   - Run focused Android Devices tests and verify the UI end to end.
+
+2. Finish the native Chromium runtime
+   - Restore Chromium third-party dependencies with gclient sync.
+   - Run depot_tools hooks.
+   - Apply the ordered InkBrowser patch series.
+   - Generate GN files and compile the Windows runtime.
+   - Stage and validate inkbrowser-chrome.exe and CDP connectivity.
+
+Current status
+--------------
+The Chromium source is pinned to 155.0.8059.39. The source checkout permissions and build-script patch handling were repaired, but dependency synchronization was blocked by Windows network access to the official Chromium Python package mirror. Android Devices is the next implementation priority before returning to the native Chromium build.

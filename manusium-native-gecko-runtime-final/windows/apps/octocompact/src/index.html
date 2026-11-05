@@ -1,0 +1,29 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; img-src 'self'; base-uri 'none'; form-action 'none'">
+<title>Octo Compact</title><link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header id="chrome">
+  <div class="tab-row"><div id="tabs" role="tablist" aria-label="Open tabs"></div><button id="new" title="New tab (Ctrl+T)" aria-label="New tab">＋</button></div>
+  <nav aria-label="Browser toolbar">
+    <div class="navigation"><button id="back" title="Back (Alt+Left)" aria-label="Back">←</button><button id="forward" title="Forward (Alt+Right)" aria-label="Forward">→</button><button id="reload" title="Reload (Ctrl+R)" aria-label="Reload">↻</button><button id="home" title="Home" aria-label="Home">⌂</button></div>
+    <form id="navigate"><span id="security" aria-label="Connection status">○</span><input id="address" aria-label="Search or enter address" placeholder="Search or enter address" autocomplete="off" autocapitalize="off" spellcheck="false"><button id="go" type="submit" aria-label="Go">→</button></form>
+    <button id="bookmark" title="Bookmark this page (Ctrl+D)" aria-label="Bookmark this page">☆</button><button id="menu" title="Bookmarks and browser options" aria-label="Bookmarks and browser options" aria-expanded="false">☰</button>
+  </nav>
+  <div id="notice" role="status" aria-live="polite">Octo Compact · one engine, less baggage</div>
+</header>
+<main id="home-page">
+  <div class="welcome"><span class="eyebrow">OCTO / COMPACT</span><h1>A little less.<br>A lot more web.</h1><p id="description">Your tabs, your bookmarks, and a quiet place to browse.</p></div>
+  <section aria-label="Bookmarks"><h2>Your shortcuts</h2><div id="shortcuts" class="shortcut-grid"></div><p id="empty">Save a page with ☆ to keep it here.</p></section>
+</main>
+<section id="panel" hidden aria-label="Browser options">
+  <div class="panel-head"><h1>Make yourself at home.</h1><button id="dismiss" aria-label="Close options">×</button></div>
+  <div class="actions"><button id="private">New private window <kbd>Ctrl+Shift+N</kbd></button><button id="clear">Clear site data &amp; cache</button><button id="updates">Security updates &amp; releases ↗</button></div>
+  <p class="muted">Updates are installed manually from the official project releases. Keep this browser current. No claimed anonymity: private windows use an in-memory session; downloaded files remain.</p>
+  <h2>Bookmarks</h2><div id="bookmarks"></div>
+</section>
+<script src="renderer.js"></script>
+</body></html>
