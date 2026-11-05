@@ -186,3 +186,25 @@ describe('one camera serves one lens', () => {
     expect([result.front, result.back].every((id) => id === '' || id === 'webcam0' || id === 'webcam1')).toBe(true);
   });
 });
+
+describe('manual/mock webcam discovery state transitions', () => {
+  it('keeps a requested endpoint pending until a mock emulator entry appears', () => {
+    const pending = assignLensCameras({ back: 'webcam0' }, []);
+    expect(pending.back).toBe('');
+    expect(pending.lost.back).toBe(true);
+
+    const detected = assignLensCameras({ back: 'webcam0' }, [{ id: 'webcam0', name: 'Mock Unity Capture' }]);
+    expect(detected.back).toBe('webcam0');
+    expect(detected.lost.back).toBe(false);
+  });
+
+  it('switches from a mock webcam0 to another enumerated endpoint without inventing one', () => {
+    const switched = assignLensCameras(
+      { back: 'webcam0' },
+      [{ id: 'webcam1', name: 'Mock OBS Virtual Camera' }],
+    );
+    expect(switched.back).toBe('webcam1');
+    expect(switched.front).toBe('');
+    expect(switched.lost.back).toBe(true);
+  });
+});

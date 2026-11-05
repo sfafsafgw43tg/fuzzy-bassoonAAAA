@@ -45,7 +45,7 @@ let liveReady = false;
 let liveTimer: number | undefined;
 let liveApplying = false;
 let crop = { x: .12, y: .08, w: .76, h: .84 };
-let drag: { kind: string; startX: number; startY: number; initial: { x: number; y: number; w: number; h: number } } | null = null;
+let drag: { kind: string; pointerId: number; startX: number; startY: number; initial: { x: number; y: number; w: number; h: number } } | null = null;
 
 function setStatus(text: string, bad = false): void {
   statusEl.textContent = text;
@@ -88,7 +88,7 @@ function clamp(): void {
   crop.y = Math.max(0, Math.min(1 - crop.h, crop.y));
 }
 function pointerMove(event: PointerEvent): void {
-  if (!drag) return;
+  if (!drag || event.pointerId !== drag.pointerId) return;
   const r = imageRect();
   const dx = (event.clientX - drag.startX) / r.width;
   const dy = (event.clientY - drag.startY) / r.height;
@@ -110,18 +110,23 @@ function pointerMove(event: PointerEvent): void {
 }
 function stopDrag(): void {
   drag = null;
-  window.removeEventListener('pointermove', pointerMove);
-  window.removeEventListener('pointerup', stopDrag);
+  cropBox.classList.remove('dragging');
 }
 
 cropBox.addEventListener('pointerdown', (event) => {
-  const target = event.target as HTMLElement;
-  drag = { kind: target.dataset.handle || 'move', startX: event.clientX, startY: event.clientY, initial: { ...crop } };
+  if (!image.naturalWidth || type !== 'image') return;
+  const target = (event.target as HTMLElement).closest<HTMLElement>('[data-handle]');
+  drag = { kind: target?.dataset.handle || 'move', pointerId: event.pointerId, startX: event.clientX, startY: event.clientY, initial: { ...crop } };
+  cropBox.classList.add('dragging');
   cropBox.setPointerCapture?.(event.pointerId);
-  window.addEventListener('pointermove', pointerMove);
-  window.addEventListener('pointerup', stopDrag);
   event.preventDefault();
+  event.stopPropagation();
 });
+cropBox.addEventListener('pointermove', pointerMove);
+cropBox.addEventListener('pointerup', (event) => {
+  if (drag?.pointerId === event.pointerId) stopDrag();
+});
+cropBox.addEventListener('pointercancel', stopDrag);
 window.addEventListener('resize', renderCrop);
 image.addEventListener('load', () => {
   crop = { x: .12, y: .08, w: .76, h: .84 };
@@ -188,11 +193,6 @@ height.oninput = () => { output(); scheduleLiveApply(); };
 fit.onchange = scheduleLiveApply;
 filter.onchange = scheduleLiveApply;
 videoSpeed.onchange = () => { movie.playbackRate = Number(videoSpeed.value); };
-$('install').onclick = async () => {
-  try { deviceStatus.textContent = await window.octoCamera.installController(serial.value || undefined); setStatus('Android controller installed.'); }
-  catch (e) { setStatus(String(e), true); }
-};
-
 applyButton.onclick = async () => {
   if (!source) { setStatus('Choose a photo or video first.', true); return; }
   if (!avd.value) { setStatus('Choose an Android Virtual Device first.', true); return; }

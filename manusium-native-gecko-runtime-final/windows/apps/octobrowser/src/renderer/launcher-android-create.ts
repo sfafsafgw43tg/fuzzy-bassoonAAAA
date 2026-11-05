@@ -102,6 +102,8 @@ interface Draft {
   snapshots: boolean; camera: boolean; microphone: boolean;
   cameraFront: CameraSource; cameraBack: CameraSource;
   cameraFrontDevice: string; cameraBackDevice: string;
+  /** Stable first-page preset, independent from performance/display choices. */
+  cameraPresetEnabled: boolean; cameraProvider: 'lensio' | 'unity-capture' | 'obs' | 'directshow';
   /** Legacy shared endpoint for older create paths. */
   cameraDevice: string;
   /** BCP-47 language Android boots in, e.g. "pl-PL". */
@@ -265,6 +267,7 @@ export function androidCreateWizard(context: CreatorContext): void {
     // source. The user selects the PNG/JPEG when opening the camera picker.
     cameraFront: 'none', cameraBack: 'image', cameraFrontDevice: '', cameraBackDevice: '',
     cameraDevice: '',
+    cameraPresetEnabled: false, cameraProvider: 'unity-capture',
     locale: '',
     customPackage: '',
     skinPath: '',
@@ -978,10 +981,13 @@ export function androidCreateWizard(context: CreatorContext): void {
     // resolution Android is told about.
     const cameras = cameraPicker({
       initial: {
-        front: draft.cameraFront, back: draft.cameraBack,
-        frontDevice: draft.cameraFrontDevice, backDevice: draft.cameraBackDevice,
+        front: draft.cameraPresetEnabled ? 'webcam' : draft.cameraFront,
+        back: draft.cameraPresetEnabled ? 'webcam' : draft.cameraBack,
+        frontDevice: draft.cameraPresetEnabled ? 'webcam0' : draft.cameraFrontDevice,
+        backDevice: draft.cameraPresetEnabled ? 'webcam0' : draft.cameraBackDevice,
         frontLimit: cameraLimits.front, backLimit: cameraLimits.back,
       },
+      preserveUnavailable: draft.cameraPresetEnabled,
       onChange: (value) => {
         draft.cameraFront = value.front;
         draft.cameraBack = value.back;
@@ -989,9 +995,26 @@ export function androidCreateWizard(context: CreatorContext): void {
         draft.cameraBackDevice = value.backDevice;
         draft.cameraDevice = value.backDevice || value.frontDevice;
         draft.camera = value.front !== 'none' || value.back !== 'none';
+        if (value.cameraProvider) draft.cameraProvider = value.cameraProvider;
         cameraLimits = { front: value.frontLimit, back: value.backLimit };
       },
     });
+    const virtualCameraPreset = toggle(draft.cameraPresetEnabled, 'Virtual camera preset: auto-install APK, use Unity Capture, and bind webcam0', (enabled) => {
+      draft.cameraPresetEnabled = enabled;
+      if (enabled) {
+        draft.camera = true;
+        draft.cameraFront = 'webcam';
+        draft.cameraBack = 'webcam';
+        draft.cameraFrontDevice = 'webcam0';
+        draft.cameraBackDevice = 'webcam0';
+        draft.cameraDevice = 'webcam0';
+        draft.cameraProvider = 'unity-capture';
+      }
+      hint.textContent = enabled
+        ? 'Virtual camera preset selected. Octo will install the receiver APK, create the reverse tunnel, and require a real host webcam0 endpoint.'
+        : 'Virtual camera preset disabled.';
+    });
+    const virtualCameraHint = h('p', { class: 'hint', 'aria-live': 'polite', text: 'This preset is independent of RAM, display, identity, and other Android options. It is only ready when Windows and the emulator enumerate webcam0.' });
 
     // The language Android boots in, applied as a system property.
     const languageSlot = h('div', {});
@@ -1107,6 +1130,8 @@ export function androidCreateWizard(context: CreatorContext): void {
           numberField('android.dpi', draft.dpi, { min: '120', max: '640' }, (value) => { draft.dpi = value; touched(); }))),
       skinControl(),
       group('android.group.media',
+        virtualCameraPreset,
+        virtualCameraHint,
         cameras.element,
         toggle(draft.microphone, 'android.media.microphone', (value) => { draft.microphone = value; }),
         h('p', { class: 'hint', text: t('android.mic.honest') })),
@@ -1433,6 +1458,8 @@ export function androidCreateWizard(context: CreatorContext): void {
       microphoneEnabled: draft.microphone,
       cameraDevice: draft.cameraBackDevice || draft.cameraFrontDevice,
       cameraLimits,
+      cameraProvider: draft.cameraProvider,
+      cameraPresetEnabled: draft.cameraPresetEnabled,
       locale: draft.locale, apps: draft.apps, appFiles: draft.appFiles,
       customPackage: draft.customPackage,
       skinPath: draft.skinPath,

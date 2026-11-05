@@ -1,0 +1,51 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Unity Capture · OctoSuite connection dashboard</title>
+<style>
+:root{color-scheme:dark;--bg:#0b0d12;--panel:#131722;--panel2:#191e2b;--line:#293142;--text:#eef2f7;--muted:#9aa5b5;--green:#39d98a;--amber:#f7c75a;--red:#ff7187;--violet:#a78bfa;--cyan:#61d7ef}*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 80% -10%,#262045 0,#0b0d12 42%);font:14px/1.5 Inter,ui-sans-serif,system-ui,sans-serif;color:var(--text)}main{max-width:1180px;margin:auto;padding:42px 24px 70px}.eyebrow{color:var(--cyan);font-weight:700;letter-spacing:.12em;text-transform:uppercase;font-size:11px}.hero{display:flex;justify-content:space-between;gap:24px;align-items:end;margin:10px 0 28px}.hero h1{font-size:clamp(30px,5vw,56px);line-height:1.02;margin:0;letter-spacing:-.05em;max-width:750px}.hero p{color:var(--muted);max-width:680px;margin:16px 0 0}.controls{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.controls input{width:105px;background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:10px;color:var(--text)}button{border:1px solid var(--line);background:var(--panel2);color:var(--text);border-radius:10px;padding:10px 14px;font-weight:700;cursor:pointer}button:hover{border-color:var(--cyan);transform:translateY(-1px)}.primary{background:var(--violet);border-color:var(--violet);color:#120f20}.grid{display:grid;grid-template-columns:repeat(4,1fr);gap:12px}.card{background:linear-gradient(145deg,#171c28,#10141d);border:1px solid var(--line);border-radius:16px;padding:18px;min-height:126px}.card h3{font-size:12px;color:var(--muted);margin:0 0 12px;text-transform:uppercase;letter-spacing:.08em}.value{font-size:19px;font-weight:800;word-break:break-word}.sub{color:var(--muted);font-size:12px;margin-top:7px}.dot{display:inline-block;width:9px;height:9px;border-radius:50%;background:var(--muted);margin-right:7px}.ok .dot{background:var(--green);box-shadow:0 0 14px var(--green)}.warn .dot{background:var(--amber)}.bad .dot{background:var(--red)}.section{margin-top:28px}.section h2{font-size:20px;margin:0 0 12px}.columns{display:grid;grid-template-columns:1.15fr .85fr;gap:16px}.panel{background:rgba(19,23,34,.86);border:1px solid var(--line);border-radius:16px;padding:20px}.preview{width:100%;aspect-ratio:16/9;border-radius:12px;background:#080a0e;border:1px solid var(--line);object-fit:contain}.preview-note{color:var(--muted);font-size:12px;margin:9px 0 0}.steps{display:grid;gap:10px}.step{display:grid;grid-template-columns:30px 1fr;gap:12px;align-items:start}.num{display:grid;place-items:center;width:28px;height:28px;border-radius:9px;background:#252b3a;color:var(--cyan);font-weight:800}.step b{display:block;margin-bottom:3px}.step span{color:var(--muted);font-size:13px}.code{font:12px/1.55 ui-monospace,SFMono-Regular,Consolas,monospace;background:#090b10;border:1px solid var(--line);border-radius:10px;padding:14px;overflow:auto;white-space:pre-wrap;color:#c8d3e5}.footer{color:var(--muted);font-size:12px;margin-top:28px}@media(max-width:850px){.grid{grid-template-columns:repeat(2,1fr)}.columns{grid-template-columns:1fr}.hero{display:block}}@media(max-width:520px){.grid{grid-template-columns:1fr}main{padding:28px 15px}}
+</style>
+</head>
+<body>
+<main>
+  <div class="eyebrow">OctoSuite · Android camera bridge</div>
+  <div class="hero">
+    <div><h1>Unity Capture connection dashboard</h1><p>Every signal is reported independently. A registered filter is not the same as a Windows camera, and a configured webcam is not the same as live Android frames.</p></div>
+    <div class="controls"><label for="port">Port</label><input id="port" value="8765" inputmode="numeric"><button class="primary" id="refresh">Refresh status</button></div>
+  </div>
+  <section class="grid" aria-label="Connection status">
+    <article class="card" id="registry"><h3>1 · Registry</h3><div class="value"><i class="dot"></i><span>Unknown</span></div><div class="sub">Unity Capture / DirectShow registration</div></article>
+    <article class="card" id="pnp"><h3>2 · Windows PnP</h3><div class="value"><i class="dot"></i><span>Unknown</span></div><div class="sub">Camera or Image device exposed by Windows</div></article>
+    <article class="card" id="emulator"><h3>3 · Emulator</h3><div class="value"><i class="dot"></i><span>Unknown</span></div><div class="sub">webcam-list endpoint enumeration</div></article>
+    <article class="card" id="stream"><h3>4 · Host stream</h3><div class="value"><i class="dot"></i><span>Unknown</span></div><div class="sub">MJPEG / ADB reverse tunnel</div></article>
+  </section>
+  <section class="section columns">
+    <div class="panel"><h2>Live preview</h2><img id="preview" class="preview" alt="Live MJPEG preview from the OctoSuite host stream"><p id="previewNote" class="preview-note">Enter the host server port and refresh. The image is intentionally blank when no frames are available.</p></div>
+    <div class="panel"><h2>Recovery path</h2><div class="steps">
+      <div class="step"><div class="num">1</div><div><b>Registry</b><span>Unity Capture must have a CLSID and InprocServer32 DLL. The invalid foo:bar DevicePath must be absent.</span></div></div>
+      <div class="step"><div class="num">2</div><div><b>Windows device</b><span>Get-PnpDevice / pnputil must show a Camera or Image device. DirectShow registry entries alone are insufficient.</span></div></div>
+      <div class="step"><div class="num">3</div><div><b>Emulator endpoint</b><span>emulator @YourAVD -webcam-list must print webcam0 or another webcamN endpoint.</span></div></div>
+      <div class="step"><div class="num">4</div><div><b>Frames</b><span>The producer must open Unity Video Capture and the host server must expose /mjpeg through adb reverse tcp:8765.</span></div></div>
+    </div></div>
+  </section>
+  <section class="section panel"><h2>Exact troubleshooting commands</h2><div class="code"># Inspect Unity Capture and DirectShow
+powershell -ExecutionPolicy Bypass -File .\scripts\android\diagnose-unity-capture.ps1
+
+# Probe the Android Emulator
+emulator.exe @Octo-Realme12Pro-Unity -webcam-list
+
+# Check Windows camera devices
+Get-PnpDevice -PresentOnly | ? { $_.Class -in @('Camera','Image') }
+
+# Check ADB reverse tunnel and receiver
+adb devices
+adb -s emulator-5554 reverse --list
+adb -s emulator-5554 shell pm path app.octo.avdcamera</div></section>
+  <p class="footer">Last update: <span id="updated">never</span> · The dashboard does not fabricate a camera state. If the emulator lists zero cameras, the Android Camera2 service cannot expose a host webcam.</p>
+</main>
+<script>
+const $=s=>document.querySelector(s);const port=()=>Math.max(1,Number($('#port').value)||8765);function set(id,state,value,sub){const el=$('#'+id);el.className='card '+(state||'');el.querySelector('.value span').textContent=value;el.querySelector('.sub').textContent=sub||el.querySelector('.sub').textContent}function text(v){return v===true?'Ready':v===false?'Missing':'Unknown'}async function refresh(){const p=port();$('#preview').src=`http://127.0.0.1:${p}/mjpeg?ts=${Date.now()}`;try{const r=await fetch(`http://127.0.0.1:${p}/health?ts=${Date.now()}`);const s=await r.json();const ready=s.running&&s.frameBytes>0;set('stream',ready?'ok':s.running?'warn':'bad',ready?'Streaming':s.running?'Server idle':'Offline',s.running?`${s.frameBytes||0} bytes · frame ${s.frameVersion||0}`:'No host stream server detected');$('#previewNote').textContent=ready?'Frames are arriving from the host MJPEG endpoint.':'The endpoint is reachable only when the OctoSuite live camera server is running and has accepted a frame.'}catch(e){set('stream','bad','Offline','No /health response on port '+p);$('#previewNote').textContent='Start the OctoSuite live camera server, then refresh this dashboard.'}$('#updated').textContent=new Date().toLocaleTimeString()}$('#refresh').onclick=refresh;refresh();setInterval(refresh,3000)
+</script>
+</body></html>

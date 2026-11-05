@@ -89,6 +89,11 @@ export function androidMediaDialog(device: { name: string; running: boolean; han
     // a camera that works right now and gets its microphone switched on.
     const repair = h('button', { class: 'btn', text: t('android.media.repair') }) as HTMLButtonElement;
     const recheck = h('button', { class: 'btn' }, icon('refreshCircle', 14), h('span', { text: t('android.media.recheck') }));
+    const openController = h('button', { class: 'btn primary', text: 'Open Octo Camera Controller' }) as HTMLButtonElement;
+    const controllerStatus = h('p', { class: 'hint', role: 'status', 'aria-live': 'polite', text: device.running
+      ? 'The live receiver will connect through the ADB reverse tunnel.'
+      : 'Start this Android device before opening its live camera controller.' });
+    openController.disabled = !device.running;
 
     let check: MediaCheck | undefined;
     /** Cameras that the picker has checked and that send a picture; undefined until the first check. */
@@ -127,6 +132,7 @@ export function androidMediaDialog(device: { name: string; running: boolean; han
       const ready = !!check?.ready && (workingCameras === undefined || workingCameras > 0);
       note.classList.toggle('warn', !!check && !ready);
       note.textContent = !check ? '' : ready ? t('android.media.allGood') : t('android.media.someMissing');
+      openController.disabled = !device.running;
     }
 
     function paintPicker(): void {
@@ -196,6 +202,14 @@ export function androidMediaDialog(device: { name: string; running: boolean; han
     });
 
     recheck.onclick = () => void refresh();
+    openController.onclick = () => void busy(openController, 'Opening camera controller…', async () => {
+      const result = await run(api.invoke<{ installed: boolean; launched: boolean; reason: string; port?: number }>(
+        'mgr:android-open-camera-controller', device.name));
+      if (!result) return;
+      controllerStatus.textContent = result.reason;
+      toast(result.reason, result.launched ? 'ok' : 'info');
+      if (result.launched) await reload();
+    });
 
     box.append(
       dashboard,
@@ -204,6 +218,9 @@ export function androidMediaDialog(device: { name: string; running: boolean; han
       pickerSlot,
       h('h4', { class: 'spec-title', text: t('android.media.microphone') }),
       microphoneSlot,
+      h('h4', { class: 'spec-title', text: 'Live camera controller' }),
+      controllerStatus,
+      openController,
       h('h4', { class: 'spec-title', text: t('android.media.checklist') }),
       list,
       note);
@@ -449,4 +466,3 @@ export function androidIdentityRow(device: { name: string; running: boolean; han
     h('p', { class: 'hint', text: t('android.identity.limits') }),
     h('div', { class: 'row' }, apply));
 }
-

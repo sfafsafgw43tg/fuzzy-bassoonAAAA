@@ -217,6 +217,8 @@ export interface AndroidLaunchInput {
   name: string;
   /** Host virtual-camera provider used for endpoint validation and diagnostics. */
   cameraProvider?: AndroidCameraProvider;
+  /** Keeps the first-page virtual-camera preset independent from other settings. */
+  cameraPresetEnabled?: boolean;
   cameraFront?: CameraSource;
   cameraBack?: CameraSource;
   /** Active emulator camera endpoints assigned independently to each facing. */
@@ -4774,24 +4776,53 @@ function octoCameraControllerApk(): string {
   return candidates.find((candidate) => fs.existsSync(candidate)) ?? '';
 }
 
-/** Install and foreground the device-side media picker used by the native imagefile/videofile flow. */
-export async function installOctoCameraControllerOnAndroid(name: string): Promise<{ installed: boolean; launched: boolean; reason: string }> {
+/** ADB can report a device before Android's package service is ready. */
+async function waitForAndroidPackageService(adb: string, serial: string, timeoutMs = 120_000): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const boot = await adbRun(adb, ['-s', serial, 'shell', 'getprop', 'sys.boot_completed'], 8_000).catch(() => '');
+    if (/\b1\b/.test(String(boot))) {
+      const packages = await adbRun(adb, ['-s', serial, 'shell', 'cmd', 'package', 'list', 'packages'], 12_000).catch(() => '');
+      if (!/can't find service|unknown command|offline|not found|error:/i.test(String(packages)) && /package:/.test(String(packages))) return true;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+  }
+  return false;
+}
+
+/** Install and foreground the device-side live Realme Studio stream receiver. */
+export async function installOctoCameraControllerOnAndroid(name: string, streamPort = 8765): Promise<{ installed: boolean; launched: boolean; reason: string }> {
   const apk = octoCameraControllerApk();
   if (!apk) return { installed: false, launched: false, reason: 'OctoCameraController.apk was not found.' };
   const clean = assertName(name);
   const serial = await emulatorSerial(clean).catch(() => '');
   const adb = adbPath();
   if (!serial || !adb) return { installed: false, launched: false, reason: 'The Android device did not become ADB-ready for the camera controller.' };
-  const output = await adbRun(adb, ['-s', serial, 'install', '-r', apk], 120_000)
+  const port = Number.isInteger(streamPort) && streamPort > 0 && streamPort <= 65535 ? streamPort : 8765;
+  const reverse = await adbRun(adb, ['-s', serial, 'reverse', `tcp:${port}`, `tcp:${port}`], 15_000)
     .catch((error: unknown) => error instanceof Error ? error.message : String(error));
+  if (!/^\s*$/im.test(String(reverse)) && /error|failed|unknown/i.test(String(reverse))) {
+    return { installed: false, launched: false, reason: `ADB reverse tunnel could not be created: ${String(reverse).trim().slice(-500)}` };
+  }
+  if (!await waitForAndroidPackageService(adb, serial)) {
+    return { installed: false, launched: false, reason: 'Android is connected, but its package service did not become ready. The receiver was not claimed as installed.' };
+  }
+  let output = '';
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    output = await adbRun(adb, ['-s', serial, 'install', '-r', apk], 120_000)
+      .catch((error: unknown) => error instanceof Error ? error.message : String(error));
+    if (/^Success\b/im.test(String(output))) break;
+    if (!/can't find service: package|package service|device offline|device not found/i.test(String(output))) break;
+    await waitForAndroidPackageService(adb, serial, 30_000);
+  }
   if (!/^Success\b/im.test(String(output))) return { installed: false, launched: false, reason: `OctoCameraController.apk could not be installed: ${String(output).trim().slice(-500)}` };
   const packageCheck = await adbRun(adb, ['-s', serial, 'shell', 'pm', 'path', 'app.octo.avdcamera'], 15_000)
     .catch((error: unknown) => error instanceof Error ? error.message : String(error));
   if (!/^package:/im.test(String(packageCheck))) return { installed: false, launched: false, reason: 'adb reported a successful install, but app.octo.avdcamera is not present.' };
-  const launch = await adbRun(adb, ['-s', serial, 'shell', 'am', 'start', '-n', 'app.octo.avdcamera/.ControllerActivity'], 30_000)
+  const launch = await adbRun(adb, ['-s', serial, 'shell', 'am', 'start', '-n', 'app.octo.avdcamera/.ControllerActivity', '--ei', 'octo_stream_port', String(port)], 30_000)
     .catch((error: unknown) => error instanceof Error ? error.message : String(error));
   const launched = !/error|exception|unable to resolve/i.test(String(launch)) && /starting: intent/i.test(String(launch));
-  return { installed: true, launched, reason: launched ? 'Octo Camera Controller is installed and open on the Android device.' : 'The controller was installed, but Android did not foreground it.' };
+  return { installed: true, launched, reason: launched ? `Live Realme Studio receiver is connected through the ADB reverse tunnel on port ${port}.` : 'The controller was installed, but Android did not foreground it.' };
 }
 
 /** The adb serial of a running device, exported for the store installer. */

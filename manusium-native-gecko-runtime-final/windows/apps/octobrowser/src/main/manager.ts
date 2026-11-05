@@ -2748,7 +2748,7 @@ export class Manager {
         microphoneEnabled: input?.microphoneEnabled !== false, microphoneDevice: String(input?.microphoneDevice ?? ''),
         networkSpeed: input?.networkSpeed, secondaryDisplay: input?.secondaryDisplay, bootMode: input?.bootMode, proxy,
       });
-      const controller = await installOctoCameraControllerOnAndroid(String(input?.name ?? ''))
+      const controller = await installOctoCameraControllerOnAndroid(String(input?.name ?? ''), this.liveCameraStream.status().port)
         .catch((error: unknown) => ({ installed: false, launched: false, reason: error instanceof Error ? error.message : String(error) }));
       // Lensio is opt-in. Its Windows receiver can start before the AVD, but
       // Android cannot install an APK until adb reports the guest as ready.
@@ -3181,6 +3181,18 @@ export class Manager {
     handle('mgr:android-live-stream-status', L, () => this.liveCameraStream.status());
     handle('mgr:android-live-stream-start', L, () => this.liveCameraStream.start());
     handle('mgr:android-live-stream-stop', L, async () => { await this.liveCameraStream.stop(); return this.liveCameraStream.status(); });
+    handle('mgr:android-open-camera-controller', L, async (_e, name: string) => {
+      const deviceName = String(name ?? '').trim();
+      if (!deviceName) return { installed: false, launched: false, reason: 'Select an Android device first.' };
+      // The receiver is a Devices-tab action, so make the diagnostic MJPEG
+      // endpoint available before installing/foregrounding the APK. The native
+      // emulator Camera path remains independent of this preview transport.
+      const stream = this.liveCameraStream.status().running
+        ? this.liveCameraStream.status()
+        : await this.liveCameraStream.start();
+      const result = await installOctoCameraControllerOnAndroid(deviceName, stream.port);
+      return { ...result, port: stream.port };
+    });
     handle('mgr:android-live-image', L, async (_e, input: { deviceName?: string; imagePath?: string; imagePaths?: string[]; activeIndex?: number; imageFit?: 'fill' | 'fit' | 'stretch' | 'blur'; playlistMode?: 'manual' | 'auto' | 'random'; playlistInterval?: number }) => {
       const deviceName = String(input?.deviceName ?? '').trim();
       if (!/^[A-Za-z0-9._-]{1,64}$/.test(deviceName)) throw new Error('Invalid Android device name');

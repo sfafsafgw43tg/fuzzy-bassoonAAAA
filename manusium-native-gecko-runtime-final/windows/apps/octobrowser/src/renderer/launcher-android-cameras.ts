@@ -65,6 +65,8 @@ export interface CameraPickerOptions {
   onChange?: (value: CameraSelection) => void;
   /** Called after every scan, with the cameras that work right now. */
   onWorking?: (working: Array<{ name: string; label: string }>) => void;
+  /** Keep a requested endpoint visible while the driver is still starting. */
+  preserveUnavailable?: boolean;
 }
 
 export interface CameraPicker {
@@ -259,6 +261,8 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
   if (selection.backDevice && selection.backLimit) measured.set(selection.backDevice, selection.backLimit);
 
   let listed: EmulatorCamera[] = [];
+  /** Manual entries are configuration fallbacks only; they are never treated as live. */
+  const manualEndpoints = new Map<string, EmulatorCamera>();
   /** The last check of each listed camera, valid only while the camera keeps its name and device. */
   const checks = new Map<string, { key: string; check: CameraCheck }>();
   let loaded = false;
@@ -372,6 +376,19 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
     streamButton.disabled = false;
   };
   streamButton.onclick = () => { void updateStreamStatus(); };
+  const manualButton = h('button', { type: 'button', class: 'btn small', text: 'Add manual endpoint', 'aria-label': 'Add an unverified webcam endpoint manually' }) as HTMLButtonElement;
+  manualButton.onclick = () => {
+    const endpoint = window.prompt('Emulator endpoint name (for example webcam0):', selection.backDevice || 'webcam0')?.trim() ?? '';
+    if (!/^webcam\d+$/.test(endpoint)) {
+      toast('Use an Android Emulator endpoint such as webcam0 or webcam1.', 'info');
+      return;
+    }
+    const devicePath = window.prompt('Optional Windows DirectShow device path or friendly name:', '')?.trim() ?? '';
+    manualEndpoints.set(endpoint, { name: endpoint, device: devicePath || `${endpoint} · manual/unverified`, virtual: true, foreign: true });
+    setSource('back', 'webcam', endpoint);
+    selection.cameraProvider = 'directshow';
+    paintLenses(); paintStatus(); emit();
+  };
   const refreshButton = h('button', { type: 'button', class: 'btn small' },
     icon('refreshCircle', 14), h('span', { text: t('common.refresh') })) as HTMLButtonElement;
   refreshButton.onclick = () => void scan(true);
@@ -573,7 +590,7 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
     manager,
     livePanel,
     h('div', { class: 'grid2' }, backSlot, frontSlot),
-    h('div', { class: 'camera-picker-foot' }, refreshButton, obsButton, streamButton, previewButton),
+    h('div', { class: 'camera-picker-foot' }, refreshButton, manualButton, obsButton, streamButton, previewButton),
     previewVideo,
     previewStatus,
     streamStatus,
@@ -674,7 +691,7 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
     }
     const currentCamera = currentDevice ? listed.find(camera => camera.name === currentDevice) : undefined;
     const currentCheck = currentCamera ? checkOf(currentCamera) : undefined;
-    const isDetected = source === 'emulated' || source === 'image' || (source === 'video' ? (videoDetected.get(facing) ?? Boolean(currentDevice && /\.(mp4|mkv|avi|mov)$/i.test(currentDevice))) : Boolean(currentDevice && listed.some(camera => camera.name === currentDevice)));
+    const isDetected = source === 'emulated' || source === 'image' || (source === 'video' ? (videoDetected.get(facing) ?? Boolean(currentDevice && /\.(mp4|mkv|avi|mov)$/i.test(currentDevice))) : Boolean(currentDevice && listed.some(camera => camera.name === currentDevice && !camera.foreign)));
     const isConfigured = source === 'image' ? Boolean(currentDevice) : source !== 'none' && (source !== 'webcam' || Boolean(currentDevice));
     const isLive = source === 'webcam' ? currentCheck?.ok === true : undefined;
     const badge = (label: string, state: boolean | undefined): HTMLElement => h('span', { class: `camera-source-badge ${state === true ? 'ok' : state === false ? 'off' : 'unknown'}`, text: `${label}: ${state === true ? t('android.camera.statusYes') : state === false ? t('android.camera.statusNo') : t('android.camera.statusUnknown')}` });
@@ -711,6 +728,8 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
       selection.back === 'webcam' ? selection.backDevice : '',
     ].filter(id => id && !listed.some(camera => camera.name === id)))];
     if (loaded && unlisted.length) lines.push(line(true, t('android.camera.manualWarning', { endpoints: unlisted.join(', ') })));
+    const manual = listed.filter((camera) => camera.foreign).map((camera) => camera.name);
+    if (manual.length) lines.push(line(true, `Manual endpoint(s) are configured but not verified by the emulator: ${manual.join(', ')}.`));
     if (loadFailed) lines.push(line(true, t('android.camera.scanFailed')));
     else if (!loaded || checking) lines.push(line(false, t('android.camera.scanning')));
     else if (noEmulator) lines.push(line(true, t('android.camera.noEmulator')));
@@ -762,14 +781,17 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
       loadFailed = false;
       loaded = true;
       noEmulator = !next.emulatorAvailable;
-      listed = next.webcams;
+      listed = [...next.webcams, ...[...manualEndpoints.values()].filter((manual) => !next.webcams.some((camera) => camera.name === manual.name))];
       problem = next.problem ?? '';
       detail = next.detail ?? '';
       hostCameraCount = next.hostCameraCount ?? 0;
       windowsCount = await countWindowsCameras();
-      // A completed scan is authoritative: never keep saving a route the
-      // emulator did not list. The user can start the provider and Refresh.
-      if (loaded && listed.length === 0) {
+      // Normal selections are cleared when the emulator definitively returns
+      // no endpoints. The virtual-camera preset is different: it keeps its
+      // requested endpoint while the driver is starting, so the five-second
+      // scanner can discover it later without making the user reselect it.
+      const hasDetectedEndpoint = listed.some((camera) => !camera.foreign);
+      if (loaded && !hasDetectedEndpoint && !options.preserveUnavailable && manualEndpoints.size === 0) {
         if (selection.front !== 'emulated' && selection.front !== 'image' && selection.front !== 'video' && selection.frontDevice) setDevice('front', '');
         if (selection.back !== 'emulated' && selection.back !== 'image' && selection.back !== 'video' && selection.backDevice) setDevice('back', '');
       }
@@ -803,7 +825,7 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
       }
       // A replaced picker must not write its old selection back into the device it was made for.
       if (attached && !element.isConnected) return;
-      assign();
+      if (!(manualEndpoints.size > 0 && !hasDetectedEndpoint) && !(options.preserveUnavailable && !hasDetectedEndpoint)) assign();
       paintLenses();
       emit();
       options.onWorking?.(working().map((camera) => ({ name: camera.name, label: displayName(camera) })));

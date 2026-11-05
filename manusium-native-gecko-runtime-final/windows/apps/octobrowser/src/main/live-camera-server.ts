@@ -20,7 +20,7 @@ export interface LiveCameraStreamStatus {
 
 function writeJson(response: ServerResponse, status: number, value: unknown): void {
   const body = Buffer.from(JSON.stringify(value));
-  response.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'content-length': body.length, 'cache-control': 'no-store' });
+  response.writeHead(status, { 'content-type': 'application/json; charset=utf-8', 'content-length': body.length, 'cache-control': 'no-store', 'access-control-allow-origin': '*' });
   response.end(body);
 }
 
@@ -32,14 +32,14 @@ export class LiveCameraStreamServer {
   private clients = new Set<WebSocketClient>();
   private port = 0;
 
-  async start(): Promise<LiveCameraStreamStatus> {
+  async start(requestedPort = 0): Promise<LiveCameraStreamStatus> {
     if (this.server) return this.status();
     this.server = createServer((request, response) => { void this.route(request, response); });
     this.server.on('upgrade', (request, socket, head) => this.upgradeWebSocket(request, socket, head));
     await new Promise<void>((resolve, reject) => {
       const server = this.server!;
       server.once('error', reject);
-      server.listen(0, '127.0.0.1', () => {
+      server.listen(requestedPort, '127.0.0.1', () => {
         server.off('error', reject);
         const address = server.address();
         this.port = typeof address === 'object' && address ? address.port : 0;
@@ -89,7 +89,7 @@ export class LiveCameraStreamServer {
   }
 
   private mjpeg(response: ServerResponse): void {
-    response.writeHead(200, { 'content-type': 'multipart/x-mixed-replace; boundary=octo-frame', 'cache-control': 'no-store', connection: 'close' });
+    response.writeHead(200, { 'content-type': 'multipart/x-mixed-replace; boundary=octo-frame', 'cache-control': 'no-store', connection: 'close', 'access-control-allow-origin': '*' });
     const send = () => {
       if (!this.frame.length || response.destroyed) return;
       response.write(`--octo-frame\r\nContent-Type: ${this.contentType}\r\nContent-Length: ${this.frame.length}\r\nX-Octo-Frame: ${this.frameVersion}\r\n\r\n`);

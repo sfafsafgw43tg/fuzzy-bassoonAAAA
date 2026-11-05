@@ -334,6 +334,7 @@ export function deviceSettingsDialog(target: {
   name: string; running: boolean;
   ramMb?: number; cores?: number; dataGb?: number; width?: number; height?: number; dpi?: number;
   cameraFront?: string; cameraBack?: string; cameraFrontDevice?: string; cameraBackDevice?: string; cameraDevice?: string; microphoneEnabled?: boolean;
+  cameraProvider?: 'lensio' | 'unity-capture' | 'obs' | 'directshow'; cameraPresetEnabled?: boolean;
   networkSpeed?: 'full' | 'lte' | 'umts' | 'edge' | 'gsm';
   /** Handset this device imitates (name, model and the device identity). */
   handset?: string;
@@ -408,12 +409,14 @@ export function deviceSettingsDialog(target: {
     // a lens with none is Off.
     const cameras = cameraPicker({
       initial: {
-        front: (target.cameraFront ?? 'webcam') as CameraSource,
-        back: (target.cameraBack ?? 'webcam') as CameraSource,
+        front: (target.cameraPresetEnabled ? 'webcam' : target.cameraFront ?? 'webcam') as CameraSource,
+        back: (target.cameraPresetEnabled ? 'webcam' : target.cameraBack ?? 'webcam') as CameraSource,
         frontDevice: rememberedFrontCamera,
         backDevice: rememberedBackCamera,
       },
     });
+    const virtualCameraPreset = toggle(target.cameraPresetEnabled === true, 'Virtual camera preset: auto-install APK, use Unity Capture, and bind webcam0');
+    const presetHint = h('p', { class: 'hint', 'aria-live': 'polite', text: 'When enabled, Octo keeps this camera route independent from the other Android settings. It requires Windows to enumerate webcam0; it never claims success when the host driver is missing.' });
     const microphone = toggle(target.microphoneEnabled !== false, 'android.media.microphone');
     const gpu = select<string>('auto', [['auto', t('android.gpu.auto')], ['host', t('android.gpu.host')], ['swiftshader_indirect', t('android.gpu.software')], ['off', t('android.gpu.off')]]);
     const boot = select<string>('quick', [['quick', t('android.boot.quick')], ['cold', t('android.boot.cold')]]);
@@ -425,8 +428,16 @@ export function deviceSettingsDialog(target: {
     // Saving writes the AVD config, which takes a few seconds
     // and used to look like the whole app had frozen.
     save.onclick = () => void busy(save, 'android.applying', async () => {
-      let ok = false;
+          let ok = false;
       const camera = cameras.value();
+      const preset = checked(virtualCameraPreset);
+      if (preset) {
+        camera.front = 'webcam';
+        camera.back = 'webcam';
+        camera.frontDevice = 'webcam0';
+        camera.backDevice = 'webcam0';
+        camera.cameraProvider = 'unity-capture';
+      }
       const changed = await run(api.invoke<string[]>('mgr:android-settings', target.name, {
         ramMb: Number(ram.value), cores: Number(cores.value), dataGb: Number(disk.value),
         gpuMode: valueOf(gpu), bootMode: valueOf(boot), networkSpeed: valueOf(netSpeed),
@@ -434,6 +445,8 @@ export function deviceSettingsDialog(target: {
         cameraFrontDevice: camera.frontDevice, cameraBackDevice: camera.backDevice,
         cameraDevice: camera.backDevice || camera.frontDevice,
         cameraLimits: { front: camera.frontLimit, back: camera.backLimit },
+        cameraProvider: preset ? 'unity-capture' : camera.cameraProvider,
+        cameraPresetEnabled: preset,
         microphoneEnabled: checked(microphone),
         brand: brand.value.trim(),
         manufacturer: manufacturer.value.trim(),
@@ -488,6 +501,8 @@ export function deviceSettingsDialog(target: {
       group('android.group.display',
         h('div', { class: 'grid2' }, field('android.spec.width', width), field('android.spec.height', height), field('android.spec.emulatorDpi', dpi))),
       group('android.group.media',
+        virtualCameraPreset,
+        presetHint,
         cameras.element,
         microphone),
       group('android.group.simulation',
@@ -615,6 +630,5 @@ export function androidNetworkBar(reload: () => Promise<void>): HTMLElement {
   void refresh();
   return bar;
 }
-
 
 

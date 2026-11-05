@@ -56,6 +56,26 @@ function copyByExt(srcDir, destDir, exts) {
   }
 }
 
+function resetDist(dist) {
+  try {
+    fs.rmSync(dist, { recursive: true, force: true });
+  } catch (error) {
+    // Windows can leave an orphaned deny ACE on the output directory. Keep the
+    // directory itself and remove its contents so a non-Administrator build can
+    // still recover without weakening permissions on the repository.
+    if (error?.code !== 'EPERM' && error?.code !== 'EACCES') throw error;
+    for (const entry of fs.readdirSync(dist)) {
+      try {
+        fs.rmSync(path.join(dist, entry), { recursive: true, force: true });
+      } catch (childError) {
+        if (childError?.code !== 'EPERM' && childError?.code !== 'EACCES') throw childError;
+        console.warn(`build: preserving locked output entry ${path.relative(root, path.join(dist, entry))}`);
+      }
+    }
+  }
+  fs.mkdirSync(dist, { recursive: true });
+}
+
 /** Keep apps/<app>/package.json version in sync with the root version (app.getVersion()). */
 function syncVersion(app) {
   const file = path.join(root, 'apps', app, 'package.json');
@@ -109,8 +129,7 @@ async function buildApp(app) {
   const appDir = path.join(root, 'apps', app);
   const src = path.join(appDir, 'src');
   const dist = path.join(appDir, 'dist');
-  fs.rmSync(dist, { recursive: true, force: true });
-  fs.mkdirSync(dist, { recursive: true });
+  resetDist(dist);
   syncVersion(app);
 
   await node(path.join(src, 'main', 'main.ts'), path.join(dist, 'main.js'));

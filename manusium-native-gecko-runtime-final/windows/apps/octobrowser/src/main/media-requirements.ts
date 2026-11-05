@@ -234,7 +234,13 @@ export async function installUnityCapture(onProgress?: (text: string, percent: n
   if (!filter) return { ok: false, message: 'The Unity Capture archive did not contain the camera filter.' };
   onProgress?.('Registering the camera filter (Windows will ask for permission)', 80);
   // regsvr32 needs elevation, so Windows shows its own consent dialog.
-  const registered = powershell(`Start-Process regsvr32.exe -ArgumentList '/s','"${filter}"' -Verb RunAs -Wait`, 5 * 60_000);
+  // Unity Capture's legacy registration script can leave a synthetic
+  // `DevicePath=foo:bar` value under the DirectShow video-input category.
+  // That is not a Windows device path and makes the Android Emulator discard
+  // the filter. Register elevated, then remove only that value; the CLSID,
+  // filter category, and InprocServer32 registration remain intact.
+  const escapedFilter = filter.replace(/'/g, "''");
+  const registered = powershell(`$r=Start-Process regsvr32.exe -ArgumentList @('/s','${escapedFilter}') -Verb RunAs -Wait -PassThru; if ($r.ExitCode -ne 0) { exit $r.ExitCode }; Remove-ItemProperty -Path 'HKLM:\\SOFTWARE\\Classes\\CLSID\\{860BB310-5D01-11d0-BD3B-00A0C911CE86}\\Instance\\{5C2CD55C-92AD-4999-8666-912BD3E70010}' -Name DevicePath -ErrorAction SilentlyContinue`, 5 * 60_000);
   if (!registered.ok) return { ok: false, message: registered.output || 'Registering the camera filter was refused.' };
   onProgress?.('done', 100);
   return unityCaptureRegistered()
