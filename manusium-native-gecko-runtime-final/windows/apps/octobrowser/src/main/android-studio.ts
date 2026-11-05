@@ -5411,10 +5411,11 @@ export async function updateAvdSettings(name: string, input: AvdSettingsInput): 
       [],
       input.cameraDevice ?? avd.cameraDevice,
     );
-    const needsHostCamera = selected.front === 'webcam' || selected.back === 'webcam';
-    if (needsHostCamera && !webcams.length) {
-      throw new Error('The Android Emulator did not verify a host camera. Refresh the camera list before saving these settings.');
-    }
+    // Match Android Studio: saving a webcam endpoint is configuration, not a
+    // host-capture permission test. The emulator may temporarily return an
+    // empty webcam-list while it is booting or while a virtual-camera driver
+    // is restarting. resolveActiveCameraAssignments preserves an explicit
+    // webcamN endpoint and returns a warning; the next refresh can verify it.
     if (assignments.frontDevice && assignments.frontDevice === assignments.backDevice) {
       throw new Error(`The same host camera (${assignments.frontDevice}) cannot be assigned to both Android lenses. Set one lens to Off or select a second endpoint.`);
     }
