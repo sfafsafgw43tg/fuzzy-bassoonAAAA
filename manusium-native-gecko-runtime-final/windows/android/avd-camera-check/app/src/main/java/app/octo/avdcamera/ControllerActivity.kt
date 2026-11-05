@@ -22,6 +22,8 @@ import java.net.HttpURLConnection
 import java.net.URL
 import java.util.concurrent.ExecutorService
 import java.util.concurrent.Executors
+import java.util.concurrent.ScheduledExecutorService
+import java.util.concurrent.TimeUnit
 import java.util.concurrent.atomic.AtomicBoolean
 
 /**
@@ -45,11 +47,13 @@ class ControllerActivity : AppCompatActivity() {
     private lateinit var portInput: EditText
     private val main = Handler(Looper.getMainLooper())
     private val worker: ExecutorService = Executors.newSingleThreadExecutor()
+    private val sourcePoller: ScheduledExecutorService = Executors.newSingleThreadScheduledExecutor()
     private val connecting = AtomicBoolean(false)
     private val closing = AtomicBoolean(false)
     private var streamPort = 8765
     private var frameCount = 0L
     private var connectedAt = 0L
+    @Volatile private var lastSourceVersion = -1L
     @Volatile private var paused = false
     @Volatile private var fitCrop = false
     @Volatile private var activeConnection: HttpURLConnection? = null
@@ -59,6 +63,7 @@ class ControllerActivity : AppCompatActivity() {
         streamPort = intent.getIntExtra(EXTRA_STREAM_PORT, 8765).coerceIn(1, 65535)
         setContentView(buildView())
         connect()
+        sourcePoller.scheduleWithFixedDelay({ pollSourceVersion() }, 0, SOURCE_POLL_SECONDS, TimeUnit.SECONDS)
     }
 
     private fun buildView(): ScrollView {
@@ -107,7 +112,7 @@ class ControllerActivity : AppCompatActivity() {
             contentDescription = "Connection status"
         }
         connectionTitle.addView(dot, LinearLayout.LayoutParams(dp(24), -2))
-        sourceStatus = label("Connecting to Unity Capture…", 16f, Color.rgb(26, 29, 43), true)
+        sourceStatus = label("Connecting to vStudio stream…", 16f, Color.rgb(26, 29, 43), true)
         connectionTitle.addView(sourceStatus, LinearLayout.LayoutParams(0, -2, 1f))
         connection.addView(connectionTitle)
         endpointStatus = label("ADB reverse tunnel  •  127.0.0.1:$streamPort/mjpeg", 13f, Color.rgb(87, 91, 108), false)
@@ -239,7 +244,7 @@ class ControllerActivity : AppCompatActivity() {
     private fun connect() {
         if (!connecting.compareAndSet(false, true) || closing.get()) return
         main.post {
-            sourceStatus.text = "Connecting to Unity Capture…"
+            sourceStatus.text = "Connecting to vStudio stream…"
             sourceStatus.setTextColor(Color.rgb(26, 29, 43))
             reconnect.isEnabled = false
         }
@@ -257,13 +262,13 @@ class ControllerActivity : AppCompatActivity() {
                 if (connection.responseCode != HttpURLConnection.HTTP_OK) throw IllegalStateException("HTTP ${connection.responseCode}")
                 connectedAt = System.currentTimeMillis()
                 Log.i(TAG, "stream-connected port=$streamPort")
-                main.post { sourceStatus.text = "Connected to Unity Capture"; sourceStatus.setTextColor(Color.rgb(24, 155, 92)) }
+                main.post { sourceStatus.text = "Connected to vStudio MJPEG stream"; sourceStatus.setTextColor(Color.rgb(24, 155, 92)) }
                 readMultipart(connection.inputStream)
             } catch (error: Exception) {
                 Log.e(TAG, "stream-error", error)
                 if (!closing.get()) {
                     main.post {
-                        sourceStatus.text = "Waiting for Unity Capture"
+                        sourceStatus.text = "Waiting for vStudio stream"
                         sourceStatus.setTextColor(Color.rgb(190, 54, 70))
                         frameInfo.text = "Reconnect failed: ${error.message ?: "stream unavailable"}"
                     }
@@ -275,6 +280,39 @@ class ControllerActivity : AppCompatActivity() {
                 connecting.set(false)
                 main.post { reconnect.isEnabled = true }
             }
+        }
+    }
+
+    /** Poll the producer every three seconds so source changes are explicit in the receiver UI. */
+    private fun pollSourceVersion() {
+        if (closing.get()) return
+        var connection: HttpURLConnection? = null
+        try {
+            connection = (URL("http://127.0.0.1:$streamPort/health").openConnection() as HttpURLConnection).apply {
+                connectTimeout = 1200
+                readTimeout = 1200
+                requestMethod = "GET"
+                setRequestProperty("Cache-Control", "no-cache")
+                connect()
+            }
+            if (connection.responseCode != HttpURLConnection.HTTP_OK) return
+            val body = connection.inputStream.bufferedReader().use { it.readText() }
+            val version = Regex("\\\"frameVersion\\\"\\s*:\\s*(\\d+)").find(body)?.groupValues?.get(1)?.toLongOrNull() ?: return
+            if (lastSourceVersion >= 0L && version > lastSourceVersion) {
+                Log.i(TAG, "source-image-changed frameVersion=$version")
+                main.post {
+                    if (!closing.get()) {
+                        frameInfo.text = "Selected vStudio image updated • live frame $version"
+                        sourceStatus.text = "Connected • selected image updated"
+                        sourceStatus.setTextColor(Color.rgb(24, 155, 92))
+                    }
+                }
+            }
+            lastSourceVersion = version
+        } catch (error: Exception) {
+            if (!closing.get()) Log.d(TAG, "source-health-unavailable", error)
+        } finally {
+            connection?.disconnect()
         }
     }
 
@@ -333,6 +371,7 @@ class ControllerActivity : AppCompatActivity() {
         activeConnection?.disconnect()
         main.removeCallbacksAndMessages(null)
         worker.shutdownNow()
+        sourcePoller.shutdownNow()
         super.onDestroy()
     }
 
@@ -356,6 +395,7 @@ class ControllerActivity : AppCompatActivity() {
 
     companion object {
         private const val TAG = "OctoLiveReceiver"
+        private const val SOURCE_POLL_SECONDS = 3L
         const val EXTRA_STREAM_PORT = "octo_stream_port"
     }
 }

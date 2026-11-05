@@ -43,6 +43,7 @@ try {
   const artifacts = [
     ['octo-camera-source.dll', projects[0].build],
     ['octo-cameractl.exe', projects[0].build],
+    ['octo-camera-feed-publisher.exe', projects[0].build],
     ['octo-directshow-camera.dll', projects[1].build],
   ];
   for (const [name, build] of artifacts) {

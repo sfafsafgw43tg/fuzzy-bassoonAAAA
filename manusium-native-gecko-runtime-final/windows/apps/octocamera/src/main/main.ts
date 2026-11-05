@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as net from 'node:net';
+import { replaceActiveSource } from './live-source';
 
 let win: BrowserWindow | undefined;
 let activeSerial: string | undefined;
@@ -13,6 +14,11 @@ const adb = process.env.ADB || path.join(sdk, 'platform-tools', 'adb.exe');
 const emulator = path.join(sdk, 'emulator', 'emulator.exe');
 const work = path.join(os.tmpdir(), 'octo-camera-controller');
 fs.mkdirSync(work, { recursive: true });
+const sharedFrame = path.join(process.env.LOCALAPPDATA || work, 'OctoSuite', 'live-camera', 'current.jpg');
+const liveServerCandidates = [
+  path.join(process.resourcesPath, 'android-scripts', 'start-live-camera-server.cjs'),
+  path.resolve(__dirname, '..', '..', '..', '..', 'scripts', 'android', 'start-live-camera-server.cjs'),
+];
 
 function run(file: string, args: string[], timeout = 30000): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -22,6 +28,29 @@ function run(file: string, args: string[], timeout = 30000): Promise<string> {
   });
 }
 function start(file: string, args: string[]): void { spawn(file, args, { detached: true, windowsHide: true, stdio: 'ignore' }).unref(); }
+async function ensureLiveServer(): Promise<void> {
+  try {
+    const response = await fetch('http://127.0.0.1:8765/health');
+    if (response.ok) return;
+  } catch { /* start it below */ }
+  const script = liveServerCandidates.find((candidate) => fs.existsSync(candidate));
+  if (!script) throw new Error('The bundled MJPEG producer script is missing.');
+  fs.mkdirSync(path.dirname(sharedFrame), { recursive: true });
+  spawn(process.execPath, [script], {
+    detached: true,
+    windowsHide: true,
+    stdio: 'ignore',
+    env: { ...process.env, OCTO_CAMERA_PORT: '8765', OCTO_CAMERA_FRAME: sharedFrame },
+  }).unref();
+  for (let attempt = 0; attempt < 20; attempt++) {
+    try {
+      const response = await fetch('http://127.0.0.1:8765/health');
+      if (response.ok) return;
+    } catch { /* wait for startup */ }
+    await new Promise((resolve) => setTimeout(resolve, 150));
+  }
+  throw new Error('The MJPEG producer did not become ready on port 8765.');
+}
 function emulatorConsolePort(serial?: string): number | undefined {
   const match = String(serial ?? '').match(/emulator-(\d+)$/);
   return match ? Number(match[1]) : undefined;
@@ -111,6 +140,10 @@ ipcMain.handle('camera:apply', async (_event, input: { avd: string; source: stri
     await run(ffmpeg, [...(input.videoLoop ? ['-stream_loop', '1'] : []), '-y', '-i', input.source, '-vf', `setpts=${1 / Math.max(0.25, Math.min(4, input.videoSpeed || 1))}*PTS`, '-an', '-c:v', 'libx264', '-pix_fmt', 'yuv420p', processed], 120000);
     source = processed;
   }
+  if (input.type === 'image') {
+    fs.mkdirSync(path.dirname(sharedFrame), { recursive: true });
+    replaceActiveSource(source, sharedFrame);
+  }
   const camera = input.type === 'video' ? `videofile:${source}` : `imagefile:${source}`;
   activeAvd = input.avd;
   const args = ['-avd', input.avd, '-no-snapshot', '-camera-front', 'none', '-camera-back', camera];
@@ -132,12 +165,10 @@ ipcMain.handle('camera:apply-live', async (_event, input: { source: string; type
   const args = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script, '-InputPath', input.source, '-OutputPath', temp, '-Width', String(input.width), '-Height', String(input.height), '-Fit', input.fit, '-Filter', input.filter || 'none'];
   if (input.fit === 'crop' && input.crop) args.push('-SourceX', String(Math.round(input.crop.x)), '-SourceY', String(Math.round(input.crop.y)), '-SourceWidth', String(Math.round(input.crop.width)), '-SourceHeight', String(Math.round(input.crop.height)));
   await run('powershell.exe', args, 60000);
-  const avd = activeAvd || (await run(adb, ['emu', 'avd', 'name']).catch(() => '')) || (await avds())[0];
-  if (!avd) throw new Error('The running emulator AVD name could not be determined. Apply the photo once with an AVD selected.');
-  activeAvd = avd;
-  try { await run(adb, ['emu', 'kill'], 10000); } catch { /* already stopped */ }
-  start(emulator, ['-avd', avd, '-no-snapshot', '-camera-front', 'none', '-camera-back', `imagefile:${temp}`]);
-  return { ok: true, message: `Applied the resized photo as a full-frame camera input. The emulator is restarting to load the new image (${input.width}x${input.height}).`, source: temp };
+  fs.mkdirSync(path.dirname(sharedFrame), { recursive: true });
+  replaceActiveSource(temp, sharedFrame);
+  await ensureLiveServer();
+  return { ok: true, message: `Applied the resized photo to the live vStudio stream without restarting the emulator (${input.width}x${input.height}).`, source: sharedFrame };
 });
 ipcMain.handle('camera:install-controller', async (_event, serial?: string) => {
   const candidates = [

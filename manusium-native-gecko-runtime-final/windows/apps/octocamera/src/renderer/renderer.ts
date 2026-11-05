@@ -53,12 +53,12 @@ function setStatus(text: string, bad = false): void {
 }
 function updateLiveButton(): void {
   applyLiveButton.disabled = !liveReady || type !== 'image' || !source;
-  applyLiveButton.textContent = liveReady && type === 'image' ? 'Apply resized photo — restart camera' : 'Apply photo as full-frame camera';
+  applyLiveButton.textContent = liveReady && type === 'image' ? 'Apply photo live — no restart' : 'Apply photo as full-frame camera';
 }
 function scheduleLiveApply(): void {
   if (!liveReady || type !== 'image' || !source) return;
   window.clearTimeout(liveTimer);
-  liveTimer = window.setTimeout(() => setStatus('Photo frame changed. Click Apply resized photo — restart camera to load it.'), 450);
+  liveTimer = window.setTimeout(() => setStatus('Photo frame changed. Click Apply photo live — no restart to send it to the running device.'), 450);
 }
 function output(): void { $('output').textContent = `${Number(width.value) || 0} × ${Number(height.value) || 0}`; }
 function imageRect(): { x: number; y: number; width: number; height: number } {
@@ -181,7 +181,7 @@ async function choose(kind: 'image' | 'video'): Promise<void> {
   }
   updateLiveButton();
   if (kind === 'image' && liveReady) scheduleLiveApply();
-  setStatus(kind === 'image' && liveReady ? 'New photo ready. Click Reapply photo live — no restart.' : 'Source ready. Configure the frame and apply it.');
+  setStatus(kind === 'image' && liveReady ? 'New photo ready. Click Apply photo live — no restart.' : 'Source ready. Configure the frame and apply it.');
 }
 
 $('photo').onclick = () => void choose('image');
@@ -213,7 +213,7 @@ async function applyCurrentLive(manual: boolean): Promise<void> {
   try {
     liveApplying = true;
     applyLiveButton.disabled = true;
-    if (manual) setStatus('Preparing the resized photo and restarting the camera input…');
+    if (manual) setStatus('Preparing the resized photo and sending it to the live vStudio stream…');
     const result = await window.octoCamera.applyLive({ source, type, width: Number(width.value) || 1280, height: Number(height.value) || 720, fit: fit.value as 'stretch' | 'fit' | 'crop', serial: serial.value || undefined, crop: { x: crop.x * image.naturalWidth, y: crop.y * image.naturalHeight, width: crop.w * image.naturalWidth, height: crop.h * image.naturalHeight }, filter: filter.value as 'none' | 'grayscale' | 'sepia' | 'bright' | 'contrast', videoLoop: videoLoop.checked, videoSpeed: Number(videoSpeed.value) });
     setStatus(result.message);
   } catch (e) { setStatus(String(e), true); }

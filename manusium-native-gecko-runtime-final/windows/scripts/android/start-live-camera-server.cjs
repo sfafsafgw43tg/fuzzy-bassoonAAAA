@@ -4,6 +4,7 @@ const path = require('node:path');
 
 const root = path.resolve(__dirname, '..', '..', '..');
 const candidates = [
+  path.join(process.env.LOCALAPPDATA || '', 'OctoSuite', 'live-camera', 'current.jpg'),
   process.env.OCTO_CAMERA_FRAME,
   path.join(root, '.work', 'camera-test', 'chosen-photo-test.jpg'),
   path.join(root, 'windows', '.work', 'camera-test', 'chosen-photo-test.jpg'),

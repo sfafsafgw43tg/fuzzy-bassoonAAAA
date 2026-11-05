@@ -19,6 +19,7 @@ for (const file of ['CMakeLists.txt', 'softcam.cpp', 'octo-directshow-camera.def
 const read = (file) => fs.readFileSync(path.join(root, file), 'utf8');
 const cmake = read('CMakeLists.txt');
 const source = read('camera_source.cpp');
+const publisher = read('camera_feed_publisher.cpp');
 const registration = read('registration.cpp');
 const control = read('cameractl.cpp');
 const protocol = read('feed_protocol.h');
@@ -32,6 +33,8 @@ const assertions = [
   [cmake.includes('mfsensorgroup'), 'Media Foundation sensor-group library is linked'],
   [cmake.includes('registration.cpp'), 'registration client is built'],
   [source.includes('IMFMediaSourceEx'), 'frame-server source extension is implemented'],
+  [publisher.includes('CreateFileMappingW') && publisher.includes('kFeedMappingName'), 'frame publisher writes the shared camera feed'],
+  [publisher.includes('GUID_WICPixelFormat24bppBGR') && publisher.includes('bgrToNv12'), 'frame publisher converts selected images to NV12'],
   [source.includes('MFCreateEventQueue'), 'source uses an event queue'],
   [registration.includes('MFVirtualCameraAccess_CurrentUser'), 'registration defaults to current-user scope'],
   [registration.includes('MFVirtualCameraType_SoftwareCameraSource'), 'registration uses software-camera source type'],

@@ -7,6 +7,8 @@ param(
   [ValidateSet('imagefile', 'videofile', 'emulated')]
   [string]$CameraSource = 'imagefile',
   [string]$CameraFile = '',
+  [switch]$NativeVirtualCamera,
+  [switch]$InstallNativeCamera,
   [switch]$NoBoot,
   [switch]$NoInstall,
   [switch]$NoLaunch,
@@ -21,6 +23,25 @@ $emulator = Join-Path $sdk 'emulator\emulator.exe'
 $serverScript = Join-Path $repo 'windows\scripts\android\start-live-camera-server.cjs'
 if ([string]::IsNullOrWhiteSpace($Apk)) { $Apk = Join-Path $repo 'outputs\Realme12ProStudio-LiveReceiver-debug.apk' }
 if ([string]::IsNullOrWhiteSpace($CameraFile)) { $CameraFile = Join-Path $repo '.work\camera-test\chosen-photo-test.jpg' }
+$sharedFrame = Join-Path $env:LOCALAPPDATA 'OctoSuite\live-camera\current.jpg'
+New-Item -ItemType Directory -Force (Split-Path $sharedFrame) | Out-Null
+if (Test-Path -LiteralPath $CameraFile) {
+  $cameraFull = [IO.Path]::GetFullPath($CameraFile)
+  $sharedFull = [IO.Path]::GetFullPath($sharedFrame)
+  if ($cameraFull -ne $sharedFull) { Copy-Item -LiteralPath $CameraFile -Destination $sharedFrame -Force }
+}
+
+if ($NativeVirtualCamera) {
+  $nativeScript = Join-Path $repo 'windows\scripts\android\start-octo-native-camera.ps1'
+  if (-not (Test-Path -LiteralPath $nativeScript)) { throw "Native camera launcher was not found: $nativeScript" }
+  if (-not (Test-Path -LiteralPath $CameraFile)) { throw "Native camera frame was not found: $CameraFile" }
+  $nativeArgs = @('-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', $nativeScript, '-Avd', $Avd, '-Frame', $CameraFile)
+  if ($InstallNativeCamera) { $nativeArgs += '-InstallDriver' }
+  if ($NoBoot) { $nativeArgs += '-NoBoot' }
+  & powershell.exe @nativeArgs
+  if ($LASTEXITCODE -ne 0) { throw "Native virtual-camera launch failed with exit code $LASTEXITCODE." }
+  return
+}
 
 foreach ($required in @($adb, $emulator, $serverScript, $Apk)) {
   if (-not (Test-Path -LiteralPath $required)) { throw "Required file was not found: $required" }
@@ -49,6 +70,7 @@ Write-Output "OctoSuite camera bridge: AVD=$Avd port=$Port"
 
 # The server is the non-PnP bridge consumed by the receiver APK.
 $env:OCTO_CAMERA_PORT = [string]$Port
+$env:OCTO_CAMERA_FRAME = $sharedFrame
 $serverLog = Join-Path $repo 'windows\.work\live-camera-server-startup.log'
 $serverErr = "$serverLog.err"
 New-Item -ItemType Directory -Force (Split-Path $serverLog) | Out-Null

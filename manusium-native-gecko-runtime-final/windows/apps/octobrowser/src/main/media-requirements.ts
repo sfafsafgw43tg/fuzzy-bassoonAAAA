@@ -9,8 +9,8 @@
  * itself:
  *
  *   Python 3          winget (the official python.org package)
- *   virtual camera    Unity Capture, registered from its official repository
- *                     - the one engine vStudio Mobile broadcasts through
+ *   virtual camera    Octo Camera Media Foundation bridge, built and registered
+ *                     locally; Unity Capture remains an optional DirectShow source
  *   virtual microphone VB-CABLE, from VB-Audio's own download
  *
  * Every download is HTTPS from the vendor's own host, size-capped, and the
@@ -41,7 +41,7 @@ export interface RequirementFix {
 
 export const REQUIREMENT_FIXES: Record<RequirementId, RequirementFix> = {
   python: { id: 'python', fixable: true, required: true, vendor: 'python.org (winget)', homepage: 'https://www.python.org/downloads/' },
-  camera: { id: 'camera', fixable: true, required: false, vendor: 'Unity Capture (github.com/schellingb)', homepage: 'https://github.com/schellingb/UnityCapture' },
+  camera: { id: 'camera', fixable: true, required: false, vendor: 'Octo Camera Media Foundation bridge', homepage: 'https://developer.android.com/studio/releases/emulator' },
   microphone: { id: 'microphone', fixable: true, required: false, vendor: 'VB-Audio', homepage: 'https://vb-audio.com/Cable/' },
   folder: { id: 'folder', fixable: false, required: true, vendor: '', homepage: '' },
   emulator: { id: 'emulator', fixable: false, required: false, vendor: '', homepage: '' },

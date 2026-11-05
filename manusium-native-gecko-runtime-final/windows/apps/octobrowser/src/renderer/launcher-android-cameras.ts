@@ -364,6 +364,26 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
     obsButton.disabled = false;
     await scan(true);
   };
+  const lensioInstallButton = h('button', { type: 'button', class: 'btn small', text: 'Install LensioCam APK', 'aria-label': 'Install LensioCam APK into the selected Android emulator' }) as HTMLButtonElement;
+  lensioInstallButton.onclick = async () => {
+    lensioInstallButton.disabled = true;
+    const result = await api.invoke<{ installed: boolean; launched: boolean; reason: string }>('mgr:android-install-lensio-apk', options.deviceName ?? '')
+      .catch((error: unknown) => ({ installed: false, launched: false, reason: errText(error) }));
+    const message = result.installed ? (result.launched ? 'LensioCam APK installed and launched.' : 'LensioCam APK installed.') : result.reason;
+    toast(message, result.installed ? 'ok' : 'info');
+    previewStatus.textContent = message;
+    lensioInstallButton.disabled = false;
+  };
+  const lensioStudioButton = h('button', { type: 'button', class: 'btn small', text: 'Start LensioStudio', 'aria-label': 'Start LensioStudio virtual camera' }) as HTMLButtonElement;
+  lensioStudioButton.onclick = async () => {
+    lensioStudioButton.disabled = true;
+    const result = await api.invoke<{ ok: boolean; message: string }>('mgr:android-start-lensio')
+      .catch((error: unknown) => ({ ok: false, message: errText(error) }));
+    toast(result.message, result.ok ? 'ok' : 'info');
+    previewStatus.textContent = result.message;
+    lensioStudioButton.disabled = false;
+    await scan(true);
+  };
   const streamButton = h('button', { type: 'button', class: 'btn small', text: 'Check virtual camera connection', 'aria-label': 'Check the native virtual camera connection to the Android Emulator' }) as HTMLButtonElement;
   const streamStatus = h('p', { class: 'hint', role: 'status', 'aria-live': 'polite', text: 'Native virtual camera connection is not active.' });
   const updateStreamStatus = async (): Promise<void> => {
@@ -590,7 +610,7 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
     manager,
     livePanel,
     h('div', { class: 'grid2' }, backSlot, frontSlot),
-    h('div', { class: 'camera-picker-foot' }, refreshButton, manualButton, obsButton, streamButton, previewButton),
+    h('div', { class: 'camera-picker-foot' }, refreshButton, manualButton, obsButton, lensioInstallButton, lensioStudioButton, streamButton, previewButton),
     previewVideo,
     previewStatus,
     streamStatus,

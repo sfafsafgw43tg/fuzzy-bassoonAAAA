@@ -45,7 +45,7 @@
         <div class="readout"><span>Output</span><strong id="output">1280 × 720</strong></div>
         <button id="apply" class="primary">Apply and start emulator</button>
         <button id="applyLive" class="liveButton" disabled>Apply photo to running device</button>
-        <p class="hint">Photo mode uses the emulator’s full-frame <code>imagefile:</code> camera input, not the 3D Virtual Scene. Move or resize the red frame, then click Apply resized photo — restart camera. The window is not resized; only the prepared image changes. Video files also require a restart.</p>
+        <p class="hint">Photo mode sends the prepared frame to the live vStudio MJPEG stream without restarting the receiver. Move or resize the red frame, then click Apply photo live — no restart. Video files still use the emulator’s <code>videofile:</code> source.</p>
         <p id="status" class="hint"></p>
       </aside>
     </section>

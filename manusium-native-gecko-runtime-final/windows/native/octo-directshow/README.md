@@ -13,4 +13,18 @@ npm run check:native-camera
 npm run build:native-camera
 ```
 
-The staged files are `resources/native-camera/octo-camera-source.dll`, `resources/native-camera/octo-cameractl.exe`, and `resources/native-camera/octo-directshow-camera.dll`.
+The staged files are `resources/native-camera/octo-camera-source.dll`, `resources/native-camera/octo-cameractl.exe`, `resources/native-camera/octo-camera-feed-publisher.exe`, and `resources/native-camera/octo-directshow-camera.dll`.
+
+## Windows 10 launch
+
+Windows 10 has no `MFCreateVirtualCamera`. OctoSuite therefore registers this filter under the DirectShow video-input category and uses the same shared NV12 publisher as the Media Foundation backend. The integrated launcher performs the registration, asks the emulator for its real webcam list, and passes the first reported `webcamN` to the back camera:
+
+```powershell
+.\windows\scripts\android\start-octo-camera-bridge.ps1 `
+  -Avd 'Your-AVD' `
+  -CameraFile 'C:\path\selected.jpg' `
+  -NativeVirtualCamera `
+  -InstallNativeCamera
+```
+
+The launcher stops if the emulator reports no webcam. It never invents `webcam0`, because doing so is the cause of the Android Camera crash observed with an unenumerated virtual endpoint. A DirectShow filter can still be visible to FFmpeg or OBS while not being accepted by a particular emulator build; in that case the emulator itself must be upgraded or a signed Media Foundation/PnP driver must be installed.

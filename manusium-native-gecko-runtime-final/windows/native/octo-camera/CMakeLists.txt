@@ -34,4 +34,9 @@ target_compile_definitions(octo-cameractl PRIVATE UNICODE _UNICODE WIN32_LEAN_AN
 target_include_directories(octo-cameractl PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
 target_link_libraries(octo-cameractl PRIVATE mfplat ole32 advapi32 shell32 strmiids)
 
-install(TARGETS octo-camera-source octo-cameractl RUNTIME DESTINATION . LIBRARY DESTINATION . ARCHIVE DESTINATION .)
+add_executable(octo-camera-feed-publisher camera_feed_publisher.cpp)
+target_compile_definitions(octo-camera-feed-publisher PRIVATE UNICODE _UNICODE WIN32_LEAN_AND_MEAN NOMINMAX)
+target_include_directories(octo-camera-feed-publisher PRIVATE ${CMAKE_CURRENT_SOURCE_DIR})
+target_link_libraries(octo-camera-feed-publisher PRIVATE windowscodecs ole32)
+
+install(TARGETS octo-camera-source octo-cameractl octo-camera-feed-publisher RUNTIME DESTINATION . LIBRARY DESTINATION . ARCHIVE DESTINATION .)

@@ -1961,6 +1961,8 @@ export async function startLensioVirtualCamera(): Promise<ObsVirtualCameraStartR
     process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'LensioStudio', 'LensioStudio.exe') : '',
     process.env.ProgramFiles ? path.join(process.env.ProgramFiles, 'LensioStudio', 'LensioStudio.exe') : '',
     process.env['ProgramFiles(x86)'] ? path.join(process.env['ProgramFiles(x86)'], 'LensioStudio', 'LensioStudio.exe') : '',
+    path.join(process.resourcesPath, 'lensio', 'LensioStudio.exe'),
+    path.resolve(process.cwd(), 'resources', 'lensio', 'LensioStudio.exe'),
   ].filter(Boolean);
   const executable = candidates.find((item) => fs.existsSync(item));
   if (!executable) return { ok: false, message: 'LensioStudio was not found. Install LensioStudio, then try again.' };

@@ -3183,6 +3183,11 @@ export class Manager {
     handle('mgr:android-webcams', L, () => emulatorWebcams());
     handle('mgr:android-start-obs', L, () => startObsVirtualCamera());
     handle('mgr:android-start-lensio', L, () => startLensioVirtualCamera());
+    handle('mgr:android-install-lensio-apk', L, async (_e, name: string) => {
+      const deviceName = String(name ?? '').trim();
+      if (!deviceName) return { installed: false, launched: false, reason: 'Select an Android device first.' };
+      return installLensioCamOnAndroid(deviceName);
+    });
     handle('mgr:android-live-stream-status', L, () => this.liveCameraStream.status());
     handle('mgr:android-live-stream-start', L, () => this.liveCameraStream.start());
     handle('mgr:android-live-stream-stop', L, async () => { await this.liveCameraStream.stop(); return this.liveCameraStream.status(); });

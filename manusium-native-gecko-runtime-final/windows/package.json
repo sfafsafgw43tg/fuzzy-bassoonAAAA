@@ -72,6 +72,7 @@
     "check-fuses": "node tools/check-fuses.mjs",
     "test:scripts": "pwsh -NoProfile -Command \"Invoke-Pester -Path scripts/tests -Output Detailed -CI\"",
     "test:android:unity-camera": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/android/test-unity-capture-avd.ps1",
+    "start:android:native-camera": "powershell.exe -NoProfile -ExecutionPolicy Bypass -File scripts/android/start-octo-camera-bridge.ps1 -NativeVirtualCamera",
     "package:local:windows": "node tools/package-local-windows.mjs",
     "verify:windows:branding": "node tools/verify-windows-branding.mjs",
     "build:compact": "node tools/build-compact.mjs",

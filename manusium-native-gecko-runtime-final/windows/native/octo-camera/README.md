@@ -24,6 +24,7 @@ The build produces:
 
 - `octo-camera-source.dll`: the COM custom media source loaded by the Windows frame-server pipeline.
 - `octo-cameractl.exe`: register, unregister, and inspect the Octo Camera registration.
+- `octo-camera-feed-publisher.exe`: converts a selected image to continuous 1280x720 NV12 frames in the shared feed.
 
 Register for the current user:
 
@@ -39,6 +40,14 @@ Remove it:
 
 The camera is published as `Octo Camera (Windows Virtual Camera)` by Windows. The source advertises NV12 at 1920x1080 and 1280x720, both at 30 fps. The source is request-driven and never returns a borrowed buffer: every sample owns its byte storage.
 
+Start the publisher after registering the camera:
+
+```powershell
+.\octo-camera-feed-publisher.exe C:\path\to\selected-frame.jpg
+```
+
+The publisher watches the file and republishes it when it changes. The emulator must enumerate the camera before launch; never force an unlisted `webcam0`.
+
 ## Feed contract
 
 The source reads the latest frame from the named mapping `Local\\OctoSuite.VirtualCamera.NV12.v1`. The mapping layout is defined in `feed_protocol.h`:
@@ -50,7 +59,7 @@ When the mapping is absent or contains an invalid frame, the source returns a bl
 
 ## Windows 10 note
 
-`MFCreateVirtualCamera` is a Windows 11 API. This project does not pretend to provide a Windows 10 implementation through that API. A separate DirectShow filter would be required for Windows 10 and is not included in this phase.
+`MFCreateVirtualCamera` is a Windows 11 API. Windows 10 cannot use this Media Foundation registration path. The repository contains a separate DirectShow fallback, but current Windows Emulator builds may not enumerate DirectShow-only virtual devices. The native Camera2 path therefore requires Windows 11 build 22000 or newer, or a separately installed signed Windows 10 Media Foundation/PnP virtual-camera driver.
 
 ## References
 
