@@ -545,11 +545,9 @@ export async function renderVirtualBox(v: HTMLElement): Promise<void> {
     clear(androidList);
     const machines = result?.machines ?? [];
     clear(virtualBrowserHost);
-    // Chrome Android is its own lower Devices workspace. Keep it visible even
-    // when the older Virtual Android Browser beta toggle is disabled; the panel
-    // reports its own Chrome/AVD readiness and does not launch anything until
-    // the user presses its explicit button.
-    virtualBrowserHost.append(chromeAndroidPanel(machines), customAndroidBuildPanel());
+    // Keep Devices focused on the Android device and camera controls. The
+    // separate Chrome Android workspace is intentionally not mounted here.
+    virtualBrowserHost.append(customAndroidBuildPanel());
     if (machines.some((machine) => machine.incomplete)) {
       androidList.append(h('p', { class: 'hint warn vm-note', text: t('android.incompleteNote') }));
     }
@@ -718,7 +716,15 @@ function customAndroidBuildPanel(): HTMLElement {
   const loadBackend = async () => { const state = await run(api.invoke<string>('mgr:android-build-backend-state')); const ready = state === 'READY_FOR_SUBMISSION'; backendStatus.dataset.ready = String(ready); backendStatus.textContent = ready ? t('android.build.backendReady') : t('android.build.backendUnavailable'); refreshJobs.disabled = !ready; paint(); if (ready) await loadJobs(); };
   refreshJobs.onclick = () => void loadJobs();
   const load = async () => { const result = await run(api.invoke<{ configs: CustomAndroidBuild[] }>('mgr:android-builds')); configs = result?.configs ?? []; paint(); void loadBackend(); };
-  const panel = h('section', { class: 'vm-section android-custom-build', 'aria-labelledby': 'android-build-title' }, h('div', { class: 'vm-section-head' }, h('div', {}, h('h2', { id: 'android-build-title' }, t('android.build.title'), h('span', { class: 'pill warn', text: t('android.build.level') })), h('p', { class: 'hint', text: t('android.build.desc') }), status, backendStatus), h('div', { class: 'android-build-form' }, h('div', { class: 'row' }, h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.build.name') }), name), h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.build.target') }), target), h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.build.variant') }), variant)), h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.build.notes') }), notes), h('div', { class: 'row' }, save, guide, refreshJobs, exportAllJson, exportAllYaml), commandBlock)), h('h3', { class: 'spec-title', text: t('android.build.savedTitle') }), list, remoteJobs);
+  const panel = h('section', { class: 'vm-section android-custom-build', 'aria-labelledby': 'android-build-title' },
+    h('details', { class: 'android-custom-build-details' },
+      h('summary', { class: 'vm-section-head', id: 'android-build-title' },
+        h('span', { class: 'android-build-summary-title', text: t('android.build.title') }),
+        h('span', { class: 'pill warn', text: t('android.build.level') })),
+      h('div', { class: 'android-custom-build-body' },
+        h('div', { class: 'vm-section-head' }, h('div', {}, h('p', { class: 'hint', text: t('android.build.desc') }), status, backendStatus)),
+        h('div', { class: 'android-build-form' }, h('div', { class: 'row' }, h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.build.name') }), name), h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.build.target') }), target), h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.build.variant') }), variant)), h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.build.notes') }), notes), h('div', { class: 'row' }, save, guide, refreshJobs, exportAllJson, exportAllYaml), commandBlock),
+        h('h3', { class: 'spec-title', text: t('android.build.savedTitle') }), list, remoteJobs)));
   void load();
   return panel;
 }
