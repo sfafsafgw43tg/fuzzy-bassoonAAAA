@@ -8,6 +8,38 @@ const FRAME_INTERVAL_MS = 100;
 
 type WebSocketClient = { socket: Duplex; timer: NodeJS.Timeout };
 
+const DISCONNECT_ERRORS = new Set(['ECONNRESET', 'ECONNABORTED', 'EPIPE', 'ETIMEDOUT']);
+
+function isDisconnectError(error: unknown): boolean {
+  return Boolean(error && typeof error === 'object' && 'code' in error && DISCONNECT_ERRORS.has(String((error as { code?: unknown }).code)));
+}
+
+function safeResponseWrite(response: ServerResponse, chunk: string | Buffer, onDisconnect: () => void): boolean {
+  if (response.destroyed || response.writableEnded) return false;
+  try {
+    response.write(chunk, (error?: Error | null) => {
+      if (error && isDisconnectError(error)) onDisconnect();
+    });
+    return true;
+  } catch (error) {
+    if (isDisconnectError(error)) onDisconnect();
+    return false;
+  }
+}
+
+function safeSocketWrite(socket: Duplex, chunk: string | Buffer, onDisconnect: () => void): boolean {
+  if (socket.destroyed || !socket.writable) return false;
+  try {
+    socket.write(chunk, (error?: Error | null) => {
+      if (error && isDisconnectError(error)) onDisconnect();
+    });
+    return true;
+  } catch (error) {
+    if (isDisconnectError(error)) onDisconnect();
+    return false;
+  }
+}
+
 export interface LiveCameraStreamStatus {
   running: boolean;
   port: number;
@@ -34,7 +66,18 @@ export class LiveCameraStreamServer {
 
   async start(requestedPort = 0): Promise<LiveCameraStreamStatus> {
     if (this.server) return this.status();
-    this.server = createServer((request, response) => { void this.route(request, response); });
+    this.server = createServer((request, response) => {
+      response.on('error', (error) => { if (!response.destroyed) response.destroy(); });
+      void this.route(request, response).catch((error: unknown) => {
+        if (isDisconnectError(error)) { if (!response.destroyed) response.destroy(); return; }
+        if (!response.headersSent) writeJson(response, 500, { error: error instanceof Error ? error.message : 'Camera stream request failed' });
+        else if (!response.destroyed) response.destroy();
+      });
+    });
+    this.server.on('clientError', (error, socket) => {
+      if (!isDisconnectError(error) && !socket.destroyed) socket.end('HTTP/1.1 400 Bad Request\r\nConnection: close\r\n\r\n');
+      else if (!socket.destroyed) socket.destroy();
+    });
     this.server.on('upgrade', (request, socket, head) => this.upgradeWebSocket(request, socket, head));
     await new Promise<void>((resolve, reject) => {
       const server = this.server!;
@@ -90,11 +133,13 @@ export class LiveCameraStreamServer {
 
   private mjpeg(response: ServerResponse): void {
     response.writeHead(200, { 'content-type': 'multipart/x-mixed-replace; boundary=octo-frame', 'cache-control': 'no-store', connection: 'close', 'access-control-allow-origin': '*' });
+    const disconnect = () => { if (!response.destroyed) response.destroy(); };
+    response.once('error', disconnect);
     const send = () => {
       if (!this.frame.length || response.destroyed) return;
-      response.write(`--octo-frame\r\nContent-Type: ${this.contentType}\r\nContent-Length: ${this.frame.length}\r\nX-Octo-Frame: ${this.frameVersion}\r\n\r\n`);
-      response.write(this.frame);
-      response.write('\r\n');
+      if (!safeResponseWrite(response, `--octo-frame\r\nContent-Type: ${this.contentType}\r\nContent-Length: ${this.frame.length}\r\nX-Octo-Frame: ${this.frameVersion}\r\n\r\n`, disconnect)) return;
+      if (!safeResponseWrite(response, this.frame, disconnect)) return;
+      safeResponseWrite(response, '\r\n', disconnect);
     };
     send();
     const timer = setInterval(send, FRAME_INTERVAL_MS);
@@ -121,7 +166,8 @@ export class LiveCameraStreamServer {
     if (head.length) socket.unshift(head);
     if (typeof key !== 'string' || request.headers.upgrade?.toLowerCase() !== 'websocket') { socket.destroy(); return; }
     const accept = createHash('sha1').update(`${key}258EAFA5-E914-47DA-95CA-C5AB0DC85B11`).digest('base64');
-    socket.write(`HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`);
+    const disconnect = () => { if (!socket.destroyed) socket.destroy(); };
+    if (!safeSocketWrite(socket, `HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: ${accept}\r\n\r\n`, disconnect)) return;
     const client: WebSocketClient = { socket, timer: setInterval(() => this.sendWebSocketFrame(client), FRAME_INTERVAL_MS) };
     this.clients.add(client);
     socket.on('close', () => { clearInterval(client.timer); this.clients.delete(client); });
@@ -134,6 +180,10 @@ export class LiveCameraStreamServer {
     const payload = this.frame;
     const length = payload.length;
     const header = length < 126 ? Buffer.from([0x82, length]) : length < 65536 ? Buffer.from([0x82, 126, length >> 8, length & 0xff]) : Buffer.from([0x82, 127, 0, 0, 0, 0, length >>> 24, (length >>> 16) & 0xff, (length >>> 8) & 0xff, length & 0xff]);
-    client.socket.write(Buffer.concat([header, payload]));
+    safeSocketWrite(client.socket, Buffer.concat([header, payload]), () => {
+      clearInterval(client.timer);
+      this.clients.delete(client);
+      client.socket.destroy();
+    });
   }
 }

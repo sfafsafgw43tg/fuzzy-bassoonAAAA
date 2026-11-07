@@ -37,6 +37,10 @@
       {
         "from": "../../resources/octo-camera",
         "to": "octo-camera"
+      },
+      {
+        "from": "../../resources/native-camera",
+        "to": "native-camera"
       }
     ],
     "linux": {

@@ -16,6 +16,22 @@ if (frame[0] !== 0xff || frame[1] !== 0xd8) throw new Error(`Not a JPEG: ${frame
 const port = Number(process.env.OCTO_CAMERA_PORT || 8765);
 let version = 1;
 let sourceStamp = `${fs.statSync(framePath).size}:${fs.statSync(framePath).mtimeMs}`;
+const disconnectErrors = new Set(['ECONNRESET', 'ECONNABORTED', 'EPIPE', 'ETIMEDOUT']);
+function isDisconnectError(error) {
+  return Boolean(error && disconnectErrors.has(String(error.code || '')));
+}
+function safeWrite(response, chunk, close) {
+  if (response.destroyed || response.writableEnded) return false;
+  try {
+    response.write(chunk, (error) => {
+      if (error && isDisconnectError(error)) close();
+    });
+    return true;
+  } catch (error) {
+    if (isDisconnectError(error)) close();
+    return false;
+  }
+}
 function refreshFrame() {
   try {
     const stat = fs.statSync(framePath);
@@ -32,6 +48,8 @@ function refreshFrame() {
   }
 }
 const server = http.createServer((req, res) => {
+  const close = () => { if (!res.destroyed) res.destroy(); };
+  res.once('error', close);
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Cache-Control', 'no-store');
   if (req.method === 'GET' && req.url?.startsWith('/health')) {
@@ -45,9 +63,9 @@ const server = http.createServer((req, res) => {
     const send = () => {
       if (res.destroyed) return;
       refreshFrame();
-      res.write(`--octo-frame\r\nContent-Type: image/jpeg\r\nContent-Length: ${frame.length}\r\nX-Octo-Frame: ${version}\r\n\r\n`);
-      res.write(frame);
-      res.write('\r\n');
+      if (!safeWrite(res, `--octo-frame\r\nContent-Type: image/jpeg\r\nContent-Length: ${frame.length}\r\nX-Octo-Frame: ${version}\r\n\r\n`, close)) return;
+      if (!safeWrite(res, frame, close)) return;
+      safeWrite(res, '\r\n', close);
     };
     send();
     const timer = setInterval(send, 100);
@@ -56,5 +74,8 @@ const server = http.createServer((req, res) => {
   }
   res.writeHead(404, { 'Content-Type': 'application/json' });
   res.end(JSON.stringify({ error: 'Not found' }));
+});
+server.on('clientError', (error, socket) => {
+  if (!socket.destroyed) socket.destroy();
 });
 server.listen(port, '127.0.0.1', () => console.log(JSON.stringify({ running: true, port, framePath, frameBytes: frame.length })));
