@@ -51,8 +51,8 @@ async function through(proxy: Socks5Target, host: string, port: number) {
 export async function startSocksHttpBridge(proxy: Socks5Target): Promise<SocksHttpBridge> {
   const sockets = new Set<{ destroy: () => void }>();
   const server = http.createServer((request, response) => {
-    request.on('error', (error) => { if (isDisconnectError(error)) closeResponse(response); });
-    response.on('error', (error) => { if (isDisconnectError(error)) closeResponse(response); });
+    request.on('error', () => closeResponse(response));
+    response.on('error', () => closeResponse(response));
     void (async () => {
       const hostHeader = String(request.headers.host ?? '');
       const targetUrl = new URL(request.url?.startsWith('http://') ? request.url : `http://${hostHeader}${request.url || '/'}`);
@@ -61,7 +61,7 @@ export async function startSocksHttpBridge(proxy: Socks5Target): Promise<SocksHt
       sockets.add(socket);
       const cleanup = () => sockets.delete(socket);
       socket.once('close', cleanup);
-      socket.on('error', (error) => { if (isDisconnectError(error)) cleanup(); });
+      socket.on('error', cleanup);
       const headers: http.OutgoingHttpHeaders = { ...request.headers, host: targetUrl.host };
       delete headers['proxy-authorization'];
       delete headers['proxy-connection'];
@@ -90,8 +90,8 @@ export async function startSocksHttpBridge(proxy: Socks5Target): Promise<SocksHt
         if (!remote.destroyed) remote.destroy();
       };
       client.once('close', clean); remote.once('close', clean);
-      client.on('error', (error) => { if (isDisconnectError(error)) clean(); });
-      remote.on('error', (error) => { if (isDisconnectError(error)) clean(); });
+      client.on('error', clean);
+      remote.on('error', clean);
       client.write('HTTP/1.1 200 Connection Established\r\n\r\n', (error) => { if (error) clean(); });
       if (head.length && !remote.destroyed) remote.write(head, (error) => { if (error) clean(); });
       client.pipe(remote); remote.pipe(client);
@@ -102,7 +102,8 @@ export async function startSocksHttpBridge(proxy: Socks5Target): Promise<SocksHt
       }
     });
   });
-  server.on('clientError', (error, socket) => { if (!socket.destroyed) socket.destroy(); });
+  server.on('clientError', (_error, socket) => { if (!socket.destroyed) socket.destroy(); });
+  server.on('error', () => { /* request-level errors are handled by their streams */ });
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject);
     server.listen(0, '127.0.0.1', () => { server.off('error', reject); resolve(); });

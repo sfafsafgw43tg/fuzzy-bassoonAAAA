@@ -51,4 +51,33 @@ describe('Android SOCKS5 adapter', () => {
     });
     expect(body).toBe('through socks');
   });
+
+  it('survives an emulator request that aborts while the upstream is pending', async () => {
+    const target = http.createServer((request, response) => {
+      if (request.url === '/slow') {
+        setTimeout(() => response.end('late'), 150);
+        return;
+      }
+      response.end('healthy');
+    });
+    await new Promise<void>((resolve) => target.listen(0, '127.0.0.1', resolve));
+    servers.push(target);
+    const socks = await socksServer();
+    bridge = await startSocksHttpBridge({ host: '127.0.0.1', port: (socks.address() as AddressInfo).port });
+    const proxy = new URL(bridge.url);
+    const targetPort = (target.address() as AddressInfo).port;
+
+    await new Promise<void>((resolve) => {
+      const request = http.get({ hostname: proxy.hostname, port: proxy.port, path: `http://127.0.0.1:${targetPort}/slow`, headers: { host: `127.0.0.1:${targetPort}` } });
+      request.once('error', () => resolve());
+      setTimeout(() => request.destroy(), 15);
+    });
+
+    const body = await new Promise<string>((resolve, reject) => {
+      http.get({ hostname: proxy.hostname, port: proxy.port, path: `http://127.0.0.1:${targetPort}/healthy`, headers: { host: `127.0.0.1:${targetPort}` } }, (response) => {
+        let text = ''; response.on('data', (chunk) => { text += chunk; }); response.on('end', () => resolve(text));
+      }).on('error', reject);
+    });
+    expect(body).toBe('healthy');
+  });
 });
