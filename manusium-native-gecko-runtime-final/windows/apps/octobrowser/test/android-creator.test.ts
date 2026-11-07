@@ -353,9 +353,12 @@ describe('vStudio Mobile inside the phones', () => {
 
   it('offers explicit manual endpoints, None, and the stable Emulated source', () => {
     expect(page).toContain('androidMediaDialog({ name: machine.name');
-    // Off is selectable and webcam0 remains configurable when enumeration fails.
-    expect(cameraUi).toContain("select<string>(source === 'video' ? 'video' : deviceOf(facing), options");
-    expect(cameraUi).toContain("t('android.camera.manualEndpoint', { endpoint: id })");
+    // The selector mirrors Android Studio: None, Emulated, then only enumerated
+    // webcamN endpoints, with stale values falling back to None.
+    expect(cameraUi).toContain('select<string>(selectorValue, options');
+    expect(cameraUi).toContain("/^webcam\\d+$/.test(id)");
+    expect(cameraUi).toContain('`Webcam${id.slice');
+    expect(cameraUi).toContain("? currentDevice");
     expect(cameraUi).toContain("['emulated', t('android.camera.emulated')]");
     expect(cameraUi).toContain("source === 'emulated'");
     expect(cameraUi).toContain("'android.camera.none'");

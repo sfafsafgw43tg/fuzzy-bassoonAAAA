@@ -673,30 +673,35 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
 
   function lensField(facing: CameraFacing): HTMLElement {
     const key = facing === 'front' ? 'android.cameraFront' : 'android.cameraBack';
-    // Do not invent webcam0 when the emulator returned an empty list. Keep a
-    // currently selected endpoint visible only long enough for scan() to clear
-    // it after a completed discovery pass.
-    // Keep the startup selector identical to Android Studio: Off, Emulated,
-    // and the host webcams enumerated by the emulator. The integrated photo /
-    // video bridge remains available through the quick actions below and is
-    // represented by its enumerated Unity Capture webcam endpoint after it is
-    // started; it is not exposed as a non-standard lens mode.
+    // Keep the selector identical to Android Studio: None, Emulated, and only
+    // the webcamN endpoints currently returned by `emulator -webcam-list`.
+    // Photo/video and virtual-camera controls remain separate actions below;
+    // they must never become fake lens values in this Android Studio selector.
     const options: Array<[string, string]> = [
       ['', t('android.camera.none')],
       ['emulated', t('android.camera.emulated')],
     ];
     const source = facing === 'front' ? selection.front : selection.back;
     const currentDevice = deviceOf(facing);
-    for (const camera of listed) {
+    const enumerated = [...listed].sort((left, right) => {
+      const leftNumber = Number.parseInt(left.name.replace('webcam', ''), 10);
+      const rightNumber = Number.parseInt(right.name.replace('webcam', ''), 10);
+      return leftNumber - rightNumber;
+    });
+    for (const camera of enumerated) {
       const id = camera.name;
-      if (!options.some(([optionId]) => optionId === id)) {
-        const label = camera.device || t('android.camera.manualEndpoint', { endpoint: id });
-        options.push([id, `${label} · ${id}`]);
+      if (/^webcam\d+$/.test(id) && !options.some(([optionId]) => optionId === id)) {
+        options.push([id, `Webcam${id.slice('webcam'.length)}`]);
       }
     }
-    if (source === 'webcam' && currentDevice && !options.some(([id]) => id === currentDevice)) {
-      options.push([currentDevice, `${currentDevice} · unavailable`]);
-    }
+    // A stale endpoint is never shown as a selectable camera. The selector
+    // falls back to None while the status area explains that the saved source
+    // is unavailable, preventing an invalid webcamN from being launched.
+    const selectorValue = source === 'emulated'
+      ? 'emulated'
+      : source === 'webcam' && options.some(([id]) => id === currentDevice)
+        ? currentDevice
+        : '';
     const video = h('button', { type: 'button', class: 'btn small camera-quick-switch', text: t('android.camera.quickVideo') }) as HTMLButtonElement;
     video.onclick = () => { void pickVideo(facing); };
     const photo = h('button', { type: 'button', class: 'btn small camera-quick-switch', text: t('android.camera.choosePhoto') }) as HTMLButtonElement;
@@ -716,7 +721,7 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
     const isLive = source === 'webcam' ? currentCheck?.ok === true : undefined;
     const badge = (label: string, state: boolean | undefined): HTMLElement => h('span', { class: `camera-source-badge ${state === true ? 'ok' : state === false ? 'off' : 'unknown'}`, text: `${label}: ${state === true ? t('android.camera.statusYes') : state === false ? t('android.camera.statusNo') : t('android.camera.statusUnknown')}` });
     return field(key, h('div', { class: 'camera-source-controls' },
-      select<string>(source === 'video' ? 'video' : deviceOf(facing), options, id => { void choose(facing, id); }),
+      select<string>(selectorValue, options, id => { void choose(facing, id); }),
       h('div', { class: 'camera-source-status', 'aria-label': t('android.camera.sourceStatus') },
         badge(t('android.camera.detected'), isDetected), badge(t('android.camera.configured'), isConfigured), badge(t('android.camera.liveFrames'), isLive)),
       h('div', { class: 'camera-quick-switches' }, photo, video), videoSettingsPanel));
