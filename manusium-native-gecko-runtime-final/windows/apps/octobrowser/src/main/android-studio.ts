@@ -932,11 +932,14 @@ function runTool(program: string, args: string[], timeout: number, sdkRoot?: str
       out = (out + text).slice(-40000);
       if (progress) parseSdkProgress(text);
     });
+    child.stdout?.on('error', () => undefined);
     child.stderr?.on('data', (chunk: Buffer) => {
       const text = chunk.toString();
       err = (err + text).slice(-40000);
       if (progress) parseSdkProgress(text);
     });
+    child.stderr?.on('error', () => undefined);
+    child.stdin?.on('error', () => undefined);
     if (answerPrompts) {
       // sdkmanager asks interactive licence questions; with no console attached
       // it reads EOF and aborts, so we answer every prompt with "y".
@@ -4096,6 +4099,8 @@ function startQuietEmulator(emulator: string, name: string, sdkRoot: string): (a
       `=== ${new Date().toISOString()} · ${name} · first boot, no window ===\n${emulator} ${args.join(' ')}\n`, 2_000_000);
     child.stdout?.on('data', log);
     child.stderr?.on('data', log);
+    child.stdout?.on('error', () => undefined);
+    child.stderr?.on('error', () => undefined);
     const exited = new Promise<number | null>((resolve) => {
       child.once('error', () => resolve(null));
       child.once('exit', (code) => resolve(code));
@@ -4460,7 +4465,9 @@ function adbRun(adb: string, args: string[], timeout = 60_000): Promise<string> 
     const child = spawn(adb, args, { windowsHide: true, stdio: ['ignore', 'pipe', 'pipe'] });
     let out = '';
     child.stdout?.on('data', (chunk: Buffer) => { out += String(chunk); });
+    child.stdout?.on('error', () => undefined);
     child.stderr?.on('data', (chunk: Buffer) => { out += String(chunk); });
+    child.stderr?.on('error', () => undefined);
     const timer = setTimeout(() => { try { child.kill(); } catch { /* gone */ } reject(new Error(`${args[0]} timed out`)); }, timeout);
     child.once('error', (error) => { clearTimeout(timer); reject(error); });
     child.once('close', (code) => {
@@ -4683,6 +4690,8 @@ async function startAndroidCameraDiagnostics(name: string): Promise<void> {
   };
   child.stdout?.on('data', append);
   child.stderr?.on('data', append);
+  child.stdout?.on('error', () => undefined);
+  child.stderr?.on('error', () => undefined);
   child.once('error', (error) => append(`\nlogcat error: ${error.message}\n`));
   child.once('exit', () => {
     if (cameraDiagnosticChildren.get(name) === child) cameraDiagnosticChildren.delete(name);
