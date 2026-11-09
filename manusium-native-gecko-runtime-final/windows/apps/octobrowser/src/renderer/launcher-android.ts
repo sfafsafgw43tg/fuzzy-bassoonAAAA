@@ -334,7 +334,7 @@ export function deviceSettingsDialog(target: {
   name: string; running: boolean;
   ramMb?: number; cores?: number; dataGb?: number; width?: number; height?: number; dpi?: number;
   cameraFront?: string; cameraBack?: string; cameraFrontDevice?: string; cameraBackDevice?: string; cameraDevice?: string; microphoneEnabled?: boolean;
-  cameraProvider?: 'lensio' | 'unity-capture' | 'obs' | 'directshow'; cameraPresetEnabled?: boolean;
+  cameraProvider?: 'unity-capture' | 'obs' | 'directshow'; cameraPresetEnabled?: boolean;
   networkSpeed?: 'full' | 'lte' | 'umts' | 'edge' | 'gsm';
   /** Handset this device imitates (name, model and the device identity). */
   handset?: string;

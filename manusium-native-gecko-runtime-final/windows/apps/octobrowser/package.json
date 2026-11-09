@@ -31,10 +31,6 @@
         "to": "addons"
       },
       {
-        "from": "../../resources/lensio",
-        "to": "lensio"
-      },
-      {
         "from": "../../resources/octo-camera",
         "to": "octo-camera"
       },

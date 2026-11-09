@@ -150,7 +150,9 @@ describe('the handset a device reports', () => {
     expect(body).not.toContain("'remount'");
     expect(body).not.toContain("'root'");
     expect(body).not.toContain("'setprop'");
-    expect(studioSource).not.toContain("'-writable-system'");
+    // Rooted AVDs may request the emulator's writable-system mode, but Octo
+    // still must not apply handset identity or invoke adb root/setprop.
+    expect(studioSource).toContain("'-writable-system'");
   });
 
   it('never reads spoofed handset identity back out of config.ini', () => {

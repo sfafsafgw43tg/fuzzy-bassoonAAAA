@@ -1,24 +1,17 @@
 <#
 .SYNOPSIS
   Install or start a known virtual-camera provider for AVD testing.
-
 .DESCRIPTION
-  This helper does not download or execute arbitrary driver code. Lensio is
-  installed only from a caller-supplied, verified executable and Unity Capture
-  is registered only from a caller-supplied DLL. OBS is started normally and
-  asked to expose its existing virtual camera. The emulator's -webcam-list
-  output remains the source of truth; Windows registration alone is not a pass.
-
-  Lensio's virtual-camera installer requires an elevated PowerShell process.
-  OBS startup itself should remain unelevated.
+  Unity Capture is registered only from a caller-supplied DLL. OBS is started
+  normally and asked to expose its existing virtual camera. The emulator's
+  -webcam-list output remains the source of truth; Windows registration alone
+  is not a pass.
 #>
 [CmdletBinding(SupportsShouldProcess = $true)]
 param(
   [Parameter(Mandatory = $true)]
-  [ValidateSet('lensio', 'unity-capture', 'obs', 'directshow')]
+  [ValidateSet('unity-capture', 'obs', 'directshow')]
   [string] $Provider,
-
-  [string] $LensioExe = "$env:LOCALAPPDATA\LensioStudio\LensioStudio.exe",
   [string] $UnityCaptureDll = '',
   [string] $SdkRoot = '',
   [ValidatePattern('^[A-Za-z0-9._-]{1,64}$')]
@@ -45,10 +38,8 @@ function Resolve-Regsvr32([bool] $Is64Bit) {
 }
 function Assert-File([string] $Path, [string] $Description) {
   if (-not $Path -or -not (Test-Path -LiteralPath $Path -PathType Leaf)) { throw "$Description was not found: $Path" }
-  $item = Get-Item -LiteralPath $Path
-  if ($item.Length -lt 1024) { throw "$Description is unexpectedly small: $Path" }
+  if ((Get-Item -LiteralPath $Path).Length -lt 1024) { throw "$Description is unexpectedly small: $Path" }
 }
-
 function Read-EmulatorWebcams {
   if ($SkipWebcamList) { return '' }
   $deadline = (Get-Date).AddSeconds(15)
@@ -66,20 +57,8 @@ if (-not $SdkRoot) {
 }
 $emulator = Join-Path $SdkRoot 'emulator\emulator.exe'
 if (-not $SkipWebcamList) { Assert-File $emulator 'Android Emulator' }
-
 $action = ''
 switch ($Provider) {
-  'lensio' {
-    Assert-File $LensioExe 'LensioStudio executable'
-    if (-not (Is-Administrator)) {
-      throw 'Lensio virtual-camera registration requires an elevated PowerShell. Re-run this script as Administrator; normal Lensio streaming remains unelevated.'
-    }
-    if ($PSCmdlet.ShouldProcess($LensioExe, 'Install/register Lensio virtual camera')) {
-      $process = Start-Process -FilePath $LensioExe -ArgumentList '--install-virtual-camera' -Wait -PassThru
-      if ($process.ExitCode -ne 0) { throw "Lensio virtual-camera installer exited with $($process.ExitCode)." }
-      $action = 'Lensio virtual-camera installer completed.'
-    }
-  }
   'unity-capture' {
     Assert-File $UnityCaptureDll 'Unity Capture DLL'
     if (-not (Is-Administrator)) { throw 'Unity Capture DLL registration requires an elevated PowerShell.' }
@@ -97,16 +76,11 @@ switch ($Provider) {
     if ($PSCmdlet.ShouldProcess($obs, 'Start OBS normally and request its virtual camera')) {
       Start-Process -FilePath $obs -ArgumentList '--startvirtualcam' | Out-Null
       Start-Sleep -Seconds 5
-      $action = 'OBS was started normally with --startvirtualcam. Safe Mode must not be used because it can skip obs-virtualcam.'
+      $action = 'OBS was started normally with --startvirtualcam.'
     }
   }
-  'directshow' {
-    # Probe-only mode: DirectShow is an interface, not a driver. This is useful
-    # for diagnostics when the caller supplies its own provider.
-    $action = 'DirectShow probe only; no driver was installed.'
-  }
+  'directshow' { $action = 'DirectShow probe only; no driver was installed.' }
 }
-
 $devices = @(Get-CimInstance Win32_PnPEntity -ErrorAction SilentlyContinue |
   Where-Object { $_.PNPClass -in @('Camera', 'Image') -or $_.Name -match '(?i)camera|webcam|video capture' } |
   Select-Object -ExpandProperty Name)

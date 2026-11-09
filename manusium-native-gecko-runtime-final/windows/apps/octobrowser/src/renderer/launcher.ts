@@ -207,6 +207,11 @@ function applyLauncherTheme(theme: Settings['ui']['theme']): void {
   document.documentElement.dataset.appTheme = theme;
 }
 
+function applyLiquidGlass(enabled: boolean, blur: number): void {
+  document.documentElement.dataset.liquidGlass = enabled ? 'on' : 'off';
+  document.documentElement.style.setProperty('--glass-blur', `${Math.max(0, Math.min(32, Math.round(blur)))}px`);
+}
+
 /** The main process intercepts the native close event; this trusted view owns
  * the small, theme-consistent confirmation instead of opening a Windows dialog. */
 function showCloseAppDialog(state?: { count?: number; names?: string[] }): void {
@@ -545,6 +550,7 @@ async function saveSettings(patch: Record<string, unknown>): Promise<Settings | 
   if (!r) return undefined;
   init.settings = r;
   applyLauncherTheme(r.ui.theme);
+  applyLiquidGlass(r.ui.liquidGlass, r.ui.liquidGlassBlur);
   return r;
 }
 
@@ -649,6 +655,17 @@ function renderSettings(v: HTMLElement): void {
     confirmDialog(t('settings.dataDirMoved', { path: s.ui.hideDirectoryPaths ? (t('settings.pathHidden') || '••••••••••••••••') : r.dataDir }), () => api.invoke('mgr:relaunch'), 'toast.saved');
   };
   const dataDirDisplay = s.ui.hideDirectoryPaths ? (t('settings.pathHidden') || '••••••••••••••••') : init.dataDir;
+  const glassToggle = toggle(s.ui.liquidGlass, 'settings.liquidGlass', (val) => {
+    applyLiquidGlass(val, Number(glassBlur.value));
+    void saveSettings({ ui: { liquidGlass: val } });
+  });
+  const glassBlur = input(String(s.ui.liquidGlassBlur), { type: 'range', min: '0', max: '32', step: '1', 'aria-label': t('settings.liquidGlassBlur') }) as HTMLInputElement;
+  const glassBlurValue = h('output', { class: 'range-value', text: `${s.ui.liquidGlassBlur}px` });
+  glassBlur.oninput = () => {
+    glassBlurValue.textContent = `${glassBlur.value}px`;
+    applyLiquidGlass(glassToggle.querySelector<HTMLInputElement>('input')?.checked ?? s.ui.liquidGlass, Number(glassBlur.value));
+  };
+  glassBlur.onchange = () => { void saveSettings({ ui: { liquidGlassBlur: Number(glassBlur.value) } }); };
   v.append(h('div', { class: 'panel' }, h('h2', { text: t('settings.general') }),
     field('settings.language', lang),
 
@@ -665,6 +682,10 @@ function renderSettings(v: HTMLElement): void {
       void saveSettings({ ui: { hideDirectoryPaths: val } }).then(() => render());
     }),
     h('p', { class: 'hint', text: t('settings.hideDirectoryPathsHint') }),
+    glassToggle,
+    h('p', { class: 'hint', text: t('settings.liquidGlassHint') }),
+    field('settings.liquidGlassBlur', h('div', { class: 'range-control' }, glassBlur, glassBlurValue)),
+    h('p', { class: 'hint', text: t('settings.liquidGlassBlurHint') }),
     h('div', { class: 'field' }, h('span', { class: 'lbl', text: t('settings.dataDir') }), h('code', { text: dataDirDisplay }), openData, moveData,
       h('span', { class: 'hint', text: t('settings.dataDirHint') }),
       h('span', { class: 'hint', text: t('settings.dataDirHint2') })),
@@ -968,6 +989,7 @@ async function boot(): Promise<void> {
   init.settings.api ??= { enabled: false, port: 35555 };
   applyVirtualBoxMode(!!init.settings.ui.virtualBoxMode);
   applyLauncherTheme(init.settings.ui.theme);
+  applyLiquidGlass(init.settings.ui.liquidGlass, init.settings.ui.liquidGlassBlur);
   setDicts(init.dicts);
   setLang(init.lang);
   document.documentElement.lang = init.lang;

@@ -74,10 +74,10 @@ export type BootMode = 'quick' | 'cold';
 export type NetworkSpeed = 'full' | 'lte' | 'umts' | 'edge' | 'gsm';
 /** Provider identity is metadata used to validate the host endpoint. The
  * emulator still receives only its enumerated webcamN endpoint. */
-export type AndroidCameraProvider = 'lensio' | 'unity-capture' | 'obs' | 'directshow';
+export type AndroidCameraProvider = 'unity-capture' | 'obs' | 'directshow';
 
 export function normalizeAndroidCameraProvider(value: unknown): AndroidCameraProvider {
-  return value === 'lensio' || value === 'obs' || value === 'directshow' || value === 'unity-capture' ? value : 'unity-capture';
+  return value === 'obs' || value === 'directshow' || value === 'unity-capture' ? value : 'unity-capture';
 }
 
 export function normalizeNetworkSpeed(value: unknown): NetworkSpeed {
@@ -144,6 +144,10 @@ export interface AndroidAvd {
   path: string;
   target: string;
   running: boolean;
+  /** Whether adb root was verified on the running AVD. */
+  rooted: boolean;
+  /** Whether the user requested the rooted AOSP profile. */
+  rootRequested: boolean;
   deviceLabel: string;
   resolution: string;
   ramMb: number;
@@ -1956,38 +1960,6 @@ export async function startObsVirtualCamera(): Promise<ObsVirtualCameraStartResu
   };
 }
 
-/** Start LensioStudio as the selected live-camera provider and wait for its
- * DirectShow endpoint. The emulator still has to enumerate that endpoint. */
-export async function startLensioVirtualCamera(): Promise<ObsVirtualCameraStartResult> {
-  if (process.platform !== 'win32') return { ok: false, message: 'Lensio startup is supported on Windows only.' };
-  const candidates = [
-    process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'LensioStudio', 'LensioStudio.exe') : '',
-    process.env.ProgramFiles ? path.join(process.env.ProgramFiles, 'LensioStudio', 'LensioStudio.exe') : '',
-    process.env['ProgramFiles(x86)'] ? path.join(process.env['ProgramFiles(x86)'], 'LensioStudio', 'LensioStudio.exe') : '',
-    path.join(process.resourcesPath, 'lensio', 'LensioStudio.exe'),
-    path.resolve(process.cwd(), 'resources', 'lensio', 'LensioStudio.exe'),
-  ].filter(Boolean);
-  const executable = candidates.find((item) => fs.existsSync(item));
-  if (!executable) return { ok: false, message: 'LensioStudio was not found. Install LensioStudio, then try again.' };
-  try {
-    const processList = String(spawnSync('tasklist', ['/FI', 'IMAGENAME eq LensioStudio.exe', '/FO', 'CSV', '/NH'], { encoding: 'utf8', windowsHide: true, timeout: 5_000 }).stdout ?? '');
-    if (!/LensioStudio\.exe/i.test(processList)) {
-      const child = spawn(executable, [], { detached: true, stdio: 'ignore', windowsHide: true });
-      child.unref();
-    }
-  } catch (error) {
-    return { ok: false, message: `LensioStudio could not be started: ${error instanceof Error ? error.message : String(error)}` };
-  }
-  const started = Date.now();
-  while (Date.now() - started < 15_000) {
-    windowsNamesCache = null;
-    const camera = (await windowsCameraNames()).find((item) => /lensio|apexcam/i.test(item.friendlyName));
-    if (camera) return { ok: true, message: 'Lensio virtual camera is ready. Refresh the Android camera list.', cameraName: camera.friendlyName };
-    await new Promise((resolve) => setTimeout(resolve, 500));
-  }
-  return { ok: false, message: 'LensioStudio started, but no Lensio DirectShow endpoint appeared within 15 seconds. Start Lensio streaming, then refresh the Android camera list.' };
-}
-
 function readWindowsCameraNames(): Promise<WindowsCameraName[]> {
   const script = "try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch { }; "
     + "$rows=@(Get-PnpDevice -PresentOnly -Status OK -ErrorAction SilentlyContinue "
@@ -3704,6 +3676,8 @@ export async function listAndroidAvds(): Promise<AndroidAvd[]> {
     return {
       ...item,
       running: running.has(item.name),
+      rooted: ['1', 'true', 'yes'].includes(configValue(item.path, 'octobrowser.rootVerified').trim().toLowerCase()),
+      rootRequested: ['1', 'true', 'yes'].includes(configValue(item.path, 'octobrowser.rooted').trim().toLowerCase()),
       deviceLabel: configValue(item.path, 'octobrowser.deviceLabel') || configValue(item.path, 'hw.device.name'),
       resolution: width && height ? `${width}x${height}` : '',
       ramMb: Number.parseInt(configValue(item.path, 'hw.ramSize'), 10) || 0,
@@ -3990,6 +3964,11 @@ export async function launchAndroidAvd(input: AndroidLaunchInput): Promise<Andro
     assignments.front, assignments.back, assignments.frontDevice, assignments.backDevice,
   );
   const args = [`@${name}`, '-camera-back', cameraValues.back, '-camera-front', cameraValues.front];
+  // Root mode is deliberately explicit: -writable-system exposes the writable
+  // system path, while actual `adb root` remains dependent on a userdebug image.
+  // Google Play images must not be presented as rooted when they cannot support it.
+  const rooted = ['1', 'true', 'yes'].includes(configValue(avd.path, 'octobrowser.rooted').trim().toLowerCase());
+  if (rooted) args.push('-writable-system', '-no-snapshot-load');
   if (!input.microphoneEnabled) args.push('-no-audio');
   // Audio is enabled by default. Do not pass the old `-allow-host-audio`
   // switch: recent Windows emulator builds do not accept it and may exit
@@ -4088,6 +4067,10 @@ export async function launchAndroidAvd(input: AndroidLaunchInput): Promise<Andro
   // The emulator is alive; follow guest camera/provider failures beyond the
   // short process-start window without delaying the launch UI.
   void startAndroidCameraDiagnostics(name);
+  if (rooted) void verifyRootAfterBoot(name, avd.path);
+  if (rooted && configValue(avd.path, 'octobrowser.rootModuleInstall') === 'boot') {
+    void installRootModulesAfterBoot(name, avd.path);
+  }
   return { cameraWarning, notes: launchNotes };
 }
 
@@ -4207,7 +4190,6 @@ export interface AndroidLaunchPrefs {
   apps: string[];
   /** User-selected APKs for catalogue entries without a stable official URL. */
   appFiles: Record<string, string>;
-  /** Lensio/ApexCam is installed after this profile's guest reaches ADB. */
   cameraProvider?: AndroidCameraProvider;
 }
 
@@ -4725,57 +4707,6 @@ export function adbPath(): string {
   return optionalSdk()?.adb ?? '';
 }
 
-function lensioCamApk(): string {
-  const bundled: string[] = [];
-  for (const root of [__dirname, process.resourcesPath, process.cwd()].filter(Boolean)) {
-    let current = path.resolve(String(root));
-    for (let i = 0; i < 8; i += 1) {
-      bundled.push(path.join(current, 'resources', 'lensio', 'LensioCam.apk'));
-      bundled.push(path.join(current, 'windows', 'resources', 'lensio', 'LensioCam.apk'));
-      const parent = path.dirname(current);
-      if (parent === current) break;
-      current = parent;
-    }
-  }
-  const candidates = [
-    process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, 'LensioStudio', 'LensioCam.apk') : '',
-    path.join(os.homedir(), '.octobrowser', 'Lensio', 'LensioCam.apk'),
-    path.join(os.homedir(), 'Downloads', 'LensioCam.apk'),
-    path.resolve(process.cwd(), '.work', 'lensio-release-v2.9.5', 'LensioCam.apk'),
-  ...bundled,
-  ].filter(Boolean);
-  return candidates.find((candidate) => fs.existsSync(candidate)) ?? '';
-}
-
-/** Install and foreground the bundled/locally staged LensioCam companion.
- * Missing assets are reported as a skip, never as a fake successful install. */
-export async function installLensioCamOnAndroid(name: string): Promise<{ installed: boolean; launched: boolean; reason: string }> {
-  const apk = lensioCamApk();
-  if (!apk) return { installed: false, launched: false, reason: 'LensioCam.apk was not found; Windows Lensio can still run without the Android companion.' };
-  const clean = assertName(name);
-  let serial = '';
-  for (let attempt = 0; attempt < 30 && !serial; attempt++) {
-    serial = await androidSerialFor(clean).catch(() => '');
-    if (!serial) await new Promise((resolve) => setTimeout(resolve, 2_000));
-  }
-  const adb = adbPath();
-  if (!serial || !adb) return { installed: false, launched: false, reason: 'The Android device did not become ADB-ready for LensioCam.' };
-  const output = await adbRun(adb, ['-s', serial, 'install', '-r', apk], 120_000)
-    .catch((error: unknown) => error instanceof Error ? error.message : String(error));
-  if (!/^Success\b/im.test(String(output))) {
-    return { installed: false, launched: false, reason: `LensioCam.apk could not be installed: ${String(output).trim().slice(-500)}` };
-  }
-  const packageCheck = await adbRun(adb, ['-s', serial, 'shell', 'pm', 'path', 'com.apexcam'], 15_000)
-    .catch((error: unknown) => error instanceof Error ? error.message : String(error));
-  if (!/^package:/im.test(String(packageCheck))) {
-    return { installed: false, launched: false, reason: 'adb reported a successful install, but com.apexcam is not present in the Android package manager.' };
-  }
-  const launch = await adbRun(adb, ['-s', serial, 'shell', 'monkey', '-p', 'com.apexcam', '1'], 30_000)
-    .catch((error: unknown) => error instanceof Error ? error.message : String(error));
-  const launched = !/error|exception|no activity|unable to resolve/i.test(String(launch)) && /monkey finished/i.test(String(launch));
-  return { installed: true, launched, reason: launched ? 'LensioCam is installed and running in the Android device.' : 'LensioCam was installed, but Android did not foreground it.' };
-}
-
 function octoCameraControllerApk(): string {
   const candidates: string[] = [];
   for (const root of [__dirname, process.resourcesPath, process.cwd()].filter(Boolean)) {
@@ -4951,6 +4882,75 @@ async function emulatorSerial(name: string): Promise<string> {
   return '';
 }
 
+/** Install only explicitly staged modules, and never run module payloads on a Classic AVD. */
+async function installRootModulesAfterBoot(name: string, avdPath: string): Promise<void> {
+  const adb = adbPath();
+  const manager = configValue(avdPath, 'octobrowser.rootModuleManager');
+  const names = configValue(avdPath, 'octobrowser.rootModules').split('|')
+    .map((item) => item.trim()).filter((item) => /^[A-Za-z0-9._-]+\.zip$/i.test(item));
+  if (!adb || !names.length || !['magisk', 'supersu'].includes(manager)) return;
+  const serial = await emulatorSerial(name);
+  if (!serial || !(await waitForAndroidPackageService(adb, serial, 120_000))) return;
+  const avdModules = path.join(avdPath, 'octo-root-modules');
+  for (const module of names) {
+    const local = path.join(avdModules, module);
+    if (!fs.existsSync(local)) continue;
+    const remote = `/data/local/tmp/octo-${module}`;
+    const pushed = await adbRun(adb, ['-s', serial, 'push', local, remote], 120_000).catch(() => '');
+    if (!/^\d+ bytes in/i.test(pushed) && !/pushed/i.test(pushed)) continue;
+    if (manager === 'magisk') {
+      await adbRun(adb, ['-s', serial, 'shell', 'su', '-c', `magisk --install-module ${remote}`], 120_000).catch(() => '');
+    }
+    // SuperSU has no stable universal ZIP installer command. Keep its ZIP staged
+    // for the compatible recovery/module manager instead of executing arbitrary scripts.
+  }
+}
+
+/** `-writable-system` is not root; only persist ROOT VERIFIED after uid=0. */
+async function verifyRootAfterBoot(name: string, avdPath: string): Promise<void> {
+  const adb = adbPath();
+  if (!adb) return;
+  const deadline = Date.now() + 120_000;
+  while (Date.now() < deadline) {
+    const serial = await emulatorSerial(name);
+    if (serial) {
+      const rootReply = await adbRun(adb, ['-s', serial, 'root'], 20_000).catch(() => '');
+      await new Promise((resolve) => setTimeout(resolve, 2_000));
+      const identity = await adbRun(adb, ['-s', serial, 'shell', 'id'], 20_000).catch(() => '');
+      const verified = /uid=0\(root\)/i.test(identity);
+      writeConfigValues(avdPath, {
+        'octobrowser.rootVerified': verified ? '1' : '0',
+        'octobrowser.rootVerification': verified ? 'adb id uid=0' : (rootReply || identity || 'adb root refused').slice(0, 160),
+      });
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 2_000));
+  }
+  writeConfigValues(avdPath, {
+    'octobrowser.rootVerified': '0',
+    'octobrowser.rootVerification': 'Timed out waiting for adb',
+  });
+}
+
+/** Perform a fresh root check without trusting the requested build flag. */
+export async function checkAndroidRoot(name: string): Promise<{ verified: boolean; serial: string; identity: string; detail: string }> {
+  const clean = String(name ?? '').trim();
+  if (!/^[A-Za-z0-9._-]{1,64}$/.test(clean)) throw new Error('Invalid Android device name');
+  const adb = adbPath();
+  if (!adb) return { verified: false, serial: '', identity: '', detail: 'ADB is not available.' };
+  const serial = await emulatorSerial(clean);
+  if (!serial) return { verified: false, serial: '', identity: '', detail: 'The Android device is not running.' };
+  const rootReply = await adbRun(adb, ['-s', serial, 'root'], 20_000).catch(() => '');
+  await new Promise((resolve) => setTimeout(resolve, 1_500));
+  const identity = await adbRun(adb, ['-s', serial, 'shell', 'id'], 20_000).catch(() => '');
+  const verified = /uid=0\(root\)/i.test(identity);
+  const avd = (await listAndroidAvds()).find((item) => item.name === clean);
+  if (avd?.path) writeConfigValues(avd.path, {
+    'octobrowser.rootVerified': verified ? '1' : '0',
+    'octobrowser.rootVerification': (verified ? 'adb id uid=0' : (rootReply || identity || 'adb root refused')).slice(0, 160),
+  });
+  return { verified, serial, identity: identity.trim(), detail: (verified ? identity : (rootReply || identity || 'adb root refused')).trim().slice(0, 240) };
+}
 /** The single mobile publisher belongs to the AVD named in its config. */
 function mediaCompanionOwner(): string {
   try {
@@ -5142,6 +5142,12 @@ export interface SpecCreateInput {
   width: number; height: number; dpi: number;
   ramMb: number; heapMb: number; cores: number; dataGb: number; sdCardMb: number;
   gpuMode: GpuMode; bootMode: BootMode; snapshots: boolean;
+  /** Use the emulator writable-system path; adb root still depends on a userdebug image. */
+  rooted?: boolean;
+  /** Optional local Magisk/SuperSU module ZIPs. They are copied into the AVD and never run on Classic builds. */
+  rootModulePaths?: string[];
+  rootModuleManager?: 'magisk' | 'supersu';
+  rootModuleInstall?: 'stage' | 'boot';
   cameraFront: CameraSource; cameraBack: CameraSource; microphoneEnabled: boolean;
   /** Active emulator camera endpoints assigned independently to each facing. */
   cameraFrontDevice?: string; cameraBackDevice?: string;
@@ -5214,6 +5220,9 @@ export async function createAndroidAvdFromSpec(input: SpecCreateInput): Promise<
   const telephone = String(input.telephone ?? '').trim();
   // Checked before anything is created, so a bad number leaves no half-made device.
   if (telephone && !validTelephoneNumber(telephone)) throw new Error('The telephony number must be 3 to 15 digits, with an optional leading +.');
+  if (input.rooted && !/;default;(x86_64|x86|arm64-v8a|armeabi-v7a)$/.test(input.systemPackage)) {
+    throw new Error('Rooted builds require an AOSP default system image. Select AOSP, not Google Play or Google APIs.');
+  }
   if (!androidPackageInstalled(input.systemPackage)) throw new Error('Selected Android system image is not installed');
   const directory = input.installDirectory.trim() || defaultAvdDirectory();
   if (!ABSOLUTE(directory)) throw new Error('Choose an absolute Android virtual device folder');
@@ -5244,6 +5253,13 @@ export async function createAndroidAvdFromSpec(input: SpecCreateInput): Promise<
   const previousSdCardMb = Number.parseInt(configValue(avdPath, 'sdcard.size'), 10) || 0;
   const safeDataGb = creating ? input.dataGb : Math.max(input.dataGb, previousDataGb);
   const safeSdCardMb = creating ? input.sdCardMb : Math.max(input.sdCardMb, previousSdCardMb);
+  const modulePaths = input.rooted ? [...new Set((input.rootModulePaths ?? []).map((item) => String(item).trim()).filter(Boolean))] : [];
+  if (modulePaths.length > 12) throw new Error('You can select up to 12 root modules at once.');
+  for (const module of modulePaths) {
+    if (!path.isAbsolute(module) || !fs.existsSync(module) || path.extname(module).toLowerCase() !== '.zip') {
+      throw new Error('Root modules must be existing local .zip files.');
+    }
+  }
   const cameraTools = optionalSdk();
   const imagePackage = input.systemPackage;
   const emulator = cameraTools ? await emulatorForPackage(imagePackage) || cameraTools.emulator : '';
@@ -5256,6 +5272,8 @@ export async function createAndroidAvdFromSpec(input: SpecCreateInput): Promise<
   );
   const skinPath = validateAndroidSkinPath(input.skinPath ?? '');
   writeConfigValues(avdPath, {
+    'octobrowser.rooted': input.rooted ? '1' : '0',
+    'octobrowser.rootVerified': '0',
     ...mediaConfig(resolvedCameras.front, resolvedCameras.back, input.microphoneEnabled,
       resolvedCameras.frontDevice, resolvedCameras.backDevice, cameraLimitsFor(avdPath, input.cameraLimits)),
     'hw.ramSize': String(input.ramMb),
@@ -5291,7 +5309,17 @@ export async function createAndroidAvdFromSpec(input: SpecCreateInput): Promise<
     'octobrowser.telephony': telephone,
     'skin.path': skinPath,
     'skin.name': skinPath ? path.basename(skinPath, path.extname(skinPath)) : '',
+    'octobrowser.rootModuleManager': input.rooted ? (input.rootModuleManager === 'supersu' ? 'supersu' : 'magisk') : '',
+    'octobrowser.rootModuleInstall': input.rooted ? (input.rootModuleInstall === 'boot' ? 'boot' : 'stage') : '',
+    'octobrowser.rootModules': input.rooted ? modulePaths.map((item) => path.basename(item)).join('|') : '',
   });
+  const moduleDirectory = path.join(avdPath, 'octo-root-modules');
+  if (input.rooted && modulePaths.length) {
+    fs.mkdirSync(moduleDirectory, { recursive: true });
+    for (const module of modulePaths) fs.copyFileSync(module, path.join(moduleDirectory, path.basename(module)));
+  } else if (!input.rooted && fs.existsSync(moduleDirectory)) {
+    fs.rmSync(moduleDirectory, { recursive: true, force: true });
+  }
   rememberAvdDirectory(path.dirname(avdPath));
   writeAvdPointer(name, avdPath, api);
   return {

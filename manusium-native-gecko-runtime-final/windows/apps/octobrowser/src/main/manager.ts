@@ -56,7 +56,7 @@ import { androidNetworkStatus, clearAndroidProxy, setAllAndroidNetworkOff, setAn
 import type { QuietBootResult } from './android-quiet-boot';
 import { ScreenStream, execAdb, keyArgs, nextRotation, parseRotation, parseScreenAction, pngDimensions, rotationLockArgs, rotationReadArgs, rotationSetArgs, screencapArgs, tapArgs } from './android-screen';
 import { parseSecondaryDisplay } from './android-displays';
- import { importAvdFolder, type CameraSource, androidCameraChoices, androidMediaCheck, repairAndroidMedia, emulatorWebcams, androidCameraChoicesCached, stopAndroidAvd, stopOwnedAndroidProcesses, androidLaunchPrefs, rememberAndroidLaunch, ANDROID_LOCALES, adbPath, androidSerialFor, openAndroidBrowser, androidChromeStatus, openAndroidChrome, installAndroidChrome, configureMediaCompanion, applyDeviceIdentity, grantAndroidMediaPermissions, reportAndroidProgress, setAndroidProgressSink, type AndroidProgress, acceptAndroidLicenses, androidPackageInstalled, createAndroidAvdFromSpec, quietBootAndroidAvd, installAndroidPackage, updateAvdSettings, type AvdSettingsInput, androidStudioStatusAsync, ANDROID_CATALOG_DEVICES, ANDROID_SYSTEM_IMAGES, androidDiskInfo, androidSdkCandidates, androidSystemImageInstalled, clearAndroidSdkRoot, installAndroidTools, setAndroidSdkRoot, createAndroidAvd, defaultAvdDirectory, deleteAndroidAvd, ensureMediaCompanionAsync, installAndroidSystemImage, launchAndroidAvd, listAndroidAvds, androidInstallRoot, androidInstallTarget, imageRunsHere, setAndroidInstallRoot, clearAndroidInstallRoot, availableSystemImageIds, availableSystemImagePackages, parseAndroidSystemImagePackage, installedAndroidSkins, androidToolLogPath, mediaCompanionStatusAsync, openAndroidAvdFolder, openAndroidStudio, requestMediaCompanionBroadcast, waitForMediaCompanionCamera, startMediaCompanion, stopMediaCompanion, startObsVirtualCamera, startLensioVirtualCamera, installLensioCamOnAndroid, installOctoCameraControllerOnAndroid, setMediaPluginEnabled, mediaPluginActive, startWebMediaCompanionAsync, applyAndroidLocation, applyRandomPolishAndroidLocation, normalizeAndroidCameraProvider, type AndroidAvdCreateInput, type AndroidLaunchInput} from './android-studio';
+ import { importAvdFolder, type CameraSource, androidCameraChoices, androidMediaCheck, repairAndroidMedia, emulatorWebcams, androidCameraChoicesCached, stopAndroidAvd, stopOwnedAndroidProcesses, androidLaunchPrefs, rememberAndroidLaunch, ANDROID_LOCALES, adbPath, androidSerialFor, openAndroidBrowser, androidChromeStatus, openAndroidChrome, installAndroidChrome, configureMediaCompanion, applyDeviceIdentity, grantAndroidMediaPermissions, reportAndroidProgress, setAndroidProgressSink, type AndroidProgress, acceptAndroidLicenses, androidPackageInstalled, createAndroidAvdFromSpec, quietBootAndroidAvd, installAndroidPackage, updateAvdSettings, type AvdSettingsInput, androidStudioStatusAsync, ANDROID_CATALOG_DEVICES, ANDROID_SYSTEM_IMAGES, androidDiskInfo, androidSdkCandidates, androidSystemImageInstalled, clearAndroidSdkRoot, installAndroidTools, setAndroidSdkRoot, createAndroidAvd, defaultAvdDirectory, deleteAndroidAvd, ensureMediaCompanionAsync, installAndroidSystemImage, launchAndroidAvd, listAndroidAvds, androidInstallRoot, androidInstallTarget, imageRunsHere, setAndroidInstallRoot, clearAndroidInstallRoot, availableSystemImageIds, availableSystemImagePackages, parseAndroidSystemImagePackage, installedAndroidSkins, androidToolLogPath, mediaCompanionStatusAsync, openAndroidAvdFolder, openAndroidStudio, requestMediaCompanionBroadcast, waitForMediaCompanionCamera, startMediaCompanion, stopMediaCompanion, startObsVirtualCamera, checkAndroidRoot, installOctoCameraControllerOnAndroid, setMediaPluginEnabled, mediaPluginActive, startWebMediaCompanionAsync, applyAndroidLocation, applyRandomPolishAndroidLocation, normalizeAndroidCameraProvider, type AndroidAvdCreateInput, type AndroidLaunchInput} from './android-studio';
 import { ANDROID_STORES, androidStore, androidStoreStates, changeAndroidStoreState, installAndroidStores, readMediaFolder, pushMediaToDevice } from './android-stores';
 import { addCustomImage, customCataloguePath, importSystemImageArchive, importSystemImageDirectory, inspectSystemImageDirectory, readCustomCatalogue, removeCustomImage, validCustomPackage } from './android-custom';
 import { customAndroidBuildGuide, customAndroidBuildPath, deleteCustomAndroidBuild, exportCustomAndroidBuilds, readCustomAndroidBuilds, saveCustomAndroidBuild, supportedCustomAndroidBuildTargets, validateCustomAndroidBuild } from './android-custom-build';
@@ -650,22 +650,23 @@ export class Manager {
     const distDir = this.ctx.prep.distDir;
     const chrome = launcherChrome(this.ctx.settings.load().ui.theme);
     this.launcher = new BrowserWindow({
-      // A wider, slightly taller base window: the profile table, the proxy
-      // table and the side panel all fit without a maximised window.
-      width: 1440,
-      height: 880,
-      minWidth: 1040,
-      minHeight: 660,
+      // Compact desktop footprint: it leaves room for the user's desktop while
+      // retaining enough width for the profile table and side panels.
+      width: 1280,
+      height: 780,
+      minWidth: 960,
+      minHeight: 600,
       // Show immediately: launcher.html contains a static boot surface and
       // the renderer replaces it with the themed startup overlay. Waiting for
       // ready-to-show would hide the entire loading experience on fast starts.
       show: true,
-      backgroundColor: chrome.color,
+      transparent: process.platform === 'win32',
+      backgroundColor: process.platform === 'win32' ? '#00000000' : chrome.color,
       // The renderer owns the title bar. Native overlay controls would create
       // a second button set over the app content.
       titleBarStyle: 'hidden',
       titleBarOverlay: false,
-      backgroundMaterial: process.platform === 'win32' ? 'mica' : 'none',
+      backgroundMaterial: process.platform === 'win32' ? 'acrylic' : 'none',
       title: 'Octo.su',
       icon: this.launcherIcon(),
       autoHideMenuBar: true,
@@ -2753,44 +2754,7 @@ export class Manager {
         : await this.liveCameraStream.start();
       const controller = await installOctoCameraControllerOnAndroid(String(input?.name ?? ''), liveStream.port)
         .catch((error: unknown) => ({ installed: false, launched: false, reason: error instanceof Error ? error.message : String(error) }));
-      // Lensio is opt-in. Its Windows receiver can start before the AVD, but
-      // Android cannot install an APK until adb reports the guest as ready.
-      // Await both results so the UI never claims that Lensio was preinstalled
-      // when the APK is missing, the device did not boot, or package-manager
-      // verification failed.
-      const lensioRequested = requestedProvider === 'lensio'
-        || selectedHostEndpoints.some((endpoint) => /lensio|apexcam/i.test(endpoint));
-      let lensio: { windowsStarted: boolean; installed: boolean; launched: boolean; message: string } | undefined;
-      if (lensioRequested) {
-        const windows = await startLensioVirtualCamera().catch((error: unknown) => ({ ok: false, message: error instanceof Error ? error.message : String(error) }));
-        const android = await installLensioCamOnAndroid(String(input?.name ?? '')).catch((error: unknown) => ({ installed: false, launched: false, reason: error instanceof Error ? error.message : String(error) }));
-        lensio = { windowsStarted: windows.ok, installed: android.installed, launched: android.launched, message: `${windows.message} ${android.reason}`.trim() };
-        if (!windows.ok || !android.installed || !android.launched) {
-          this.ctx.logger.warn('android.lensio.notReady', { device: String(input?.name ?? ''), message: lensio.message });
-        }
-      }
-      // Apps chosen while the device was created are installed as soon as
-      // Android is actually up - adb cannot install into a device that is
-      // still booting.
-      void this.installQueuedApps(String(input?.name ?? ''), proxyLocation);
-      // A launch that worked is the setting the user wants next time.
-      rememberAndroidLaunch(String(input?.name ?? ''), {
-        proxyId, cameraFront: input?.cameraFront, cameraBack: input?.cameraBack,
-        cameraProvider: input?.cameraProvider,
-        cameraFrontDevice: String(input?.cameraFrontDevice ?? ''), cameraBackDevice: String(input?.cameraBackDevice ?? ''),
-        cameraDevice: String(input?.cameraDevice ?? ''), locale: String(input?.locale ?? ''),
-        microphoneEnabled: input?.microphoneEnabled !== false, microphoneDevice: String(input?.microphoneDevice ?? ''),
-        networkSpeed: input?.networkSpeed, secondaryDisplay: parseSecondaryDisplay(input?.secondaryDisplay), bootMode: input?.bootMode,
-      });
-      for (const note of launched.notes) this.ctx.logger.warn('android.launch.notApplied', { device: String(input?.name ?? ''), note });
-      const notes = [...launched.notes];
-      if (!controller.installed || !controller.launched) {
-        notes.push(`Octo Camera Controller was not fully started: ${controller.reason}`);
-      }
-      if (lensio && (!lensio.windowsStarted || !lensio.installed || !lensio.launched)) {
-        notes.push(`Lensio was not fully started: ${lensio.message}`);
-      }
-      return { ok: !lensio || (lensio.windowsStarted && lensio.installed && lensio.launched), cameraWarning: launched.cameraWarning, notes, lensio };
+      return { ok: true, cameraWarning: launched.cameraWarning, controller };
     });
     // Adopt devices that already exist somewhere on disk: the folder is
     // scanned, the missing pointers are written, and it is remembered.
@@ -3046,7 +3010,7 @@ export class Manager {
       /** An SDK package the user added themselves, used instead of the variant. */
       customPackage?: string;
       ramMb?: number; cpus?: number; diskGb?: number; cameraFront?: string; cameraBack?: string; microphoneEnabled?: boolean;
-      cameraProvider?: 'lensio' | 'unity-capture' | 'obs' | 'directshow';
+      cameraProvider?: 'unity-capture' | 'obs' | 'directshow';
       width?: number; height?: number; dpi?: number; heapMb?: number; sdCardMb?: number;
       skinPath?: string;
       gpuMode?: string; bootMode?: string; snapshots?: boolean;
@@ -3180,14 +3144,14 @@ export class Manager {
     // ---- camera and microphone of one Android device ----
     // Every camera the emulator can hand to Android right now, and a one-click
     // repair that wires the device to one of them.
-    handle('mgr:android-webcams', L, () => emulatorWebcams());
-    handle('mgr:android-start-obs', L, () => startObsVirtualCamera());
-    handle('mgr:android-start-lensio', L, () => startLensioVirtualCamera());
-    handle('mgr:android-install-lensio-apk', L, async (_e, name: string) => {
-      const deviceName = String(name ?? '').trim();
-      if (!deviceName) return { installed: false, launched: false, reason: 'Select an Android device first.' };
-      return installLensioCamOnAndroid(deviceName);
+    handle('mgr:android-launch-prefs', L, (_e, name: string) => androidLaunchPrefs(String(name ?? '')));
+    handle('mgr:android-remember-launch', L, (_e, input: AndroidLaunchInput) => {
+      rememberAndroidLaunch(String(input?.name ?? ''), input);
+      return true;
     });
+    handle('mgr:android-webcams', L, () => emulatorWebcams());
+    handle('mgr:android-root-check', L, async (_e, name: string) => checkAndroidRoot(String(name ?? '')));
+    handle('mgr:android-start-obs', L, () => startObsVirtualCamera());
     handle('mgr:android-live-stream-status', L, () => this.liveCameraStream.status());
     handle('mgr:android-live-stream-start', L, () => this.liveCameraStream.start());
     handle('mgr:android-live-stream-stop', L, async () => { await this.liveCameraStream.stop(); return this.liveCameraStream.status(); });
@@ -3722,9 +3686,11 @@ export class Manager {
       });
       if (patch.logs) ctx.logger.setMode(updated.logs.mode);
       if (patch.plugins) this.syncMediaPlugins();
-      if (patch.ui && typeof (patch.ui as Record<string, unknown>).theme === 'string' && this.launcher && !this.launcher.isDestroyed()) {
+      if (patch.ui && this.launcher && !this.launcher.isDestroyed()
+        && (typeof (patch.ui as Record<string, unknown>).theme === 'string'
+          || typeof (patch.ui as Record<string, unknown>).liquidGlass === 'boolean')) {
         const chrome = launcherChrome(updated.ui.theme);
-        this.launcher.setBackgroundColor(chrome.color);
+        this.launcher.setBackgroundColor(process.platform === 'win32' && updated.ui.liquidGlass ? '#00000000' : chrome.color);
         // The renderer-owned controls inherit the updated theme tokens.
       }
       // A sidebar preference is entirely local to the launcher. Apart from not

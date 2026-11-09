@@ -16,7 +16,10 @@ const BANNED = [
   new RegExp(['wayd', 'roid'].join(''), 'i'),
   new RegExp(['gm', 'tool'].join(''), 'i'),
 ];
-const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'out', 'coverage', '.vite', '.turbo', '.cache']);
+// Local build archives, logs, and unpacked Electron trees are artifacts rather
+// than source. They can be hundreds of MB and may contain unrelated archive
+// payloads, so scanning them makes this source-policy test slow and noisy.
+const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', 'build', 'out', 'coverage', '.vite', '.turbo', '.cache', 'outputs', '.work', 'release']);
 const SKIP_FILES = new Set(['package-lock.json']);
 
 function* walk(dir: string): Generator<string> {

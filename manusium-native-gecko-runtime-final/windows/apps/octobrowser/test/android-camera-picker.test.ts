@@ -30,6 +30,7 @@ describe('the camera picker follows the cameras by itself', () => {
   it('keeps the startup lens selector limited to Android Studio modes while preserving the integrated quick actions', () => {
     expect(picker).toContain("['', t('android.camera.none')]");
     expect(picker).toContain("['emulated', t('android.camera.emulated')]");
+    expect(picker).toContain("['webcam0', 'Webcam0']");
     expect(picker).not.toContain("['virtualcam', 'Live image · Unity Capture']");
     expect(picker).not.toContain("['image', t('android.camera.imageFile')]");
     expect(picker).not.toContain("['video', t('android.camera.videoFile')]");

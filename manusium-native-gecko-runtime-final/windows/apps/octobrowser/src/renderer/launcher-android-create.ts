@@ -91,6 +91,7 @@ const VARIANTS: Array<{ id: string; labelKey: string; descKey: string }> = [
 /** Everything the wizard collects. One object, so every step reads the truth. */
 interface Draft {
   phone?: PhoneSpec;
+  installMode: 'simple' | 'advanced';
   variant: string;
   name: string;
   nameTouched: boolean;
@@ -99,11 +100,12 @@ interface Draft {
   ramMb: number; cpus: number; diskGb: number; heapMb: number; sdCardMb: number;
   width: number; height: number; dpi: number;
   gpuMode: string; bootMode: string;
-  snapshots: boolean; camera: boolean; microphone: boolean;
+  snapshots: boolean; rooted: boolean; camera: boolean; microphone: boolean;
+  rootModulePaths: string[]; rootModuleManager: 'magisk' | 'supersu'; rootModuleInstall: 'stage' | 'boot';
   cameraFront: CameraSource; cameraBack: CameraSource;
   cameraFrontDevice: string; cameraBackDevice: string;
   /** Stable first-page preset, independent from performance/display choices. */
-  cameraPresetEnabled: boolean; cameraProvider: 'lensio' | 'unity-capture' | 'obs' | 'directshow';
+  cameraPresetEnabled: boolean; cameraProvider: 'unity-capture' | 'obs' | 'directshow';
   /** Legacy shared endpoint for older create paths. */
   cameraDevice: string;
   /** BCP-47 language Android boots in, e.g. "pl-PL". */
@@ -116,8 +118,6 @@ interface Draft {
   apps: string[];
   /** Manual APK choices for stores without a stable publisher download. */
   appFiles: Record<string, string>;
-  /** Tell Windows when the device is ready, with a sound. */
-  notify: boolean;
   directory: string;
   brand: string;
   manufacturer: string;
@@ -246,6 +246,7 @@ export function androidCreateWizard(context: CreatorContext): void {
   const firstOp = randomSimProfile('us');
   const draft: Draft = {
     phone: first,
+    installMode: 'simple',
     variant: 'play',
     name: first ? suggestName(first) : '',
     nameTouched: false,
@@ -260,7 +261,8 @@ export function androidCreateWizard(context: CreatorContext): void {
     height: first?.sizing.height ?? 2400,
     dpi: first?.sizing.dpi ?? 420,
     gpuMode: 'auto', bootMode: 'quick',
-    snapshots: true, camera: false, microphone: true,
+    snapshots: true, rooted: false, camera: false, microphone: true,
+    rootModulePaths: [], rootModuleManager: 'magisk', rootModuleInstall: 'stage',
     // A single host endpoint must not be opened by both Android lenses: some
     // CameraProvider builds crash when the same DirectShow stream is shared.
     // Base camera policy: front is off and rear uses the native photo/image
@@ -272,7 +274,6 @@ export function androidCreateWizard(context: CreatorContext): void {
     customPackage: '',
     skinPath: '',
     apps: [], appFiles: {},
-    notify: true,
     // One target folder holds both the system-image download and the AVD's
     // virtual disk. Reuse the last selection, while keeping it editable.
     directory: lastAndroidCreateDirectory(),
@@ -760,9 +761,11 @@ export function androidCreateWizard(context: CreatorContext): void {
       const tabletOnly = variant.id === 'tablet';
       const card = optionCard({
         selected: draft.variant === variant.id,
+        disabled: draft.rooted && variant.id !== 'aosp',
         title: t(variant.labelKey),
         meta: t(variant.descKey),
         onPick: () => {
+          if (draft.rooted && variant.id !== 'aosp') return;
           // Android 12L is a large-screen image. If the user picks it while a
           // phone is selected, move to the real tablet catalog entry instead
           // of silently ignoring the click or creating a misleading AVD.
@@ -791,12 +794,14 @@ export function androidCreateWizard(context: CreatorContext): void {
       const result = await api.invoke<{ trusted: boolean; packages: string[]; installed: string[]; error?: string }>('mgr:android-api-packages').catch(() => undefined);
       apiSlot.replaceChildren();
       if (!result?.packages?.length) { apiStatus.textContent = result?.error || t('android.apiSelection.unavailable'); apiInstall.disabled = true; return; }
-      const options = result.packages.map((pkg) => {
+      const availablePackages = result.packages.filter((pkg) => !draft.rooted || /;default;(x86_64|x86|arm64-v8a|armeabi-v7a)$/.test(pkg));
+      if (!availablePackages.length) { apiStatus.textContent = draft.rooted ? 'No AOSP default userdebug-compatible image is installed or available.' : t('android.apiSelection.unavailable'); apiInstall.disabled = true; return; }
+      const options = availablePackages.map((pkg) => {
         const match = /^system-images;android-(\d+);([^;]+);([^;]+)$/.exec(pkg);
         const label = match ? `Android ${match[1]} · ${match[2]} · ${match[3]}${result.installed.includes(pkg) ? ` · ${t('android.alreadyDownloaded')}` : ''}` : pkg;
         return [pkg, label] as [string, string];
       });
-      if (draft.customPackage && !options.some(([pkg]) => pkg === draft.customPackage)) options.unshift([draft.customPackage, `${draft.customPackage} · ${t('android.custom.inUse', { pkg: draft.customPackage })}`]);
+      if (draft.customPackage && (!draft.rooted || /;default;(x86_64|x86|arm64-v8a|armeabi-v7a)$/.test(draft.customPackage)) && !options.some(([pkg]) => pkg === draft.customPackage)) options.unshift([draft.customPackage, `${draft.customPackage} · ${t('android.custom.inUse', { pkg: draft.customPackage })}`]);
       const selected = options.some(([pkg]) => pkg === draft.customPackage) ? draft.customPackage : (options.find(([pkg]) => result.installed.includes(pkg))?.[0] ?? options[0][0]);
       const apiSelect = select<string>(selected, options, (value) => { draft.customPackage = value; apiInstall.disabled = result.installed.includes(value); });
       draft.customPackage = selected;
@@ -1036,6 +1041,70 @@ export function androidCreateWizard(context: CreatorContext): void {
     const group = (titleKey: string, ...children: Array<Node | null>) =>
       h('section', { class: 'android-group' }, h('h3', { text: t(titleKey) }), ...children);
 
+    const installMode = toggle(draft.installMode === 'advanced', 'android.advancedInstall', (enabled) => {
+      draft.installMode = enabled ? 'advanced' : 'simple';
+      paint();
+    });
+    const buildChoice = h('div', { class: 'build-choice', role: 'radiogroup', 'aria-label': t('android.buildType') },
+      optionCard({
+        selected: !draft.rooted,
+        title: t('android.buildClassic'),
+        meta: t('android.buildClassicHint'),
+        onPick: () => { draft.rooted = false; paint(); },
+        wide: true,
+      }),
+      optionCard({
+        selected: draft.rooted,
+        title: t('android.buildRooted'),
+        meta: t('android.buildRootedHint'),
+        onPick: () => { draft.rooted = true; draft.variant = 'aosp'; draft.customPackage = ''; paint(); },
+        wide: true,
+      }));
+    const rootedBuildSwitch = toggle(draft.rooted, 'android.buildRooted', (enabled) => {
+      draft.rooted = enabled;
+      if (enabled) { draft.variant = 'aosp'; draft.customPackage = ''; }
+      paint();
+    });
+    const moduleList = h('div', { class: 'root-module-list' });
+    const paintRootModules = () => {
+      moduleList.replaceChildren(...draft.rootModulePaths.map((file, index) =>
+        h('div', { class: 'root-module-row' },
+          h('span', { class: 'grow', text: file.split(/[\\/]/).pop() || file }),
+          h('button', { type: 'button', class: 'icon-btn', title: t('android.rootModules.remove'), 'aria-label': t('android.rootModules.remove') }, '×'))));
+      [...moduleList.querySelectorAll('button')].forEach((button, index) => {
+        button.addEventListener('click', () => { draft.rootModulePaths.splice(index, 1); paintRootModules(); });
+      });
+    };
+    const addModule = h('button', { type: 'button', class: 'btn small', text: t('android.rootModules.add') });
+    addModule.onclick = async () => {
+      const selected = await api.invoke<string | null>('mgr:pick-file', { extensions: ['zip'] });
+      if (selected && !draft.rootModulePaths.includes(selected)) { draft.rootModulePaths.push(selected); paintRootModules(); }
+    };
+    const addMagisk = h('button', { type: 'button', class: 'btn small', text: t('android.rootModules.addMagisk') });
+    addMagisk.onclick = async () => {
+      const selected = await api.invoke<string | null>('mgr:pick-file', { extensions: ['zip'] });
+      if (!selected) return;
+      draft.rootModuleManager = 'magisk';
+      if (!draft.rootModulePaths.includes(selected)) draft.rootModulePaths.push(selected);
+      paintRootModules();
+    };
+    paintRootModules();
+    const rootModulesGroup = group('android.rootModules.title',
+      h('p', { class: 'hint', text: t('android.rootModules.hint') }),
+      h('div', { class: 'row' },
+        select<string>(draft.rootModuleManager, [['magisk', 'Magisk'], ['supersu', 'SuperSU']], (value) => { draft.rootModuleManager = value as 'magisk' | 'supersu'; }),
+        select<string>(draft.rootModuleInstall, [['stage', t('android.rootModules.stage')], ['boot', t('android.rootModules.boot')]], (value) => { draft.rootModuleInstall = value as 'stage' | 'boot'; }),
+        addMagisk,
+        addModule),
+      moduleList,
+      h('p', { class: 'hint warning', text: t('android.rootModules.warning') }));
+    const baseGroup = group('android.group.install',
+      h('p', { class: 'hint', text: t('android.simpleInstallHint') }),
+      h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.buildType') }), buildChoice),
+      rootedBuildSwitch,
+      installMode,
+      h('p', { class: 'hint', text: t('android.advancedInstallHint') }));
+
     const randomizeAllBtn = h('button', { type: 'button', class: 'btn small', text: t('android.identity.randomizeAll') });
     randomizeAllBtn.onclick = (e) => {
       e.preventDefault();
@@ -1105,24 +1174,24 @@ export function androidCreateWizard(context: CreatorContext): void {
         h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.identity.simOperator') }), simOperatorInput)),
       h('p', { class: 'hint', text: t('android.identity.hintDetail') }));
 
-    host.append(
-      group('android.group.model',
+    const modelGroup = group('android.group.model',
         h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.name') }), name),
         nameHint,
         h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.telephony.label') }), telephoneInput),
         h('p', { class: 'hint', id: 'androidTelephoneHint', text: t('android.telephony.hint') }),
         languageSlot,
-        h('p', { class: 'hint', text: `${handsetName(phone)} · ${phone.identity.currentAndroid} · ${phone.display.inches}" · ${phone.performance.chipset}` })),
-      identityGroup,
-      group('android.group.performance',
-        h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.preset') }), presetSelect),
-        h('div', { class: 'grid2' },
-          numberField('android.ram', draft.ramMb, { min: '1024', max: '65536', step: '512' }, (value) => { draft.ramMb = value; touched(); }, 'MB'),
-          numberField('android.cores', draft.cpus, { min: '1', max: '16' }, (value) => { draft.cpus = value; touched(); }),
-          numberField('android.virtualStorageGb', draft.diskGb, { min: '4', max: '512' }, (value) => { draft.diskGb = value; touched(); }),
-          numberField('android.heapMb', draft.heapMb, { min: '128', max: '4096' }, (value) => { draft.heapMb = value; touched(); }, 'MB'),
-          numberField('android.sdCardMb', draft.sdCardMb, { min: '0', max: '65536' }, (value) => { draft.sdCardMb = value; touched(); }, 'MB')),
-        h('p', { class: 'hint', text: t('android.presetHint') })),
+        h('p', { class: 'hint', text: `${handsetName(phone)} · ${phone.identity.currentAndroid} · ${phone.display.inches}" · ${phone.performance.chipset}` }));
+    const performanceGroup = group('android.group.performance',
+      h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.preset') }), presetSelect),
+      h('div', { class: 'grid2' },
+        numberField('android.ram', draft.ramMb, { min: '1024', max: '65536', step: '512' }, (value) => { draft.ramMb = value; touched(); }, 'MB'),
+        numberField('android.cores', draft.cpus, { min: '1', max: '16' }, (value) => { draft.cpus = value; touched(); }),
+        numberField('android.virtualStorageGb', draft.diskGb, { min: '4', max: '512' }, (value) => { draft.diskGb = value; touched(); }),
+        numberField('android.heapMb', draft.heapMb, { min: '128', max: '4096' }, (value) => { draft.heapMb = value; touched(); }, 'MB'),
+        numberField('android.sdCardMb', draft.sdCardMb, { min: '0', max: '65536' }, (value) => { draft.sdCardMb = value; touched(); }, 'MB')),
+      h('p', { class: 'hint', text: t('android.presetHint') }));
+
+    const advancedSections = [modelGroup, identityGroup, performanceGroup,
       group('android.group.display',
         h('div', { class: 'grid2' },
           numberField('android.width', draft.width, { min: '320', max: '4096' }, (value) => { draft.width = value; touched(); }),
@@ -1130,18 +1199,23 @@ export function androidCreateWizard(context: CreatorContext): void {
           numberField('android.dpi', draft.dpi, { min: '120', max: '640' }, (value) => { draft.dpi = value; touched(); }))),
       skinControl(),
       group('android.group.media',
-        virtualCameraPreset,
-        virtualCameraHint,
-        cameras.element,
+        virtualCameraPreset, virtualCameraHint, cameras.element,
         toggle(draft.microphone, 'android.media.microphone', (value) => { draft.microphone = value; }),
         h('p', { class: 'hint', text: t('android.mic.honest') })),
+      rootModulesGroup,
       h('details', { class: 'card-specs' }, h('summary', { text: t('android.advanced') }),
         h('div', { class: 'grid2' },
           h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.gpuMode') }),
             select<string>(draft.gpuMode, [['auto', t('android.gpu.auto')], ['host', t('android.gpu.host')], ['swiftshader_indirect', t('android.gpu.software')], ['off', t('android.gpu.off')]], (value) => { draft.gpuMode = value; })),
           h('label', { class: 'field' }, h('span', { class: 'lbl', text: t('android.bootMode') }),
             select<string>(draft.bootMode, [['quick', t('android.boot.quick')], ['cold', t('android.boot.cold')]], (value) => { draft.bootMode = value; }))),
-        toggle(draft.snapshots, 'android.snapshots', (value) => { draft.snapshots = value; })));
+        toggle(draft.snapshots, 'android.snapshots', (value) => { draft.snapshots = value; }),
+        h('p', { class: 'hint', text: t('android.rootedHint') }))];
+    host.replaceChildren(baseGroup, ...advancedSections);
+    for (const section of advancedSections) {
+      if (section !== baseGroup) (section as HTMLElement).hidden = draft.installMode !== 'advanced';
+    }
+    rootModulesGroup.hidden = !draft.rooted || draft.installMode !== 'advanced';
   }
 
   // ---------------------------------------------------------------- step 5: review
@@ -1368,8 +1442,6 @@ export function androidCreateWizard(context: CreatorContext): void {
       h('p', { class: 'hint', text: t('android.storageExplainer') }),
       h('h4', { class: 'spec-title', text: t('android.stores.preinstall') }),
       appsHost,
-      toggle(draft.notify, 'android.notifyWhenDone', (value) => { draft.notify = value; }),
-      h('p', { class: 'hint', text: t('android.notifyHint') }),
       failureBox);
 
     drawSummary();
@@ -1451,6 +1523,10 @@ export function androidCreateWizard(context: CreatorContext): void {
       width: draft.width, height: draft.height, dpi: draft.dpi,
       gpuMode: draft.gpuMode, bootMode: draft.bootMode,
       snapshots: draft.snapshots,
+      rooted: draft.rooted,
+      rootModulePaths: draft.rooted ? draft.rootModulePaths : [],
+      rootModuleManager: draft.rooted ? draft.rootModuleManager : undefined,
+      rootModuleInstall: draft.rooted ? draft.rootModuleInstall : undefined,
       cameraFront: draft.cameraFront,
       cameraBack: draft.cameraBack,
       cameraFrontDevice: draft.cameraFrontDevice,
@@ -1533,12 +1609,6 @@ export function androidCreateWizard(context: CreatorContext): void {
       h('p', { class: 'hint', text: t('android.createdBody') })));
     failureBox.scrollIntoView?.({ block: 'nearest' });
     hint.textContent = t('android.created', { name: result.name });
-    if (draft.notify) {
-      void api.invoke('mgr:notify', {
-        title: t('android.createdTitle', { name: result.name }),
-        body: draft.apps.length ? t('android.notifyWithApps', { n: String(draft.apps.length) }) : t('android.createdBody'),
-      });
-    }
     next.textContent = t('common.close');
     next.onclick = () => { closeModal(); void context.reload(); };
     next.focus();

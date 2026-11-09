@@ -53,7 +53,7 @@ export interface CameraSelection {
   frontLimit?: CameraResolution;
   backLimit?: CameraResolution;
   /** Provider selected for the endpoint, used to request provider-specific setup. */
-  cameraProvider?: 'lensio' | 'unity-capture' | 'obs' | 'directshow';
+  cameraProvider?: 'unity-capture' | 'obs' | 'directshow';
 }
 
 export interface CameraPickerOptions {
@@ -364,26 +364,6 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
     obsButton.disabled = false;
     await scan(true);
   };
-  const lensioInstallButton = h('button', { type: 'button', class: 'btn small', text: 'Install LensioCam APK', 'aria-label': 'Install LensioCam APK into the selected Android emulator' }) as HTMLButtonElement;
-  lensioInstallButton.onclick = async () => {
-    lensioInstallButton.disabled = true;
-    const result = await api.invoke<{ installed: boolean; launched: boolean; reason: string }>('mgr:android-install-lensio-apk', options.deviceName ?? '')
-      .catch((error: unknown) => ({ installed: false, launched: false, reason: errText(error) }));
-    const message = result.installed ? (result.launched ? 'LensioCam APK installed and launched.' : 'LensioCam APK installed.') : result.reason;
-    toast(message, result.installed ? 'ok' : 'info');
-    previewStatus.textContent = message;
-    lensioInstallButton.disabled = false;
-  };
-  const lensioStudioButton = h('button', { type: 'button', class: 'btn small', text: 'Start LensioStudio', 'aria-label': 'Start LensioStudio virtual camera' }) as HTMLButtonElement;
-  lensioStudioButton.onclick = async () => {
-    lensioStudioButton.disabled = true;
-    const result = await api.invoke<{ ok: boolean; message: string }>('mgr:android-start-lensio')
-      .catch((error: unknown) => ({ ok: false, message: errText(error) }));
-    toast(result.message, result.ok ? 'ok' : 'info');
-    previewStatus.textContent = result.message;
-    lensioStudioButton.disabled = false;
-    await scan(true);
-  };
   const streamButton = h('button', { type: 'button', class: 'btn small', text: 'Check virtual camera connection', 'aria-label': 'Check the native virtual camera connection to the Android Emulator' }) as HTMLButtonElement;
   const streamStatus = h('p', { class: 'hint', role: 'status', 'aria-live': 'polite', text: 'Native virtual camera connection is not active.' });
   const updateStreamStatus = async (): Promise<void> => {
@@ -544,11 +524,8 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
     livePanel.replaceChildren(
       h('div', { class: 'camera-live-panel-head' },
         h('strong', { text: t('android.camera.liveImagePanel') }),
-        h('span', { class: 'camera-lensio-badge', text: t('android.camera.lensioBridge') }),
         h('span', { class: 'hint', text: t('android.camera.liveImageCount', { n: String(liveImages.length) }) })),
-      h('p', { class: `hint ${listed.length ? '' : 'warn'}`, text: listed.length
-        ? t('android.camera.lensioEndpointReady', { endpoints: listed.map((camera) => camera.name).join(', ') })
-        : t('android.camera.lensioEndpointWaiting') }),
+      h('p', { class: `hint ${listed.length ? '' : 'warn'}`, text: listed.length ? `Host camera endpoint available: ${listed.map((camera) => camera.name).join(', ')}` : 'Waiting for a host camera endpoint.' }),
       h('div', { class: 'camera-live-settings' },
         field('android.camera.imageFit', fit), field('android.camera.playlistMode', mode),
         field('android.camera.playlistInterval', interval)),
@@ -610,7 +587,7 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
     manager,
     livePanel,
     h('div', { class: 'grid2' }, backSlot, frontSlot),
-    h('div', { class: 'camera-picker-foot' }, refreshButton, manualButton, obsButton, lensioInstallButton, lensioStudioButton, streamButton, previewButton),
+    h('div', { class: 'camera-picker-foot' }, refreshButton, manualButton, obsButton, streamButton, previewButton),
     previewVideo,
     previewStatus,
     streamStatus,
@@ -679,6 +656,9 @@ export function cameraPicker(options: CameraPickerOptions): CameraPicker {
     // they must never become fake lens values in this Android Studio selector.
     const options: Array<[string, string]> = [
       ['', t('android.camera.none')],
+      // Keep the canonical Android Studio endpoint available even while the
+      // emulator is booting and `-webcam-list` temporarily returns empty.
+      ['webcam0', 'Webcam0'],
       ['emulated', t('android.camera.emulated')],
     ];
     const source = facing === 'front' ? selection.front : selection.back;

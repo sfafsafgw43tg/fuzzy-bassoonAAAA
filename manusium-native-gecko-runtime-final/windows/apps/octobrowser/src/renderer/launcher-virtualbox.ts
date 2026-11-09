@@ -22,7 +22,7 @@ type NetworkSpeed = 'full' | 'lte' | 'umts' | 'edge' | 'gsm';
 interface AndroidDevice { id: string; brand: string; model: string; width: number; height: number; density: number; inches: number; ramMb: number; shippedApi: number; year: number }
 interface AndroidSystem { id: string; runsHere?: boolean; label: string; api: number; release: string; abi: string; imageBytes: number; googlePlay: boolean; installed: boolean; family?: 'phone' | 'tv' | 'wear' | 'automotive'; familyLabel?: string }
 interface MediaCompanion { plugin: string; ready?: boolean; requirements?: Array<{ key: string; ok: boolean }>; pluginName: string; enabled: boolean; bundleAvailable: boolean; bundleBytes: number; installed: boolean; path: string; files: number; pythonAvailable: boolean; virtualCameraDriver: boolean; virtualMicrophoneDriver: boolean; running: boolean }
-interface AndroidMachine { name: string; path: string; target: string; running: boolean; deviceLabel: string; resolution: string; ramMb: number; dataPartition: string; cameraFront: CameraSource; cameraBack: CameraSource; cameraFrontDevice: string; cameraBackDevice: string; cameraDevice: string; microphoneEnabled: boolean; networkSpeed: NetworkSpeed; incomplete: boolean; diskBytes: number; identity?: DeviceIdentity }
+interface AndroidMachine { name: string; path: string; target: string; running: boolean; rooted: boolean; rootRequested?: boolean; deviceLabel: string; resolution: string; ramMb: number; dataPartition: string; cameraFront: CameraSource; cameraBack: CameraSource; cameraFrontDevice: string; cameraBackDevice: string; cameraDevice: string; microphoneEnabled: boolean; networkSpeed: NetworkSpeed; incomplete: boolean; diskBytes: number; identity?: DeviceIdentity }
 interface AndroidStatus { javaVersion?: number; javaHome?: string; searched: string[]; missing: '' | 'sdk' | 'cmdline-tools' | 'emulator'; manualSdkRoot: boolean; available: boolean; sdkRoot: string; studioAppPath: string; avdManagerAvailable: boolean; emulatorAvailable: boolean; adbAvailable: boolean; defaultDirectory: string; mediaCompanion: MediaCompanion; devices: AndroidDevice[]; systems: AndroidSystem[] }
 interface AndroidResult { available: boolean; machines: AndroidMachine[] }
 interface ChromeCameraChoice { name: string; device: string; virtual: boolean; foreign?: boolean }
@@ -30,7 +30,7 @@ interface ChromeCameraChoices { webcams: ChromeCameraChoice[]; emulatorAvailable
 interface CustomAndroidBuild { id: string; name: string; release: string; architecture: string; target: string; variant: string; notes: string; createdAt: string; updatedAt: string }
 interface AndroidLaunchPrefs {
   proxyId: string; cameraFront: CameraSource; cameraBack: CameraSource;
-  cameraProvider?: 'lensio' | 'obs' | 'directshow';
+  cameraProvider?: 'obs' | 'directshow';
   cameraFrontDevice: string; cameraBackDevice: string; cameraDevice: string;
   microphoneEnabled: boolean; microphoneDevice: string; bootMode: BootMode; networkSpeed: NetworkSpeed; secondaryDisplay?: 'none' | 'secondary1080'; locale: string;
 }
@@ -265,19 +265,9 @@ function androidLaunchDialog(machine: AndroidMachine, load: () => Promise<void>,
     const launch = h('button', { class: 'btn primary', text: t('android.launch') });
     const cancel = h('button', { class: 'btn', text: t('common.cancel') });
     cancel.onclick = () => { stopMicrophonePreview(); closeModal(); };
-    const askStartVstudio = (): Promise<boolean> => new Promise((resolve) => {
-      modal(t('android.startVstudio.title'), (prompt) => {
-        const no = h('button', { class: 'btn', text: t('android.startVstudio.no') }) as HTMLButtonElement;
-        const yes = h('button', { class: 'btn primary', text: t('android.startVstudio.yes') }) as HTMLButtonElement;
-        no.onclick = () => { closeModal(); resolve(false); };
-        yes.onclick = () => { closeModal(); resolve(true); };
-        prompt.append(h('p', { text: t('android.startVstudio.body') }), h('div', { class: 'modal-actions' }, no, yes));
-      }, 'wide');
-    });
     launch.onclick = async () => {
       stopMicrophonePreview();
       const camera = cameras.value();
-      const startVstudio = await askStartVstudio();
       launch.disabled = true;
       const label = launch.textContent;
       launch.textContent = t('android.starting');
@@ -286,11 +276,7 @@ function androidLaunchDialog(machine: AndroidMachine, load: () => Promise<void>,
       // "Starting…" during the emulator's six-second health check.
       closeModal();
       try {
-        if (startVstudio) {
-          const vstudio = await run(api.invoke<{ started: boolean; message: string }>('mgr:plugin-start', 'vstudio-mobile'));
-          if (!vstudio?.started) toast(vstudio?.message || 'vStudio could not be started.', 'info');
-        }
-        const result = await run(api.invoke<{ ok: boolean; cameraWarning?: string; notes?: string[]; lensio?: { installed: boolean; launched: boolean; message: string } }>('mgr:android-launch', {
+        const result = await run(api.invoke<{ ok: boolean; cameraWarning?: string; notes?: string[] }>('mgr:android-launch', {
           name: machine.name, proxyId, cameraFront: camera.front, cameraBack: camera.back,
           cameraProvider: camera.cameraProvider,
           cameraFrontDevice: camera.frontDevice, cameraBackDevice: camera.backDevice,
@@ -301,7 +287,7 @@ function androidLaunchDialog(machine: AndroidMachine, load: () => Promise<void>,
           secondaryDisplay: valueOf(display),
         }));
         if (!result?.ok) {
-          toast(result?.lensio?.message || result?.notes?.join(' ') || t('android.launch.notApplied'), 'info');
+        toast(result?.notes?.join(' ') || t('android.launch.notApplied'), 'info');
           return;
         }
         if (result.cameraWarning) {
@@ -338,18 +324,21 @@ function cameraLabel(device: string): string {
 }
 
 const startingAvds = new Set<string>();
+/** A deletion continues in the main process while the Devices tab remains usable. */
+const deletingAvds = new Set<string>();
 
 function androidRow(machine: AndroidMachine, load: () => Promise<void>): HTMLElement {
   // A device whose system image is gone cannot boot: say so instead of
   // starting an emulator that dies one second later.
   const isStarting = startingAvds.has(machine.name);
+  const isDeleting = deletingAvds.has(machine.name);
   const launch = h('button', {
-    class: `btn small ${machine.running ? '' : 'primary'}${isStarting ? ' is-busy' : ''}`.trim(),
-    text: isStarting ? t('android.starting') : (machine.running ? t('android.stop') : t('android.launch')),
-    disabled: !machine.running && machine.incomplete,
-    title: !machine.running && machine.incomplete ? t('android.incompleteHint') : '',
+    class: `btn small ${machine.running ? '' : 'primary'}${isStarting || isDeleting ? ' is-busy' : ''}`.trim(),
+    text: isDeleting ? t('android.deleting') : (isStarting ? t('android.starting') : (machine.running ? t('android.stop') : t('android.launch'))),
+    disabled: isDeleting || (!machine.running && machine.incomplete),
+    title: isDeleting ? t('android.deleting') : (!machine.running && machine.incomplete ? t('android.incompleteHint') : ''),
   }) as HTMLButtonElement;
-  if (isStarting) launch.disabled = true;
+  if (isStarting || isDeleting) launch.disabled = true;
   const stopDevice = async (force: boolean) => {
     launch.disabled = true;
     launch.textContent = t('android.stopping');
@@ -374,8 +363,9 @@ function androidRow(machine: AndroidMachine, load: () => Promise<void>): HTMLEle
       launch.textContent = t('android.starting');
     });
   };
-  launch.onclick = () => { if (machine.running) void stopDevice(false); else void openLaunch(); };
+  launch.onclick = () => { if (isDeleting) return; if (machine.running) void stopDevice(false); else void openLaunch(); };
   const folder = h('button', { class: 'icon-btn tiny', title: t('android.folder'), 'aria-label': t('android.folder') }, icon('folder', 16));
+  folder.disabled = isDeleting;
   folder.onclick = async () => {
     folder.disabled = true;
     const result = await run(api.invoke<boolean>('mgr:android-folder', machine.name));
@@ -383,6 +373,7 @@ function androidRow(machine: AndroidMachine, load: () => Promise<void>): HTMLEle
     if (!result) toast(t('android.folderFailed'), 'err');
   };
   const settings = h('button', { class: 'icon-btn tiny', title: t('android.settings'), 'aria-label': t('android.settings') }, icon('settings', 16));
+  settings.disabled = isDeleting;
   const openSettings = () => deviceSettingsDialog({
     name: machine.name, running: machine.running,
     ramMb: machine.ramMb || undefined, dataGb: Number.parseInt(machine.dataPartition, 10) || undefined,
@@ -396,12 +387,19 @@ function androidRow(machine: AndroidMachine, load: () => Promise<void>): HTMLEle
   settings.onclick = openSettings;
   const openMedia = () => androidMediaDialog({ name: machine.name, running: machine.running, handset: machine.deviceLabel }, load);
   const media = h('button', { class: 'icon-btn tiny', title: t('android.media.deviceAction'), 'aria-label': t('android.media.deviceAction') }, icon('camera', 16));
+  media.disabled = isDeleting;
   media.onclick = openMedia;
   const screen = h('button', { class: 'icon-btn tiny', title: t('android.screen.open'), 'aria-label': t('android.screen.open') }, icon('monitor', 16));
+  screen.disabled = isDeleting || !machine.running;
   screen.onclick = () => openAndroidScreen({ name: machine.name, handset: machine.deviceLabel });
   const more = h('button', { class: 'icon-btn tiny', title: t('vm.more'), 'aria-label': t('vm.more') }, icon('dots', 17));
+  more.disabled = isDeleting;
   more.onclick = () => popupMenu(more, [
     ...(machine.running ? [{ icon: 'monitor', label: t('android.screen.open'), fn: () => openAndroidScreen({ name: machine.name, handset: machine.deviceLabel }) }] : []),
+    ...(machine.rootRequested ? [{ icon: 'shield', label: t('android.rootChecker'), fn: async () => {
+      const result = await run(api.invoke<{ verified: boolean; detail: string }>('mgr:android-root-check', machine.name));
+      toast(result?.verified ? t('android.rootCheckPassed') : t('android.rootCheckFailed'), result?.verified ? 'ok' : 'err', result?.detail);
+    } }] : []),
     ...(machine.running
       ? [{ icon: 'stop', label: t('android.stop'), fn: () => void stopDevice(false) },
         { icon: 'close', label: t('android.forceStop'), danger: true, fn: () => void stopDevice(true) }] as const
@@ -412,14 +410,23 @@ function androidRow(machine: AndroidMachine, load: () => Promise<void>): HTMLEle
     { icon: 'settings', label: t('android.settings'), fn: openSettings },
     {
       icon: 'close', label: t('android.delete'), danger: true, fn: () => confirmDialog(t('android.deleteConfirm', { name: machine.name }), async () => {
-        const done = await api.invoke<boolean>('mgr:android-delete', machine.name);
-        if (!done) throw new Error(t('android.deleteFailed'));
+        // Close the prompt immediately and keep the rest of the Devices tab usable.
+        // The row is redrawn with "Deleting..." while the filesystem operation runs.
+        deletingAvds.add(machine.name);
         void load();
+        void api.invoke<boolean>('mgr:android-delete', machine.name).then((done) => {
+          if (!done) toast(t('android.deleteFailed'), 'err');
+        }).catch((error: unknown) => {
+          toast(t('android.deleteFailed'), 'err', error instanceof Error ? error.message : String(error));
+        }).finally(() => {
+          deletingAvds.delete(machine.name);
+          void load();
+        });
         return true;
       }, 'android.deleted'),
     },
   ]);
-  const specs = [machine.deviceLabel, machine.resolution, machine.ramMb ? `${machine.ramMb} MB RAM` : '', machine.dataPartition, machine.diskBytes ? t('android.onDisk', { size: dataSize(machine.diskBytes) }) : ''].filter(Boolean).join(' · ');
+  const specs = [machine.rooted ? t('android.rootedBadge') : machine.rootRequested ? t('android.rootRequested') : t('android.classicBadge'), machine.deviceLabel, machine.resolution, machine.ramMb ? `${machine.ramMb} MB RAM` : '', machine.dataPartition, machine.diskBytes ? t('android.onDisk', { size: dataSize(machine.diskBytes) }) : ''].filter(Boolean).join(' · ');
   const mediaLine = [
     `${t('android.cameraBack')}: ${cameraLabel(machine.cameraBackDevice)}`,
     `${t('android.cameraFront')}: ${cameraLabel(machine.cameraFrontDevice)}`,
@@ -429,10 +436,12 @@ function androidRow(machine: AndroidMachine, load: () => Promise<void>): HTMLEle
     h('div', { class: 'vm-name grow' },
       h('div', { class: 'vm-meta' }, h('b', { class: 'vm-title-text', text: machine.name }),
         h('span', { class: 'pill engine-tag', text: t('android.backend.avd') }),
+        h('span', { class: `pill ${machine.rooted ? 'ok rooted-badge' : machine.rootRequested ? 'warn rooted-badge' : 'muted'}`, text: machine.rooted ? t('android.rootedBadge') : machine.rootRequested ? t('android.rootRequested') : t('android.classicBadge') }),
         machine.running ? h('span', { class: 'pill ok', text: t('android.running') }) : null,
         isStarting && !machine.running ? h('span', { class: 'pill warn', text: t('android.starting') }) : null,
         machine.incomplete ? h('span', { class: 'pill bad', text: t('android.incomplete') }) : null),
       h('span', { class: 'small muted vm-detail', text: specs || (S.init?.settings?.ui?.hideDirectoryPaths ? (t('settings.pathHidden') || '••••••••••••••••') : (machine.target || machine.path)) }),
+      machine.rooted ? h('strong', { class: 'android-root-status', text: t('android.rootedDeviceLine') }) : machine.rootRequested ? h('strong', { class: 'android-root-status pending', text: t('android.rootNotVerifiedLine') }) : null,
       h('span', { class: 'small muted vm-detail', text: mediaLine })),
     h('div', { class: 'vm-actions' }, folder, ...(machine.running ? [screen] : []), media, settings, launch, more));
 }

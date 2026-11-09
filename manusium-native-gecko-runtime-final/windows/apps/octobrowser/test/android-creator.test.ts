@@ -440,8 +440,9 @@ describe('devices that do not start, and devices that will not stop', () => {
     expect(studio).toContain('function avdIncomplete');
     expect(studio).toContain('incomplete: avdIncomplete(item.path),');
     expect(page).toContain("machine.incomplete ? h('span', { class: 'pill bad', text: t('android.incomplete') }) : null");
-    expect(page).toContain("disabled: !machine.running && machine.incomplete,");
-    for (const key of ['android.incomplete', 'android.incompleteHint', 'android.incompleteNote', 'android.forceStop', 'android.stopping', 'android.starting']) {
+    expect(page).toContain("disabled: isDeleting || (!machine.running && machine.incomplete),");
+    expect(page).toContain("text: isDeleting ? t('android.deleting')");
+    for (const key of ['android.incomplete', 'android.incompleteHint', 'android.incompleteNote', 'android.forceStop', 'android.stopping', 'android.starting', 'android.deleting']) {
       expect(DICTS.en[key]).toBeTruthy();
       expect(DICTS.pl[key]).toBeTruthy();
     }
@@ -745,12 +746,10 @@ describe('the last step of the creator', () => {
     expect(studio).toContain('apps: string[];');
   });
 
-  it('can ring Windows when the device is ready', () => {
-    expect(creator).toContain("toggle(draft.notify, 'android.notifyWhenDone'");
-    expect(creator).toContain("api.invoke('mgr:notify'");
-    expect(manager).toContain("handle('mgr:notify'");
-    expect(manager).toContain('silent: input?.silent === true');
-    for (const key of ['android.notifyWhenDone', 'android.notifyHint', 'android.notifyWithApps', 'android.stores.preinstall']) {
+  it('does not offer the removed Windows ready-notification option', () => {
+    expect(creator).not.toContain("toggle(draft.notify, 'android.notifyWhenDone'");
+    expect(creator).not.toContain("api.invoke('mgr:notify'");
+    for (const key of ['android.notifyWhenDone', 'android.notifyHint', 'android.notifyWithApps']) {
       expect(DICTS.en[key]).toBeTruthy();
       expect(DICTS.pl[key]).toBeTruthy();
     }

@@ -51,7 +51,6 @@ The emulator launch path must use only these driver-backed provider identities:
 | `unity-capture` | OctoSuite/vStudio producer publishes frames into Unity Capture | Yes |
 | `obs` | OBS publishes its active scene through OBS Virtual Camera | Yes, after the scene is configured |
 | `directshow` | A registered DirectShow virtual camera or physical camera | Depends on producer |
-| `lensio` | Existing Lensio/ApexCam compatibility route | Depends on installed endpoint |
 
 OpenStream is intentionally not a provider value in OctoSuite. It may be staged as an optional phone-to-OBS asset, but it is never passed as an emulator camera provider.
 

@@ -114,6 +114,10 @@ export interface AppSettings {
 
     /** Ultra-fast simplified mode for VirtualBox and virtual machines (zero animations, no heavy filters, fast rendering). */
     virtualBoxMode: boolean;
+    /** Whether the launcher shell uses translucent liquid-glass surfaces. */
+    liquidGlass: boolean;
+    /** Backdrop blur radius for the liquid-glass shell, in pixels. */
+    liquidGlassBlur: number;
 
     /** Ask before a browser window closes (the session can then be saved). */
     confirmOnQuit: boolean;
@@ -162,7 +166,7 @@ export function defaultSettings(): AppSettings {
     security: { autoLockMinutes: 15, secretStore: 'local' },
     logs: { mode: 'standard' },
 
-    ui: { verticalTabs: false, theme: 'ink', sleepTabsAfterMin: 30, showStartupSplash: false, showBookmarksBar: false, hideDirectoryPaths: false, virtualBoxMode: false, confirmOnQuit: true, closeAction: 'ask', closeCountdown: true, openLinksInBackground: false, animations: true, sidebar: LAUNCHER_NAV_ITEMS.map((id) => ({ id, visible: true })), navOrder: [...LAUNCHER_NAV_ITEMS], navHidden: [] },
+    ui: { verticalTabs: false, theme: 'ink', sleepTabsAfterMin: 30, showStartupSplash: false, showBookmarksBar: false, hideDirectoryPaths: false, virtualBoxMode: false, liquidGlass: true, liquidGlassBlur: 18, confirmOnQuit: true, closeAction: 'ask', closeCountdown: true, openLinksInBackground: false, animations: true, sidebar: LAUNCHER_NAV_ITEMS.map((id) => ({ id, visible: true })), navOrder: [...LAUNCHER_NAV_ITEMS], navHidden: [] },
 
     tor: { torBrowserPath: '' },
     firefox: { firefoxPath: '' },
@@ -276,6 +280,8 @@ export function validateSettings(value: unknown): AppSettings {
       showBookmarksBar: strictBool(ui.showBookmarksBar, d.ui.showBookmarksBar),
       hideDirectoryPaths: strictBool(ui.hideDirectoryPaths, strictBool(ui.hidePaths, d.ui.hideDirectoryPaths)),
       virtualBoxMode: strictBool(ui.virtualBoxMode, strictBool(ui.vmMode, strictBool(ui.vmFriendlyMode, d.ui.virtualBoxMode))),
+      liquidGlass: strictBool(ui.liquidGlass, d.ui.liquidGlass),
+      liquidGlassBlur: strictInt(ui.liquidGlassBlur, 0, 32, d.ui.liquidGlassBlur),
       confirmOnQuit: strictBool(ui.confirmOnQuit, d.ui.confirmOnQuit),
       closeAction: ui.closeAction === 'quit' || ui.closeAction === 'background' ? ui.closeAction : d.ui.closeAction,
       closeCountdown: strictBool(ui.closeCountdown, d.ui.closeCountdown),
