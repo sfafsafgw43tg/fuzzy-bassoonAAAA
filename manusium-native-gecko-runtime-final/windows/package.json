@@ -16,6 +16,7 @@
     "build:dev": "node tools/build.mjs --dev",
     "build:browser": "node tools/build.mjs octobrowser",
     "build:camera": "node tools/build.mjs octocamera",
+    "build:android": "node tools/build.mjs octoandroid",
     "build:android-build-platform": "tsc --target ES2022 --module commonjs --moduleResolution node --esModuleInterop --skipLibCheck --outDir services/android-build/dist services/android-build/src/*.ts",
     "start:android-build-api": "npm run build:android-build-platform && node services/android-build/dist/services/android-build/src/api.js",
     "start:android-build-worker": "npm run build:android-build-platform && node services/android-build/dist/services/android-build/src/worker-daemon.js",

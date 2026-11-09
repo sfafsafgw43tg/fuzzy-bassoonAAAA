@@ -1,0 +1,26 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta http-equiv="Content-Security-Policy" content="default-src 'self'; style-src 'self'; script-src 'self';">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Octo Android Manager</title>
+  <link rel="stylesheet" href="./style.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar">
+      <div class="brand"><div class="brand-mark">O</div><div><strong>Octo</strong><span>Android Manager</span></div></div>
+      <nav><button class="nav-item active">▣ <span>Machines</span></button><button class="nav-item" id="studio">▤ <span>Android Studio</span></button><button class="nav-item" id="refresh">↻ <span>Refresh</span></button></nav>
+      <div class="sidebar-foot"><span class="dot"></span><span id="sdkState">SDK not checked</span></div>
+    </aside>
+    <main class="workspace">
+      <header class="topbar"><div><div class="eyebrow">ANDROID EMULATORS / AVD MANAGER</div><h1>Virtual machines</h1><p>Manage Android Studio emulators from one focused desktop app.</p></div><div class="top-actions"><button id="newDevice" class="primary">＋ New</button><button id="topRefresh" class="square" aria-label="Refresh">↻</button></div></header>
+      <section class="summary"><div><span class="summary-label">Machines</span><strong id="machineCount">—</strong></div><div><span class="summary-label">Running</span><strong id="runningCount">—</strong></div><div><span class="summary-label">ADB</span><strong id="adbState">—</strong></div><div class="summary-note">VirtualBox-inspired controls<br><small>Root checks use live ADB identity</small></div></section>
+      <div id="notice" class="notice" hidden></div>
+      <section class="content-grid"><div><div class="section-head"><h2>All machines</h2><span id="lastRefresh">—</span></div><div id="machines" class="machine-list"></div></div><aside id="details" class="details-card"><div class="empty-details"><div class="big-icon">▣</div><h2>Select a machine</h2><p>Choose an AVD to see its state, Android version, and root verification controls.</p></div></aside></section>
+    </main>
+  </div>
+  <script src="./renderer.js"></script>
+</body>
+</html>

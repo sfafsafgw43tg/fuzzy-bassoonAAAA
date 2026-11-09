@@ -23,13 +23,13 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const args = process.argv.slice(2);
 const dev = args.includes('--dev');
 const only = args.filter((a) => !a.startsWith('--'));
-const apps = only.length ? only : ['octobrowser', 'octodetect', 'octocamera'];
+const apps = only.length ? only : ['octobrowser', 'octodetect', 'octocamera', 'octoandroid'];
 const rootPkg = JSON.parse(fs.readFileSync(path.join(root, 'package.json'), 'utf8'));
 const version = rootPkg.version;
 
 for (const a of apps) {
-  if (!['octobrowser', 'octodetect', 'octocamera'].includes(a)) {
-    console.error(`Unknown app "${a}" (expected octobrowser, octodetect, or octocamera)`);
+  if (!['octobrowser', 'octodetect', 'octocamera', 'octoandroid'].includes(a)) {
+    console.error(`Unknown app "${a}" (expected octobrowser, octodetect, octocamera, or octoandroid)`);
     process.exit(2);
   }
 }
@@ -106,7 +106,7 @@ async function buildShared(dist) {
 }
 
 function buildAssets(app, dist) {
-  const b = path.join(root, 'branding', app === 'octocamera' ? 'octobrowser' : app);
+  const b = path.join(root, 'branding', app === 'octocamera' || app === 'octoandroid' ? 'octobrowser' : app);
   const out = path.join(dist, 'assets');
   if (!fs.existsSync(path.join(b, 'icon.ico'))) {
     throw new Error(`Missing branding/${app}/icon.ico - run "npm run icons" first.`);
