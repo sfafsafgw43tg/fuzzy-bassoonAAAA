@@ -1,0 +1,50 @@
+name: Dependency setup regression checks
+
+on:
+  pull_request:
+    paths:
+      - 'manusium-native-gecko-runtime-final/windows/tools/ensure-deps.mjs'
+      - 'manusium-native-gecko-runtime-final/windows/packages/core/test/ensure-deps.test.ts'
+      - '.github/workflows/dependency-checks.yml'
+      - 'manusium-native-gecko-runtime-final/windows/tools/test-packaged-chromium.mjs'
+      - 'manusium-native-gecko-runtime-final/windows/packages/shell/test/native-engine.integration.test.ts'
+      - 'manusium-native-gecko-runtime-final/windows/packages/core/test/installed-runtime-gate.test.ts'
+  push:
+    branches: ['arena/c10966b9-fuzzy-bassoonaaaa']
+    paths:
+      - 'manusium-native-gecko-runtime-final/windows/tools/ensure-deps.mjs'
+      - 'manusium-native-gecko-runtime-final/windows/packages/core/test/ensure-deps.test.ts'
+      - '.github/workflows/dependency-checks.yml'
+      - 'manusium-native-gecko-runtime-final/windows/tools/test-packaged-chromium.mjs'
+      - 'manusium-native-gecko-runtime-final/windows/packages/shell/test/native-engine.integration.test.ts'
+      - 'manusium-native-gecko-runtime-final/windows/packages/core/test/installed-runtime-gate.test.ts'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  dependencies:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest]
+        node: [22, 24]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 15
+    defaults:
+      run:
+        working-directory: manusium-native-gecko-runtime-final/windows
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: manusium-native-gecko-runtime-final/windows/package-lock.json
+      - name: Install dependencies without lifecycle scripts
+        run: npm ci --ignore-scripts --include=optional --no-audit --no-fund
+      - name: Regression tests
+        run: npx vitest run packages/core/test/ensure-deps.test.ts packages/core/test/installed-runtime-gate.test.ts packages/core/test/packaged-chromium.test.ts
+      - name: Execute the real platform binary and npm without a shell
+        run: node --input-type=module -e "import { esbuildBinaryPath, runCommand } from './tools/ensure-deps.mjs'; const root = process.cwd(); const binary = esbuildBinaryPath(root); if (!binary || runCommand(binary, ['--version'], root) !== 0 || runCommand('npm', ['--version'], root) !== 0) process.exit(1);"

@@ -1,0 +1,1 @@
+Windows CI and Windows release builds populate this directory with octo-camera-source.dll and octo-cameractl.exe via npm run build:native-camera. The files are intentionally absent from source control because they are platform build outputs.
