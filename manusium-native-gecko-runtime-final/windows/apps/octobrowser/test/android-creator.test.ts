@@ -159,6 +159,14 @@ describe('the guided creator', () => {
     expect(creator).not.toContain('draft.backend');
   });
 
+  it('forwards rooted mode to the AVD backend instead of treating it as UI-only state', () => {
+    expect(creator).toContain('rooted: draft.rooted');
+    expect(manager).toContain('rooted: input?.rooted === true');
+    expect(manager).toContain('rootModulePaths: input?.rooted === true');
+    expect(studio).toContain("'octobrowser.rooted': input.rooted ? '1' : '0'");
+    expect(studio).toContain("input.rooted && !/;default;(x86_64|x86|arm64-v8a|armeabi-v7a)$/");
+  });
+
   it('refuses to move on before the step is answered', () => {
     expect(creator).toContain("problem: () => draft.phone ? '' : t('android.needDevice')");
     expect(creator).toContain("problem: () => NAME_RX.test(draft.name.trim()) ? '' : t('android.nameInvalid')");

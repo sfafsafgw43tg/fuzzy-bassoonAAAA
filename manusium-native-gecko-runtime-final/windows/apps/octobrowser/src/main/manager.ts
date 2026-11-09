@@ -3011,6 +3011,7 @@ export class Manager {
       customPackage?: string;
       ramMb?: number; cpus?: number; diskGb?: number; cameraFront?: string; cameraBack?: string; microphoneEnabled?: boolean;
       cameraProvider?: 'unity-capture' | 'obs' | 'directshow';
+      rooted?: boolean; rootModulePaths?: string[]; rootModuleManager?: 'magisk' | 'supersu'; rootModuleInstall?: 'stage' | 'boot';
       width?: number; height?: number; dpi?: number; heapMb?: number; sdCardMb?: number;
       skinPath?: string;
       gpuMode?: string; bootMode?: string; snapshots?: boolean;
@@ -3076,6 +3077,10 @@ export class Manager {
         gpuMode: (['auto', 'host', 'swiftshader_indirect', 'off'].includes(String(input?.gpuMode)) ? input?.gpuMode : 'auto') as 'auto',
         bootMode: input?.bootMode === 'cold' ? 'cold' : 'quick',
         snapshots: input?.snapshots !== false,
+        rooted: input?.rooted === true,
+        rootModulePaths: input?.rooted === true && Array.isArray(input?.rootModulePaths) ? input.rootModulePaths.map((item) => String(item)).slice(0, 12) : [],
+        rootModuleManager: input?.rootModuleManager === 'supersu' ? 'supersu' : 'magisk',
+        rootModuleInstall: input?.rootModuleInstall === 'boot' ? 'boot' : 'stage',
         cameraFront, cameraBack,
         cameraFrontDevice: String(input?.cameraFrontDevice ?? ''), cameraBackDevice: String(input?.cameraBackDevice ?? ''),
         cameraDevice: String(input?.cameraDevice ?? ''),
