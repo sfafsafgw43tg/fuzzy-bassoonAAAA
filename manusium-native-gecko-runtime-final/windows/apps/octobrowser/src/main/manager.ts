@@ -3112,11 +3112,14 @@ export class Manager {
         for (const issue of quiet.issues) this.ctx.logger.warn('android.avd.quietboot', { device: avdName, issue });
       }
       const attention = quiet?.issues.length ?? 0;
+      const rootStatus = input?.rooted === true
+        ? (quiet?.rootVerified === true ? ' · ROOTED DEVICE verified (uid=0(root))' : ' · Root verification failed; use Root Checker after launch')
+        : '';
       reportAndroidProgress({
         stage: 'done', percent: 100,
-        text: attention ? `${avdName} is ready, with ${attention} thing${attention === 1 ? '' : 's'} to check` : `${avdName} is ready`,
+        text: attention ? `${avdName} is ready, with ${attention} thing${attention === 1 ? '' : 's'} to check${rootStatus}` : `${avdName} is ready${rootStatus}`,
       });
-      return { created: true, backend: 'avd', name: avdName };
+      return { created: true, backend: 'avd', name: avdName, rooted: input?.rooted === true, rootVerified: quiet?.rootVerified === true };
       } finally { setAndroidProgressSink(null); }
     });
     handle('mgr:android-open-log', L, async () => {

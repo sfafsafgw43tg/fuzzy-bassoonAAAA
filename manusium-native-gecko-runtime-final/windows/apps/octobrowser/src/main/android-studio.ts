@@ -4150,15 +4150,33 @@ export async function quietBootAndroidAvd(name: string): Promise<QuietBootResult
       catch (error) { notes.push(error instanceof Error ? error.message : String(error)); }
     }
   }
+  const rooted = ['1', 'true', 'yes'].includes(configValue(avd.path, 'octobrowser.rooted').trim().toLowerCase());
   const result = await quietBoot({
     start: startQuietEmulator(emulator, name, root),
     adb: (args, timeoutMs) => adbRun(adb, args, timeoutMs),
     inspect: () => inspectAvdFiles(name, avd.path),
     repair: () => repairAvdFilesAfterBoot(name, avd.path),
     progress: (text, percent) => reportAndroidProgress({ stage: 'configure', percent, text }),
+    verifyRoot: rooted ? async (serial) => {
+      const rootReply = await adbRun(adb, ['-s', serial, 'root'], 20_000).catch(() => '');
+      await new Promise((resolve) => { setTimeout(resolve, 1_500); });
+      const identity = await adbRun(adb, ['-s', serial, 'shell', 'id'], 20_000).catch(() => '');
+      const verified = /uid=0\(root\)/i.test(identity);
+      return {
+        verified,
+        detail: (verified ? 'adb id uid=0' : (rootReply || identity || 'adb root refused')).trim().slice(0, 240),
+      };
+    } : undefined,
     sleep: (ms) => new Promise<void>((resolve) => { setTimeout(resolve, ms); }),
     now: () => Date.now(),
   }, { name, extraArgs });
+  if (rooted && typeof result.rootVerified === 'boolean') {
+    // Persist only after the emulator has closed so config.ini cannot race the AVD.
+    writeConfigValues(avd.path, {
+      'octobrowser.rootVerified': result.rootVerified ? '1' : '0',
+      'octobrowser.rootVerification': result.rootVerification || 'adb root refused',
+    });
+  }
   return { ...result, issues: [...notes, ...result.issues] };
 }
 

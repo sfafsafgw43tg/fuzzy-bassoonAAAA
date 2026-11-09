@@ -20,6 +20,8 @@ export interface QuietBootDeps {
   repair(problems: string[]): void;
   /** One line for the download bar. percent is 0-100, or -1 when unknown. */
   progress(text: string, percent: number): void;
+  /** Optional live root check while the guest is booted; returns null when verified. */
+  verifyRoot?(serial: string): Promise<{ verified: boolean; detail: string }>;
   sleep(ms: number): Promise<void>;
   now(): number;
 }
@@ -41,6 +43,9 @@ export interface QuietBootResult {
   issues: string[];
   /** Problems that were found and fixed in place. */
   repaired: string[];
+  /** Present only when a rooted creation requested verification during quiet boot. */
+  rootVerified?: boolean;
+  rootVerification?: string;
 }
 
 export const QUIET_BOOT_ATTACH_MS = 3 * 60_000;
@@ -99,6 +104,7 @@ export async function quietBoot(deps: QuietBootDeps, options: QuietBootOptions):
   const repaired: string[] = [];
   let serial = '';
   let booted = false;
+  let rootResult: { verified: boolean; detail: string } | undefined;
   let exited = false;
   deps.progress(`Starting ${name} with no window to finish its first setup`, -1);
   let emulator: ReturnType<QuietBootDeps['start']> | null = null;
@@ -123,6 +129,13 @@ export async function quietBoot(deps: QuietBootDeps, options: QuietBootOptions):
         if (!booted && !exited) await deps.sleep(POLL_MS);
       }
       if (!booted) issues.push(exited ? 'The emulator stopped before Android finished booting.' : 'Android did not finish booting in time.');
+      if (booted && deps.verifyRoot) {
+        rootResult = await deps.verifyRoot(serial).catch((error: unknown) => ({
+          verified: false,
+          detail: messageOf(error),
+        }));
+        if (!rootResult.verified) issues.push(`Root verification failed: ${rootResult.detail || 'adb root was refused.'}`);
+      }
     }
   } catch (error) {
     issues.push(messageOf(error));
@@ -158,5 +171,8 @@ export async function quietBoot(deps: QuietBootDeps, options: QuietBootOptions):
   deps.progress(issues.length
     ? `${name} is set up, with ${issues.length} file issue${issues.length === 1 ? '' : 's'} to check`
     : `${name} is set up`, 100);
-  return { booted, serial, issues, repaired };
+  return {
+    booted, serial, issues, repaired,
+    ...(rootResult ? { rootVerified: rootResult.verified, rootVerification: rootResult.detail } : {}),
+  };
 }

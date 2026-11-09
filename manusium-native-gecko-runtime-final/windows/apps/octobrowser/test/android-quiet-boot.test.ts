@@ -124,6 +124,21 @@ describe('quietBoot', () => {
     expect(fake.progress[fake.progress.length - 1]).toBe('Pixel_10_Pro_Fold is set up');
   });
 
+  it('runs rooted verification while the first boot is alive and returns the result', async () => {
+    const fake = fakeDeps({ attachAfterMs: 0, bootAfterMs: 0, inspections: [[]] });
+    const result = await quietBoot({
+      ...fake.deps,
+      verifyRoot: async (serial) => {
+        expect(serial).toBe('emulator-5554');
+        return { verified: true, detail: 'adb id uid=0' };
+      },
+    }, { name: fake.name });
+    expect(result.rootVerified).toBe(true);
+    expect(result.rootVerification).toBe('adb id uid=0');
+    expect(result.issues).toEqual([]);
+    expect(fake.events.indexOf('emu kill')).toBeGreaterThan(fake.events.indexOf('boot poll'));
+  });
+
   it('repairs the problems it finds and reports the ones that are still there', async () => {
     const fake = fakeDeps({
       inspections: [
