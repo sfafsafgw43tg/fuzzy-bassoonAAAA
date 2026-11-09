@@ -10,13 +10,10 @@
 <body>
   <div class="app-shell">
     <aside class="sidebar">
-      <div class="brand"><strong>Octo Android Manager</strong><span>— Android Studio emulator manager</span></div>
-      <nav><button class="nav-item active">File</button><button class="nav-item">Machine</button><button class="nav-item">Help</button><button class="nav-item" id="studio">Open Android Studio</button><button class="nav-item" id="refresh">Refresh</button></nav>
-      <div class="sidebar-foot"><span class="dot"></span><span id="sdkState">SDK not checked</span></div>
+      <nav><button class="nav-item active">File</button><button class="nav-item">Machine</button><button class="nav-item">Help</button><button class="nav-item" id="newDevice">New</button><button class="nav-item" id="studio">Open Android Studio</button><button class="nav-item" id="refresh">Refresh</button><button class="nav-item" id="topRefresh">↻</button><div class="sidebar-foot"><span class="dot"></span><span id="sdkState">SDK not checked</span></div></nav>
     </aside>
     <main class="workspace">
-      <header class="topbar"><div><h1>Virtual Android Machines</h1><p>Android Studio AVDs registered on this computer</p></div><div class="top-actions"><button id="newDevice" class="primary">New</button><button id="topRefresh" class="square" aria-label="Refresh">↻</button></div></header>
-      <section class="summary"><div><span class="summary-label">Machines:</span><strong id="machineCount">—</strong></div><div><span class="summary-label">Running:</span><strong id="runningCount">—</strong></div><div><span class="summary-label">ADB:</span><strong id="adbState">—</strong></div><div class="summary-note">Webcam0 is passed to started emulators<br><small>Root checks use live ADB identity</small></div></section>
+      <section class="summary"><div><span class="summary-label">Machines:</span><strong id="machineCount">—</strong></div><div><span class="summary-label">Running:</span><strong id="runningCount">—</strong></div><div><span class="summary-label">ADB:</span><strong id="adbState">—</strong></div><div class="summary-note">WEBCAM0 / ANDROID STUDIO<br><small>LIVE ADB ROOT CHECKS</small></div></section>
       <div id="notice" class="notice" hidden></div>
       <section class="content-grid"><div><div class="section-head"><h2>Machines</h2><span id="lastRefresh">—</span></div><div id="machines" class="machine-list"></div></div><aside id="details" class="details-card"><div class="empty-details"><div class="big-icon">▣</div><h2>Select a machine</h2><p>Select an Android Studio AVD to view its state and available actions.</p></div></aside></section>
     </main>
